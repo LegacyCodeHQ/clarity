@@ -11,10 +11,22 @@ import (
 type DependencyGraph map[string][]string
 
 // BuildDependencyGraph analyzes a list of files and builds a dependency graph
-// containing only project imports (excluding package: and dart: imports)
+// containing only project imports (excluding package: and dart: imports).
+// Only dependencies that are in the supplied file list are included in the graph.
 func BuildDependencyGraph(filePaths []string) (DependencyGraph, error) {
 	graph := make(DependencyGraph)
 
+	// First pass: build a set of all supplied file paths (as absolute paths)
+	suppliedFiles := make(map[string]bool)
+	for _, filePath := range filePaths {
+		absPath, err := filepath.Abs(filePath)
+		if err != nil {
+			return nil, fmt.Errorf("failed to resolve path %s: %w", filePath, err)
+		}
+		suppliedFiles[absPath] = true
+	}
+
+	// Second pass: build the dependency graph
 	for _, filePath := range filePaths {
 		// Get absolute path
 		absPath, err := filepath.Abs(filePath)
@@ -28,13 +40,17 @@ func BuildDependencyGraph(filePaths []string) (DependencyGraph, error) {
 			return nil, fmt.Errorf("failed to parse imports in %s: %w", filePath, err)
 		}
 
-		// Filter for project imports only
+		// Filter for project imports only that are in the supplied file list
 		var projectImports []string
 		for _, imp := range imports {
 			if projImp, ok := imp.(ProjectImport); ok {
 				// Resolve relative path to absolute
 				resolvedPath := resolveImportPath(absPath, projImp.URI())
-				projectImports = append(projectImports, resolvedPath)
+
+				// Only include if the dependency is in the supplied files
+				if suppliedFiles[resolvedPath] {
+					projectImports = append(projectImports, resolvedPath)
+				}
 			}
 		}
 

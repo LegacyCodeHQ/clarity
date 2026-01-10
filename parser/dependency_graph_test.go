@@ -111,6 +111,56 @@ func TestBuildDependencyGraph_NonexistentFile(t *testing.T) {
 	assert.Contains(t, err.Error(), "failed to parse imports")
 }
 
+func TestBuildDependencyGraph_FiltersNonSuppliedFiles(t *testing.T) {
+	// Create temporary directory with test files
+	tmpDir := t.TempDir()
+
+	// Create main.dart that imports helper.dart and utils.dart
+	mainContent := `
+		import 'helper.dart';
+		import 'utils.dart';
+
+		void main() {}
+	`
+	mainPath := filepath.Join(tmpDir, "main.dart")
+	err := os.WriteFile(mainPath, []byte(mainContent), 0644)
+	require.NoError(t, err)
+
+	// Create helper.dart (we'll include this in the supplied files)
+	helperContent := `
+		class Helper {}
+	`
+	helperPath := filepath.Join(tmpDir, "helper.dart")
+	err = os.WriteFile(helperPath, []byte(helperContent), 0644)
+	require.NoError(t, err)
+
+	// Create utils.dart (we'll NOT include this in the supplied files)
+	utilsContent := `
+		class Utils {}
+	`
+	utilsPath := filepath.Join(tmpDir, "utils.dart")
+	err = os.WriteFile(utilsPath, []byte(utilsContent), 0644)
+	require.NoError(t, err)
+
+	// Build dependency graph with only main.dart and helper.dart
+	// (utils.dart is NOT supplied, so it should be filtered out)
+	files := []string{mainPath, helperPath}
+	graph, err := BuildDependencyGraph(files)
+
+	require.NoError(t, err)
+	assert.Len(t, graph, 2)
+
+	// Check main.dart dependencies (should only contain helper.dart, NOT utils.dart)
+	mainDeps := graph[mainPath]
+	assert.Len(t, mainDeps, 1, "main.dart should only have 1 dependency (helper.dart)")
+	assert.Contains(t, mainDeps, helperPath)
+	assert.NotContains(t, mainDeps, utilsPath, "utils.dart should be filtered out since it wasn't supplied")
+
+	// Check helper.dart dependencies (should have none)
+	helperDeps := graph[helperPath]
+	assert.Empty(t, helperDeps)
+}
+
 func TestDependencyGraph_ToJSON(t *testing.T) {
 	graph := DependencyGraph{
 		"/project/main.dart":  {"/project/utils.dart", "/project/models/user.dart"},
