@@ -2,3 +2,9 @@
 
 # application binary
 sanity
+
+# coverage files
+coverage.out
+coverage.html
+*.coverprofile
+*.cover

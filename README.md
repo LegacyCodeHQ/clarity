@@ -31,6 +31,57 @@ sanity graph --repo . --commit HEAD~1 --format=json
 sanity graph --repo /path/to/repo --commit main --format=dot
 ```
 
+## Testing and Code Coverage
+
+This project uses Go's built-in testing framework with code coverage support.
+
+### Running Tests
+
+```bash
+# Run all tests
+make test
+# or
+go test ./...
+
+# Run tests with coverage percentage
+make test-coverage
+# or
+go test -cover ./...
+```
+
+### Generating Coverage Reports
+
+```bash
+# Generate coverage profile (coverage.out)
+make coverage
+# or
+go test -coverprofile=coverage.out ./...
+
+# Generate HTML coverage report (coverage.html)
+make coverage-html
+# or
+go test -coverprofile=coverage.out ./...
+go tool cover -html=coverage.out -o coverage.html
+
+# View the HTML report (open in browser)
+open coverage.html
+```
+
+### Makefile Targets
+
+- `make test` - Run all tests
+- `make test-coverage` - Run tests and show coverage percentage
+- `make coverage` - Generate coverage profile (coverage.out)
+- `make coverage-html` - Generate HTML coverage report (coverage.html)
+- `make clean` - Remove coverage files
+
+### Coverage Files
+
+Coverage files are automatically ignored by git:
+- `coverage.out` - Coverage profile data
+- `coverage.html` - HTML coverage report
+- `*.coverprofile` - Alternative coverage profile format
+
 ## Getting Help
 
 - **List all commands**: `sanity --help`
