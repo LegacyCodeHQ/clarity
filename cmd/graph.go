@@ -17,13 +17,16 @@ var commitID string
 var graphCmd = &cobra.Command{
 	Use:   "graph [files...]",
 	Short: "Generate dependency graph for project imports",
-	Long: `Analyzes Dart files and generates a dependency graph showing relationships
+	Long: `Analyzes files and generates a dependency graph showing relationships
 between project files (excluding external package: and dart: imports).
+
+All files are included in the graph. Dart files will show their dependencies,
+while non-Dart files appear as standalone nodes with no connections.
 
 Supports three modes:
   1. Explicit files: Analyze specific files
-  2. Uncommitted files: Analyze all uncommitted .dart files (--repo)
-  3. Commit analysis: Analyze .dart files changed in a commit (--repo --commit)
+  2. Uncommitted files: Analyze all uncommitted files (--repo)
+  3. Commit analysis: Analyze files changed in a commit (--repo --commit)
 
 Output formats:
   - list: Simple text list (default)
@@ -54,7 +57,7 @@ Example usage:
 				}
 
 				if len(filePaths) == 0 {
-					return fmt.Errorf("no Dart files changed in commit %s", commitID)
+					return fmt.Errorf("no files changed in commit %s", commitID)
 				}
 			} else {
 				// Uncommitted files mode
@@ -64,7 +67,7 @@ Example usage:
 				}
 
 				if len(filePaths) == 0 {
-					return fmt.Errorf("no uncommitted Dart files found in repository")
+					return fmt.Errorf("no uncommitted files found in repository")
 				}
 			}
 		} else {

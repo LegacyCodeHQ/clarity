@@ -170,23 +170,29 @@ func TestGetUncommittedDartFiles_MixedStates(t *testing.T) {
 	assert.Contains(t, files, resolved3)  // untracked
 }
 
-func TestGetUncommittedDartFiles_FiltersDartOnly(t *testing.T) {
+func TestGetUncommittedDartFiles_IncludesAllFiles(t *testing.T) {
 	tmpDir := t.TempDir()
 	setupGitRepo(t, tmpDir)
 
 	// Create various file types
 	dartFile := createDartFile(t, tmpDir, "test.dart")
-	createFile(t, tmpDir, "test.go", "package main")
-	createFile(t, tmpDir, "README.md", "# Test")
-	createFile(t, tmpDir, "test.txt", "text file")
+	goFile := createFile(t, tmpDir, "test.go", "package main")
+	mdFile := createFile(t, tmpDir, "README.md", "# Test")
+	txtFile := createFile(t, tmpDir, "test.txt", "text file")
 
 	// Get uncommitted files
 	files, err := GetUncommittedDartFiles(tmpDir)
 
 	require.NoError(t, err)
-	assert.Len(t, files, 1, "should only include .dart files")
-	resolved, _ := filepath.EvalSymlinks(dartFile)
-	assert.Contains(t, files, resolved)
+	assert.Len(t, files, 4, "should include all file types")
+	resolvedDart, _ := filepath.EvalSymlinks(dartFile)
+	resolvedGo, _ := filepath.EvalSymlinks(goFile)
+	resolvedMd, _ := filepath.EvalSymlinks(mdFile)
+	resolvedTxt, _ := filepath.EvalSymlinks(txtFile)
+	assert.Contains(t, files, resolvedDart)
+	assert.Contains(t, files, resolvedGo)
+	assert.Contains(t, files, resolvedMd)
+	assert.Contains(t, files, resolvedTxt)
 }
 
 func TestGetUncommittedDartFiles_NoUncommittedFiles(t *testing.T) {
@@ -330,14 +336,14 @@ func TestGetCommitDartFiles_MultipleFiles(t *testing.T) {
 	assert.Contains(t, files, resolved3)
 }
 
-func TestGetCommitDartFiles_FiltersDartOnly(t *testing.T) {
+func TestGetCommitDartFiles_IncludesAllFiles(t *testing.T) {
 	tmpDir := t.TempDir()
 	setupGitRepo(t, tmpDir)
 
 	// Create and commit various file types
 	dartFile := createDartFile(t, tmpDir, "test.dart")
-	createFile(t, tmpDir, "test.go", "package main")
-	createFile(t, tmpDir, "README.md", "# Test")
+	goFile := createFile(t, tmpDir, "test.go", "package main")
+	mdFile := createFile(t, tmpDir, "README.md", "# Test")
 
 	gitAdd(t, tmpDir, "test.dart")
 	gitAdd(t, tmpDir, "test.go")
@@ -348,17 +354,21 @@ func TestGetCommitDartFiles_FiltersDartOnly(t *testing.T) {
 	files, err := GetCommitDartFiles(tmpDir, commitID)
 
 	require.NoError(t, err)
-	assert.Len(t, files, 1, "should only include .dart files")
-	resolved, _ := filepath.EvalSymlinks(dartFile)
-	assert.Contains(t, files, resolved)
+	assert.Len(t, files, 3, "should include all file types")
+	resolvedDart, _ := filepath.EvalSymlinks(dartFile)
+	resolvedGo, _ := filepath.EvalSymlinks(goFile)
+	resolvedMd, _ := filepath.EvalSymlinks(mdFile)
+	assert.Contains(t, files, resolvedDart)
+	assert.Contains(t, files, resolvedGo)
+	assert.Contains(t, files, resolvedMd)
 }
 
-func TestGetCommitDartFiles_NoDartFiles(t *testing.T) {
+func TestGetCommitDartFiles_NonDartFiles(t *testing.T) {
 	tmpDir := t.TempDir()
 	setupGitRepo(t, tmpDir)
 
 	// Create and commit non-.dart files
-	createFile(t, tmpDir, "test.go", "package main")
+	goFile := createFile(t, tmpDir, "test.go", "package main")
 	gitAdd(t, tmpDir, "test.go")
 	commitID := gitCommitAndGetSHA(t, tmpDir, "Add go file")
 
@@ -366,7 +376,9 @@ func TestGetCommitDartFiles_NoDartFiles(t *testing.T) {
 	files, err := GetCommitDartFiles(tmpDir, commitID)
 
 	require.NoError(t, err)
-	assert.Empty(t, files)
+	assert.Len(t, files, 1)
+	resolvedGo, _ := filepath.EvalSymlinks(goFile)
+	assert.Contains(t, files, resolvedGo)
 }
 
 func TestGetCommitDartFiles_InvalidCommit(t *testing.T) {

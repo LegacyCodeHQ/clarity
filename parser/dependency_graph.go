@@ -34,7 +34,14 @@ func BuildDependencyGraph(filePaths []string) (DependencyGraph, error) {
 			return nil, fmt.Errorf("failed to resolve path %s: %w", filePath, err)
 		}
 
-		// Parse imports
+		// Check if this is a Dart file
+		if filepath.Ext(absPath) != ".dart" {
+			// Non-Dart files are included in the graph with no dependencies
+			graph[absPath] = []string{}
+			continue
+		}
+
+		// Parse imports for Dart files
 		imports, err := Imports(filePath)
 		if err != nil {
 			return nil, fmt.Errorf("failed to parse imports in %s: %w", filePath, err)

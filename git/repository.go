@@ -9,7 +9,7 @@ import (
 	"strings"
 )
 
-// GetUncommittedDartFiles finds all uncommitted .dart files in a git repository.
+// GetUncommittedDartFiles finds all uncommitted files in a git repository.
 // Returns absolute paths to all uncommitted files (staged, unstaged, and untracked).
 func GetUncommittedDartFiles(repoPath string) ([]string, error) {
 	// Validate the repository path exists
@@ -34,11 +34,8 @@ func GetUncommittedDartFiles(repoPath string) ([]string, error) {
 		return nil, fmt.Errorf("failed to get uncommitted files: %w", err)
 	}
 
-	// Filter for .dart files
-	dartFiles := filterDartFiles(uncommittedFiles)
-
-	// Convert to absolute paths
-	absolutePaths := toAbsolutePaths(repoRoot, dartFiles)
+	// Convert to absolute paths (no filtering - include all files)
+	absolutePaths := toAbsolutePaths(repoRoot, uncommittedFiles)
 
 	return absolutePaths, nil
 }
@@ -140,8 +137,8 @@ func toAbsolutePaths(repoRoot string, relativePaths []string) []string {
 	return absolutePaths
 }
 
-// GetCommitDartFiles finds all .dart files that were changed in a specific commit.
-// Returns absolute paths to all .dart files added, modified, or renamed in the commit.
+// GetCommitDartFiles finds all files that were changed in a specific commit.
+// Returns absolute paths to all files added, modified, or renamed in the commit.
 func GetCommitDartFiles(repoPath, commitID string) ([]string, error) {
 	// Validate the repository path exists
 	if _, err := os.Stat(repoPath); os.IsNotExist(err) {
@@ -170,11 +167,8 @@ func GetCommitDartFiles(repoPath, commitID string) ([]string, error) {
 		return nil, fmt.Errorf("failed to get files from commit: %w", err)
 	}
 
-	// Filter for .dart files
-	dartFiles := filterDartFiles(commitFiles)
-
-	// Convert to absolute paths
-	absolutePaths := toAbsolutePaths(repoRoot, dartFiles)
+	// Convert to absolute paths (no filtering - include all files)
+	absolutePaths := toAbsolutePaths(repoRoot, commitFiles)
 
 	return absolutePaths, nil
 }

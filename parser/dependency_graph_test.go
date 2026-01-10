@@ -202,3 +202,44 @@ func TestDependencyGraph_ToList(t *testing.T) {
 	assert.Contains(t, list, "/project/utils.dart:")
 	assert.Contains(t, list, "(no project dependencies)")
 }
+
+func TestBuildDependencyGraph_IncludesNonDartFiles(t *testing.T) {
+	// Create temporary directory with test files
+	tmpDir := t.TempDir()
+
+	// Create a .dart file
+	dartContent := `
+		import 'dart:io';
+		void main() {}
+	`
+	dartPath := filepath.Join(tmpDir, "main.dart")
+	err := os.WriteFile(dartPath, []byte(dartContent), 0644)
+	require.NoError(t, err)
+
+	// Create a non-.dart file (Go file)
+	goPath := filepath.Join(tmpDir, "main.go")
+	err = os.WriteFile(goPath, []byte("package main"), 0644)
+	require.NoError(t, err)
+
+	// Create another non-.dart file (README)
+	readmePath := filepath.Join(tmpDir, "README.md")
+	err = os.WriteFile(readmePath, []byte("# Test"), 0644)
+	require.NoError(t, err)
+
+	// Build dependency graph with all files
+	files := []string{dartPath, goPath, readmePath}
+	graph, err := BuildDependencyGraph(files)
+
+	require.NoError(t, err)
+	assert.Len(t, graph, 3, "graph should include all files")
+
+	// Verify .dart file is in the graph (may have dependencies parsed)
+	assert.Contains(t, graph, dartPath)
+
+	// Verify non-.dart files are in the graph with empty dependencies
+	assert.Contains(t, graph, goPath)
+	assert.Empty(t, graph[goPath], "non-dart file should have no dependencies")
+
+	assert.Contains(t, graph, readmePath)
+	assert.Empty(t, graph[readmePath], "non-dart file should have no dependencies")
+}
