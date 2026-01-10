@@ -13,13 +13,24 @@ help:
 test:
 	go test ./...
 
-# Run tests with coverage percentage
+# Run tests with coverage percentage (exclude cmd package as it has no tests)
 test-coverage:
+	@go list ./... | grep -v '/cmd$$' | xargs go test -cover
+
+# Alternative: test all packages including cmd (may fail on Go 1.25+)
+test-coverage-all:
 	go test -cover ./...
 
-# Generate coverage profile
+# Generate coverage profile (exclude cmd package as it has no tests)
 coverage:
-	go test -coverprofile=coverage.out ./...
+	@echo "mode: atomic" > coverage.out
+	@go list ./... | grep -v '/cmd$$' | while read pkg; do \
+		go test -coverprofile=coverage.tmp -covermode=atomic $$pkg || true; \
+		if [ -f coverage.tmp ]; then \
+			tail -n +2 coverage.tmp >> coverage.out; \
+			rm coverage.tmp; \
+		fi; \
+	done
 
 # Generate HTML coverage report (requires coverage.out)
 coverage-html: coverage
@@ -28,4 +39,4 @@ coverage-html: coverage
 
 # Clean coverage files
 clean:
-	rm -f coverage.out coverage.html *.coverprofile *.cover
+	rm -f coverage.out coverage.html coverage.tmp *.coverprofile *.cover

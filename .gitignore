@@ -6,5 +6,6 @@ sanity
 # coverage files
 coverage.out
 coverage.html
+coverage.tmp
 *.coverprofile
 *.cover
