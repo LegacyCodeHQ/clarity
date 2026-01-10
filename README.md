@@ -22,14 +22,21 @@ sanity graph file1.dart file2.dart file3.dart
 sanity graph --repo .
 
 # Analyze files changed in a specific commit
-sanity graph --repo . --commit abc123
+sanity graph --repo . --commit 8d4f78
 
 # Output in JSON format
 sanity graph --repo . --commit HEAD~1 --format=json
 
 # Output in Graphviz DOT format for visualization
-sanity graph --repo /path/to/repo --commit main --format=dot
+sanity graph --repo /path/to/repo --commit 8d4f78 --format=dot
 ```
+
+### Help
+
+- **List all commands**: `sanity --help`
+- **Command-specific help**: `sanity <command> --help`
+- **Help command alias**: `sanity help <command>`
+
 
 ## Testing and Code Coverage
 
@@ -74,16 +81,3 @@ open coverage.html
 - `make coverage` - Generate coverage profile (coverage.out)
 - `make coverage-html` - Generate HTML coverage report (coverage.html)
 - `make clean` - Remove coverage files
-
-### Coverage Files
-
-Coverage files are automatically ignored by git:
-- `coverage.out` - Coverage profile data
-- `coverage.html` - HTML coverage report
-- `*.coverprofile` - Alternative coverage profile format
-
-## Getting Help
-
-- **List all commands**: `sanity --help`
-- **Command-specific help**: `sanity <command> --help`
-- **Help command alias**: `sanity help <command>`
