@@ -54,8 +54,10 @@ This project uses Go's built-in testing framework with code coverage support.
 
 **Available make targets**:
 
-- `make test` - Run all tests
-- `make test-coverage` - Run tests and show coverage percentage
-- `make coverage` - Generate coverage profile (coverage.out)
-- `make coverage-html` - Generate HTML coverage report (coverage.html)
-- `make clean` - Remove coverage files and binary
+| Command              | Description                                   |
+|----------------------|-----------------------------------------------|
+| `make test`          | Run all tests                                 |
+| `make test-coverage` | Run tests and show coverage percentage        |
+| `make coverage`      | Generate coverage profile (coverage.out)      |
+| `make coverage-html` | Generate HTML coverage report (coverage.html) |
+| `make clean`         | Remove coverage files and binary              |
