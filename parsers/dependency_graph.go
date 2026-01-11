@@ -254,6 +254,21 @@ func (g DependencyGraph) ToDOT() string {
 	sb.WriteString("  rankdir=LR;\n")
 	sb.WriteString("  node [shape=box];\n\n")
 
+	// Track which nodes have been styled to avoid duplicates
+	styledNodes := make(map[string]bool)
+
+	// First, define node styles for test files
+	for source := range g {
+		sourceBase := filepath.Base(source)
+		if !styledNodes[sourceBase] && strings.HasSuffix(sourceBase, "_test.go") {
+			sb.WriteString(fmt.Sprintf("  %q [style=filled, fillcolor=lightgreen];\n", sourceBase))
+			styledNodes[sourceBase] = true
+		}
+	}
+	if len(styledNodes) > 0 {
+		sb.WriteString("\n")
+	}
+
 	for source, deps := range g {
 		// Use base filename for cleaner visualization
 		sourceBase := filepath.Base(source)
