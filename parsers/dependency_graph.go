@@ -292,7 +292,19 @@ func (g DependencyGraph) ToDOT() string {
 	// First, define node styles for test files
 	for source := range g {
 		sourceBase := filepath.Base(source)
-		if !styledNodes[sourceBase] && strings.HasSuffix(sourceBase, "_test.go") {
+		isTestFile := false
+
+		// Go test files: must have _test.go suffix
+		if strings.HasSuffix(sourceBase, "_test.go") {
+			isTestFile = true
+		}
+
+		// Dart test files: check if in test/ directory (more reliable than _test.dart suffix)
+		if filepath.Ext(sourceBase) == ".dart" && strings.Contains(filepath.ToSlash(source), "/test/") {
+			isTestFile = true
+		}
+
+		if !styledNodes[sourceBase] && isTestFile {
 			sb.WriteString(fmt.Sprintf("  %q [style=filled, fillcolor=lightgreen];\n", sourceBase))
 			styledNodes[sourceBase] = true
 		}
