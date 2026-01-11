@@ -194,7 +194,8 @@ func validateCommit(repoPath, commitID string) error {
 // getCommitFiles returns a list of all files changed in the specified commit (relative to repo root)
 func getCommitFiles(repoPath, commitID string) ([]string, error) {
 	// Use --root flag to handle root commits (first commit in repo)
-	cmd := exec.Command("git", "diff-tree", "--no-commit-id", "--name-only", "-r", "--root", commitID)
+	// Use --diff-filter=d to exclude deleted files (only include added, modified, and renamed files)
+	cmd := exec.Command("git", "diff-tree", "--no-commit-id", "--name-only", "-r", "--root", "--diff-filter=d", commitID)
 	cmd.Dir = repoPath
 
 	var stdout bytes.Buffer
