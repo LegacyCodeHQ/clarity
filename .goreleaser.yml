@@ -3,9 +3,9 @@
 version: 2
 
 # Build configuration
-# NOTE: This project uses CGO (tree-sitter C bindings), which makes cross-compilation
-# difficult. For production releases, use GitHub Actions which builds natively on each
-# platform. For local development, use 'make build-local' to build for your platform.
+# NOTE: This project uses CGO (tree-sitter C bindings). Cross-compilation is handled
+# via toolchains installed in GitHub Actions (gcc-mingw-w64, gcc-aarch64-linux-gnu, OSXCross).
+# For local development, use 'make build-local' to build for your platform.
 builds:
   - id: sanity
     main: ./main.go
@@ -29,6 +29,32 @@ builds:
       - -X sanity/cmd.version={{.Version}}
       - -X sanity/cmd.buildDate={{.Date}}
       - -X sanity/cmd.commit={{.ShortCommit}}
+    # Configure cross-compilation
+    overrides:
+      # Linux ARM64
+      - goos: linux
+        goarch: arm64
+        env:
+          - CC=aarch64-linux-gnu-gcc
+          - CXX=aarch64-linux-gnu-g++
+      # Windows AMD64
+      - goos: windows
+        goarch: amd64
+        env:
+          - CC=x86_64-w64-mingw32-gcc
+          - CXX=x86_64-w64-mingw32-g++
+      # macOS AMD64 (Intel)
+      - goos: darwin
+        goarch: amd64
+        env:
+          - CC=o64-clang
+          - CXX=o64-clang++
+      # macOS ARM64 (Apple Silicon)
+      - goos: darwin
+        goarch: arm64
+        env:
+          - CC=oa64-clang
+          - CXX=oa64-clang++
 
 # Archive configuration
 archives:

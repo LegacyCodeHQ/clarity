@@ -9,37 +9,10 @@ permissions:
   contents: write
 
 jobs:
-  build:
-    name: Build ${{ matrix.goos }}-${{ matrix.goarch }}
-    runs-on: ${{ matrix.os }}
-    strategy:
-      matrix:
-        include:
-          # Linux builds
-          - os: ubuntu-latest
-            goos: linux
-            goarch: amd64
-
-          - os: ubuntu-latest
-            goos: linux
-            goarch: arm64
-
-          # macOS builds
-          - os: macos-15-intel  # Intel (x86_64)
-            goos: darwin
-            goarch: amd64
-
-          - os: macos-latest  # Apple Silicon (arm64)
-            goos: darwin
-            goarch: arm64
-
-          # Windows builds
-          - os: windows-latest
-            goos: windows
-            goarch: amd64
-
+  goreleaser:
+    runs-on: ubuntu-latest
     steps:
-      - name: Checkout code
+      - name: Checkout
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
@@ -50,150 +23,35 @@ jobs:
           go-version: '1.25'
           cache-dependency-path: go.sum
 
-      - name: Get version from tag
-        id: version
-        shell: bash
+      - name: Install cross-compilation toolchains
         run: |
-          echo "version=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
-          echo "tag=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+          sudo apt-get update
+          sudo apt-get install -y gcc-mingw-w64-x86-64 gcc-aarch64-linux-gnu
 
-      - name: Build binary
-        shell: bash
-        env:
-          GOOS: ${{ matrix.goos }}
-          GOARCH: ${{ matrix.goarch }}
-          CGO_ENABLED: 1
+      - name: Set up OSXCross for macOS builds
         run: |
-          VERSION=${{ steps.version.outputs.tag }}
-          BUILD_DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
-          COMMIT=$(git rev-parse --short HEAD)
+          # Install dependencies for OSXCross
+          sudo apt-get install -y clang llvm-dev libxml2-dev uuid-dev libssl-dev bash patch make tar xz-utils bzip2 gzip sed cpio libbz2-dev
 
-          if [ "${{ matrix.goos }}" = "windows" ]; then
-            OUTPUT="sanity.exe"
-          else
-            OUTPUT="sanity"
-          fi
+          # Clone OSXCross
+          git clone https://github.com/tpoechtrager/osxcross /tmp/osxcross
+          cd /tmp/osxcross
 
-          go build -ldflags "-s -w -X sanity/cmd.version=${VERSION} -X sanity/cmd.buildDate=${BUILD_DATE} -X sanity/cmd.commit=${COMMIT}" -o "${OUTPUT}" ./main.go
+          # Download macOS SDK (we'll use the publicly available SDK)
+          wget -nc https://github.com/joseluisq/macosx-sdks/releases/download/12.3/MacOSX12.3.sdk.tar.xz -O tarballs/MacOSX12.3.sdk.tar.xz
 
-      - name: Create archive
-        shell: bash
-        run: |
-          VERSION=${{ steps.version.outputs.version }}
-          if [ "${{ matrix.goos }}" = "windows" ]; then
-            ARCHIVE="sanity_${VERSION}_${{ matrix.goos }}_${{ matrix.goarch }}.zip"
-            7z a "${ARCHIVE}" sanity.exe LICENSE README.md
-          else
-            ARCHIVE="sanity_${VERSION}_${{ matrix.goos }}_${{ matrix.goarch }}.tar.gz"
-            tar czf "${ARCHIVE}" sanity LICENSE README.md
-          fi
-          echo "archive=${ARCHIVE}" >> $GITHUB_ENV
+          # Build OSXCross
+          UNATTENDED=yes OSX_VERSION_MIN=10.13 ./build.sh
 
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
+          # Add to PATH
+          echo "/tmp/osxcross/target/bin" >> $GITHUB_PATH
+
+      - name: Run GoReleaser
+        uses: goreleaser/goreleaser-action@v6
         with:
-          name: sanity-${{ matrix.goos }}-${{ matrix.goarch }}
-          path: ${{ env.archive }}
-          retention-days: 1
-
-  release:
-    name: Create Release & Homebrew Formula
-    needs: build
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Download all artifacts
-        uses: actions/download-artifact@v4
-        with:
-          path: dist
-
-      - name: Flatten artifacts directory
-        run: |
-          mkdir -p dist-flat
-          find dist -type f \( -name "*.tar.gz" -o -name "*.zip" \) -exec mv {} dist-flat/ \;
-          rm -rf dist
-          mv dist-flat dist
-
-      - name: Generate checksums
-        run: |
-          cd dist
-          sha256sum *.tar.gz *.zip > checksums.txt
-
-      - name: Create Release
-        uses: softprops/action-gh-release@v2
-        with:
-          draft: false
-          prerelease: false
-          generate_release_notes: true
-          files: |
-            dist/*.tar.gz
-            dist/*.zip
-            dist/checksums.txt
+          distribution: goreleaser
+          version: '~> v2'
+          args: release --clean
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Update Homebrew Formula
-        if: env.HOMEBREW_TAP_TOKEN != ''
-        env:
           HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
-        run: |
-          VERSION="${GITHUB_REF#refs/tags/v}"
-
-          # Calculate SHA256 for macOS ARM64 archive (primary target for Homebrew)
-          DARWIN_ARM64_SHA=$(sha256sum dist/sanity_${VERSION}_darwin_arm64.tar.gz | awk '{print $1}')
-          DARWIN_AMD64_SHA=$(sha256sum dist/sanity_${VERSION}_darwin_amd64.tar.gz | awk '{print $1}')
-          LINUX_ARM64_SHA=$(sha256sum dist/sanity_${VERSION}_linux_arm64.tar.gz | awk '{print $1}')
-          LINUX_AMD64_SHA=$(sha256sum dist/sanity_${VERSION}_linux_amd64.tar.gz | awk '{print $1}')
-
-          # Clone the homebrew-tap repository
-          git clone https://x-access-token:${HOMEBREW_TAP_TOKEN}@github.com/LegacyCodeHQ/homebrew-tap.git
-          cd homebrew-tap
-
-          # Create or update the formula
-          cat > Formula/sanity.rb <<EOF
-          class Sanity < Formula
-            desc "CLI tool for analyzing and visualizing dependency graphs"
-            homepage "https://github.com/LegacyCodeHQ/sanity"
-            version "${VERSION}"
-            license "MIT"
-
-            on_macos do
-              if Hardware::CPU.arm?
-                url "https://github.com/LegacyCodeHQ/sanity/releases/download/v${VERSION}/sanity_${VERSION}_darwin_arm64.tar.gz"
-                sha256 "${DARWIN_ARM64_SHA}"
-              else
-                url "https://github.com/LegacyCodeHQ/sanity/releases/download/v${VERSION}/sanity_${VERSION}_darwin_amd64.tar.gz"
-                sha256 "${DARWIN_AMD64_SHA}"
-              end
-            end
-
-            on_linux do
-              if Hardware::CPU.arm?
-                url "https://github.com/LegacyCodeHQ/sanity/releases/download/v${VERSION}/sanity_${VERSION}_linux_arm64.tar.gz"
-                sha256 "${LINUX_ARM64_SHA}"
-              else
-                url "https://github.com/LegacyCodeHQ/sanity/releases/download/v${VERSION}/sanity_${VERSION}_linux_amd64.tar.gz"
-                sha256 "${LINUX_AMD64_SHA}"
-              end
-            end
-
-            def install
-              bin.install "sanity"
-            end
-
-            test do
-              system "#{bin}/sanity", "--version"
-            end
-          end
-          EOF
-
-          # Commit and push the formula
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add Formula/sanity.rb
-          git commit -m "Update sanity to v${VERSION}"
-          git push origin main
