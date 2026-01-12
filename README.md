@@ -52,7 +52,7 @@ sanity graph --format=json
 sanity graph --commit 8d4f78
 
 # Analyze uncommitted files in a different repository
-sanity graph --repo /path/to/repo
+sanity graph --repo /path/to/repo --commit HEAD~1
 
 # Analyze specific files directly
 sanity graph file1.dart file2.dart file3.dart
