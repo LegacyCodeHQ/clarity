@@ -6,6 +6,9 @@ GIT_TAG := $(shell git describe --tags --exact-match 2>/dev/null || git describe
 VERSION ?= $(if $(GIT_TAG),$(GIT_TAG),dev)
 BUILD_DATE := $(shell date -u +"%Y-%m-%dT%H:%M:%SZ")
 COMMIT := $(shell git rev-parse --short HEAD 2>/dev/null || echo "unknown")
+# Check for uncommitted changes (staged, unstaged, or untracked) and add -dirty suffix if present
+DIRTY_CHECK := $(shell test -z "$$(git status --porcelain 2>/dev/null)" || echo "-dirty")
+COMMIT := $(COMMIT)$(DIRTY_CHECK)
 
 # Default target
 help:
