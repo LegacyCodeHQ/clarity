@@ -287,26 +287,97 @@ func (g DependencyGraph) ToDOT() string {
 	sb.WriteString("  rankdir=LR;\n")
 	sb.WriteString("  node [shape=box];\n\n")
 
-	// Track which nodes have been styled to avoid duplicates
-	styledNodes := make(map[string]bool)
+	// Find all files with the most dependencies (nodes)
+	maxDeps := 0
+	for _, deps := range g {
+		if len(deps) > maxDeps {
+			maxDeps = len(deps)
+		}
+	}
 
-	// First, define node styles for test files
+	// Track all files that have the maximum dependency count
+	filesWithMostDeps := make(map[string]bool)
+	for source, deps := range g {
+		if len(deps) == maxDeps {
+			filesWithMostDeps[source] = true
+		}
+	}
+
+	// Count unique file extensions to determine if we need extension-based coloring
+	uniqueExtensions := make(map[string]bool)
 	for source := range g {
+		ext := filepath.Ext(filepath.Base(source))
+		uniqueExtensions[ext] = true
+	}
+	hasMultipleExtensions := len(uniqueExtensions) > 1
+
+	// Available colors for dynamic assignment to extensions
+	availableColors := []string{
+		"lightblue", "lightyellow", "lightcoral", "lightcyan",
+		"lightsalmon", "lightpink", "lavender", "mistyrose",
+		"peachpuff", "plum", "powderblue", "khaki",
+		"palegreen", "palegoldenrod", "paleturquoise", "thistle",
+	}
+
+	// Dynamically assign colors to extensions as they are encountered
+	extensionColors := make(map[string]string)
+	colorIndex := 0
+
+	// Helper function to get color for an extension
+	getColorForExtension := func(ext string) string {
+		if color, ok := extensionColors[ext]; ok {
+			return color
+		}
+		// Assign a new color to this extension
+		color := availableColors[colorIndex%len(availableColors)]
+		extensionColors[ext] = color
+		colorIndex++
+		return color
+	}
+
+	// Helper function to check if a file is a test file
+	isTestFile := func(source string) bool {
 		sourceBase := filepath.Base(source)
-		isTestFile := false
 
 		// Go test files: must have _test.go suffix
 		if strings.HasSuffix(sourceBase, "_test.go") {
-			isTestFile = true
+			return true
 		}
 
-		// Dart test files: check if in test/ directory (more reliable than _test.dart suffix)
+		// Dart test files: check if in test/ directory
 		if filepath.Ext(sourceBase) == ".dart" && strings.Contains(filepath.ToSlash(source), "/test/") {
-			isTestFile = true
+			return true
 		}
 
-		if !styledNodes[sourceBase] && isTestFile {
-			sb.WriteString(fmt.Sprintf("  %q [style=filled, fillcolor=lightgreen];\n", sourceBase))
+		return false
+	}
+
+	// Track which nodes have been styled to avoid duplicates
+	styledNodes := make(map[string]bool)
+
+	// First, define node styles based on file extensions
+	for source := range g {
+		sourceBase := filepath.Base(source)
+
+		if !styledNodes[sourceBase] {
+			var color string
+
+			// Priority 1: Test files are always light green
+			if isTestFile(source) {
+				color = "lightgreen"
+			} else if filesWithMostDeps[source] {
+				// Priority 2: Files with most dependencies are always white
+				color = "white"
+			} else if hasMultipleExtensions {
+				// Priority 3: Color based on extension (only if multiple extensions exist)
+				ext := filepath.Ext(sourceBase)
+				color = getColorForExtension(ext)
+			} else {
+				// Priority 4: Single extension - use white (no need to differentiate)
+				color = "white"
+			}
+
+			sb.WriteString(fmt.Sprintf("  %q [style=filled, fillcolor=%s];\n", sourceBase, color))
 			styledNodes[sourceBase] = true
 		}
 	}
