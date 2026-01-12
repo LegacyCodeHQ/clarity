@@ -54,4 +54,90 @@ jobs:
           args: release --clean
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  update-homebrew:
+    name: Update Homebrew Tap
+    needs: goreleaser
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Extract version
+        id: version
+        run: echo "version=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+
+      - name: Download checksums
+        run: |
+          VERSION=${{ steps.version.outputs.version }}
+          curl -sL "https://github.com/LegacyCodeHQ/sanity/releases/download/v${VERSION}/sanity_${VERSION}_checksums.txt" -o checksums.txt
+
+      - name: Parse checksums
+        id: checksums
+        run: |
+          VERSION=${{ steps.version.outputs.version }}
+          echo "darwin_amd64=$(grep "sanity_${VERSION}_darwin_amd64.tar.gz" checksums.txt | awk '{print $1}')" >> $GITHUB_OUTPUT
+          echo "darwin_arm64=$(grep "sanity_${VERSION}_darwin_arm64.tar.gz" checksums.txt | awk '{print $1}')" >> $GITHUB_OUTPUT
+          echo "linux_amd64=$(grep "sanity_${VERSION}_linux_amd64.tar.gz" checksums.txt | awk '{print $1}')" >> $GITHUB_OUTPUT
+          echo "linux_arm64=$(grep "sanity_${VERSION}_linux_arm64.tar.gz" checksums.txt | awk '{print $1}')" >> $GITHUB_OUTPUT
+
+      - name: Update Homebrew formula
+        if: env.HOMEBREW_TAP_TOKEN != ''
+        env:
           HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+        run: |
+          VERSION=${{ steps.version.outputs.version }}
+
+          # Clone homebrew tap
+          git clone https://x-access-token:${HOMEBREW_TAP_TOKEN}@github.com/LegacyCodeHQ/homebrew-tap.git
+          cd homebrew-tap
+
+          # Create Formula directory if it doesn't exist
+          mkdir -p Formula
+
+          # Generate formula
+          cat > Formula/sanity.rb <<EOF
+          class Sanity < Formula
+            desc "CLI tool for analyzing and visualizing dependency graphs"
+            homepage "https://github.com/LegacyCodeHQ/sanity"
+            version "${VERSION}"
+            license "MIT"
+
+            on_macos do
+              if Hardware::CPU.arm?
+                url "https://github.com/LegacyCodeHQ/sanity/releases/download/v${VERSION}/sanity_${VERSION}_darwin_arm64.tar.gz"
+                sha256 "${{ steps.checksums.outputs.darwin_arm64 }}"
+              else
+                url "https://github.com/LegacyCodeHQ/sanity/releases/download/v${VERSION}/sanity_${VERSION}_darwin_amd64.tar.gz"
+                sha256 "${{ steps.checksums.outputs.darwin_amd64 }}"
+              end
+            end
+
+            on_linux do
+              if Hardware::CPU.arm?
+                url "https://github.com/LegacyCodeHQ/sanity/releases/download/v${VERSION}/sanity_${VERSION}_linux_arm64.tar.gz"
+                sha256 "${{ steps.checksums.outputs.linux_arm64 }}"
+              else
+                url "https://github.com/LegacyCodeHQ/sanity/releases/download/v${VERSION}/sanity_${VERSION}_linux_amd64.tar.gz"
+                sha256 "${{ steps.checksums.outputs.linux_amd64 }}"
+              end
+            end
+
+            def install
+              bin.install "sanity"
+            end
+
+            test do
+              system "#{bin}/sanity", "--version"
+            end
+          end
+          EOF
+
+          # Commit and push
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add Formula/sanity.rb
+          git commit -m "Update sanity to v${VERSION}"
+          git push origin trunk
