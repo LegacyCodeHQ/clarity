@@ -165,9 +165,9 @@ func TestGetUncommittedDartFiles_MixedStates(t *testing.T) {
 	resolved1, _ := filepath.EvalSymlinks(committedFile)
 	resolved2, _ := filepath.EvalSymlinks(stagedFile)
 	resolved3, _ := filepath.EvalSymlinks(untrackedFile)
-	assert.Contains(t, files, resolved1)  // modified
-	assert.Contains(t, files, resolved2)  // staged
-	assert.Contains(t, files, resolved3)  // untracked
+	assert.Contains(t, files, resolved1) // modified
+	assert.Contains(t, files, resolved2) // staged
+	assert.Contains(t, files, resolved3) // untracked
 }
 
 func TestGetUncommittedDartFiles_IncludesAllFiles(t *testing.T) {

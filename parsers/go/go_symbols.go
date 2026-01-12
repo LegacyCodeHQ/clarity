@@ -5,8 +5,9 @@ import (
 	"go/parser"
 	"go/token"
 	"path/filepath"
-	"sanity/git"
 	"strings"
+
+	"github.com/LegacyCodeHQ/sanity/git"
 )
 
 // GoSymbolInfo tracks symbols defined and referenced in a Go file

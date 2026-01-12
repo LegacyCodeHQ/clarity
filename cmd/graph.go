@@ -3,8 +3,8 @@ package cmd
 import (
 	"fmt"
 
-	"sanity/git"
-	"sanity/parsers"
+	"github.com/LegacyCodeHQ/sanity/git"
+	"github.com/LegacyCodeHQ/sanity/parsers"
 
 	"github.com/atotto/clipboard"
 	"github.com/spf13/cobra"

@@ -1,4 +1,4 @@
-module sanity
+module github.com/LegacyCodeHQ/sanity
 
 go 1.25
 

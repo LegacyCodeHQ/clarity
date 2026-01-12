@@ -1,6 +1,6 @@
 package main
 
-import "sanity/cmd"
+import "github.com/LegacyCodeHQ/sanity/cmd"
 
 func main() {
 	cmd.Execute()

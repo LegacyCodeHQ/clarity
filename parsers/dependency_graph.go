@@ -6,10 +6,11 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"sanity/git"
-	"sanity/parsers/dart"
-	"sanity/parsers/go"
 	"strings"
+
+	"github.com/LegacyCodeHQ/sanity/git"
+	"github.com/LegacyCodeHQ/sanity/parsers/dart"
+	"github.com/LegacyCodeHQ/sanity/parsers/go"
 )
 
 // DependencyGraph represents a mapping from file paths to their project dependencies

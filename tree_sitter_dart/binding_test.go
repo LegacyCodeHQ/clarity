@@ -3,7 +3,7 @@ package tree_sitter_dart_test
 import (
 	"testing"
 
-	"sanity/tree_sitter_dart"
+	"github.com/LegacyCodeHQ/sanity/tree_sitter_dart"
 )
 
 func TestCanLoadGrammar(t *testing.T) {
