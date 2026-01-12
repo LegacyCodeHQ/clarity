@@ -142,6 +142,10 @@ func BuildDependencyGraph(filePaths []string, repoPath, commitID string) (Depend
 
 				// Find all files in the supplied list that are in this package
 				if files, ok := dirToFiles[packageDir]; ok {
+					// Check if we're importing from the same directory
+					sourceDir := filepath.Dir(absPath)
+					sameDir := sourceDir == packageDir
+
 					for _, depFile := range files {
 						// Don't add self-dependencies
 						if depFile != absPath {
@@ -149,6 +153,13 @@ func BuildDependencyGraph(filePaths []string, repoPath, commitID string) (Depend
 							if !isTestFile && strings.HasSuffix(depFile, "_test.go") {
 								continue
 							}
+
+							// If importing from same directory, only include .go files
+							// If importing from different directory, include all files (including C files for CGo)
+							if sameDir && filepath.Ext(depFile) != ".go" {
+								continue
+							}
+
 							projectImports = append(projectImports, depFile)
 						}
 					}
