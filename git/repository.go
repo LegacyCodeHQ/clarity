@@ -23,7 +23,7 @@ func GetUncommittedDartFiles(repoPath string) ([]string, error) {
 	}
 
 	// Get the repository root
-	repoRoot, err := getRepositoryRoot(repoPath)
+	repoRoot, err := GetRepositoryRoot(repoPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get repository root: %w", err)
 	}
@@ -48,8 +48,8 @@ func isGitRepository(path string) bool {
 	return err == nil
 }
 
-// getRepositoryRoot returns the absolute path to the repository root
-func getRepositoryRoot(repoPath string) (string, error) {
+// GetRepositoryRoot returns the absolute path to the repository root
+func GetRepositoryRoot(repoPath string) (string, error) {
 	cmd := exec.Command("git", "rev-parse", "--show-toplevel")
 	cmd.Dir = repoPath
 
@@ -156,7 +156,7 @@ func GetCommitDartFiles(repoPath, commitID string) ([]string, error) {
 	}
 
 	// Get the repository root
-	repoRoot, err := getRepositoryRoot(repoPath)
+	repoRoot, err := GetRepositoryRoot(repoPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get repository root: %w", err)
 	}

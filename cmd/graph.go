@@ -3,6 +3,7 @@ package cmd
 import (
 	"fmt"
 	"net/url"
+	"path/filepath"
 
 	"github.com/LegacyCodeHQ/sanity/git"
 	"github.com/LegacyCodeHQ/sanity/parsers"
@@ -105,10 +106,17 @@ Example usage:
 				labelRepoPath = "."
 			}
 
+			// Get repository root and extract directory name
+			repoRoot, err := git.GetRepositoryRoot(labelRepoPath)
+			if err == nil {
+				projectName := filepath.Base(repoRoot)
+				label = fmt.Sprintf("(%s) ", projectName)
+			}
+
 			// Get current commit hash
 			commitHash, err := git.GetCurrentCommitHash(labelRepoPath)
 			if err == nil {
-				label = commitHash
+				label += commitHash
 
 				// Check if there are uncommitted changes
 				isDirty, err := git.HasUncommittedChanges(labelRepoPath)
