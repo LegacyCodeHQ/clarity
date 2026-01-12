@@ -1,0 +1,3 @@
+# Tree-sitter Dart bindings are vendored/generated code
+tree_sitter_dart/** linguist-vendored
+tree_sitter_dart/*.c linguist-generated
