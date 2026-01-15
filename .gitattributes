@@ -1,3 +1,6 @@
 # Tree-sitter external bindings - only exclude C/header files, not Go files
 tree_sitter_external/**/*.c linguist-generated
 tree_sitter_external/**/*.h linguist-vendored
+
+# Use bd merge for beads JSONL files
+.beads/issues.jsonl merge=beads
