@@ -56,6 +56,10 @@ Example usage:
 		var filePaths []string
 		var err error
 
+		// Track commit range info for use throughout the function
+		var fromCommit, toCommit string
+		var isCommitRange bool
+
 		// If no explicit files provided and no repo path specified, default to current directory
 		if len(includes) == 0 && repoPath == "" {
 			repoPath = "."
@@ -68,14 +72,35 @@ Example usage:
 			}
 
 			if commitID != "" {
-				// Commit analysis mode
-				filePaths, err = git.GetCommitDartFiles(repoPath, commitID)
-				if err != nil {
-					return fmt.Errorf("failed to get files from commit: %w", err)
-				}
+				// Parse potential commit range
+				fromCommit, toCommit, isCommitRange = git.ParseCommitRange(commitID)
 
-				if len(filePaths) == 0 {
-					return fmt.Errorf("no files changed in commit %s", commitID)
+				if isCommitRange {
+					// Normalize commit range to chronological order (older...newer)
+					fromCommit, toCommit, _, err = git.NormalizeCommitRange(repoPath, fromCommit, toCommit)
+					if err != nil {
+						return fmt.Errorf("failed to normalize commit range: %w", err)
+					}
+
+					// Commit range mode
+					filePaths, err = git.GetCommitRangeFiles(repoPath, fromCommit, toCommit)
+					if err != nil {
+						return fmt.Errorf("failed to get files from commit range: %w", err)
+					}
+
+					if len(filePaths) == 0 {
+						return fmt.Errorf("no files changed in commit range %s", commitID)
+					}
+				} else {
+					// Single commit mode
+					filePaths, err = git.GetCommitDartFiles(repoPath, toCommit)
+					if err != nil {
+						return fmt.Errorf("failed to get files from commit: %w", err)
+					}
+
+					if len(filePaths) == 0 {
+						return fmt.Errorf("no files changed in commit %s", toCommit)
+					}
 				}
 			} else {
 				// Uncommitted files mode
@@ -113,8 +138,9 @@ Example usage:
 		}
 
 		// Build the dependency graph
-		// Pass repoPath and commitID if we're analyzing a commit (otherwise pass empty strings)
-		graph, err := parsers.BuildDependencyGraph(filePaths, repoPath, commitID)
+		// Pass repoPath and toCommit if we're analyzing a commit (otherwise pass empty strings)
+		// For ranges, toCommit is the right side; for single commits, it's the commit itself
+		graph, err := parsers.BuildDependencyGraph(filePaths, repoPath, toCommit)
 		if err != nil {
 			return fmt.Errorf("failed to build dependency graph: %w", err)
 		}
@@ -123,8 +149,13 @@ Example usage:
 		var fileStats map[string]git.FileStats
 		if (outputFormat == "dot" || outputFormat == "mermaid") && repoPath != "" {
 			if commitID != "" {
-				// Get stats for committed changes
-				fileStats, err = git.GetCommitFileStats(repoPath, commitID)
+				if isCommitRange {
+					// Get stats for commit range
+					fileStats, err = git.GetCommitRangeFileStats(repoPath, fromCommit, toCommit)
+				} else {
+					// Get stats for single commit
+					fileStats, err = git.GetCommitFileStats(repoPath, toCommit)
+				}
 				if err != nil {
 					// Don't fail if we can't get stats, just log and continue without them
 					fmt.Fprintf(cmd.ErrOrStderr(), "Warning: failed to get file statistics: %v\n", err)
@@ -155,17 +186,22 @@ Example usage:
 				label = fmt.Sprintf("%s • ", projectName)
 			}
 
-			// Get current commit hash
-			var commitHash string
+			// Get commit hash or range label
+			var commitLabel string
 			if commitID != "" {
-				// When analyzing a specific commit, show that commit's hash
-				commitHash, err = git.GetShortCommitHash(labelRepoPath, commitID)
+				if isCommitRange {
+					// When analyzing a commit range, show "abc123...def456"
+					commitLabel, err = git.GetCommitRangeLabel(labelRepoPath, fromCommit, toCommit)
+				} else {
+					// When analyzing a specific commit, show that commit's hash
+					commitLabel, err = git.GetShortCommitHash(labelRepoPath, toCommit)
+				}
 			} else {
 				// When analyzing uncommitted changes, show current HEAD
-				commitHash, err = git.GetCurrentCommitHash(labelRepoPath)
+				commitLabel, err = git.GetCurrentCommitHash(labelRepoPath)
 			}
 			if err == nil {
-				label += commitHash
+				label += commitLabel
 
 				// Only check for uncommitted changes when analyzing current state (not a specific commit)
 				if commitID == "" {
