@@ -66,15 +66,12 @@ func extractSymbolsFromAST(filePath string, node *ast.File) (*GoSymbolInfo, erro
 	for _, decl := range node.Decls {
 		switch d := decl.(type) {
 		case *ast.FuncDecl:
-			// Function or method
+			// Only track top-level functions, not methods
+			// Methods are scoped to their receiver type and don't create
+			// package-level dependencies (e.g., DOTFormatter.Format is different
+			// from JSONFormatter.Format, even though both are named "Format")
 			if d.Recv == nil {
-				// Top-level function
 				info.Defined[d.Name.Name] = true
-			} else {
-				// Method - also track the receiver type
-				if d.Name.IsExported() {
-					info.Defined[d.Name.Name] = true
-				}
 			}
 		case *ast.GenDecl:
 			// Type, const, var, or import
