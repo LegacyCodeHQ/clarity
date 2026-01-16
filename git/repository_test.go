@@ -637,3 +637,816 @@ func TestParseRenamedFilePath_NoRename(t *testing.T) {
 		})
 	}
 }
+
+// Tests for GetRepositoryRoot
+
+func TestGetRepositoryRoot_FromRepoRoot(t *testing.T) {
+	tmpDir := t.TempDir()
+	setupGitRepo(t, tmpDir)
+
+	root, err := GetRepositoryRoot(tmpDir)
+
+	require.NoError(t, err)
+	// Resolve symlinks for comparison (macOS /var -> /private/var)
+	resolvedTmp, _ := filepath.EvalSymlinks(tmpDir)
+	assert.Equal(t, resolvedTmp, root)
+}
+
+func TestGetRepositoryRoot_FromSubdirectory(t *testing.T) {
+	tmpDir := t.TempDir()
+	setupGitRepo(t, tmpDir)
+
+	// Create subdirectory
+	subDir := filepath.Join(tmpDir, "lib", "src")
+	err := os.MkdirAll(subDir, 0755)
+	require.NoError(t, err)
+
+	root, err := GetRepositoryRoot(subDir)
+
+	require.NoError(t, err)
+	resolvedTmp, _ := filepath.EvalSymlinks(tmpDir)
+	assert.Equal(t, resolvedTmp, root)
+}
+
+func TestGetRepositoryRoot_NotGitRepo(t *testing.T) {
+	tmpDir := t.TempDir()
+	// Don't initialize git
+
+	_, err := GetRepositoryRoot(tmpDir)
+
+	assert.Error(t, err)
+}
+
+// Tests for GetFileContentFromCommit
+
+func TestGetFileContentFromCommit_Success(t *testing.T) {
+	tmpDir := t.TempDir()
+	setupGitRepo(t, tmpDir)
+
+	// Create and commit a file with specific content
+	content := "package main\n\nfunc main() {\n\tprintln(\"hello\")\n}\n"
+	createFile(t, tmpDir, "main.go", content)
+	gitAdd(t, tmpDir, "main.go")
+	commitID := gitCommitAndGetSHA(t, tmpDir, "Add main.go")
+
+	// Read the file content from commit
+	result, err := GetFileContentFromCommit(tmpDir, commitID, "main.go")
+
+	require.NoError(t, err)
+	assert.Equal(t, content, string(result))
+}
+
+func TestGetFileContentFromCommit_OlderCommit(t *testing.T) {
+	tmpDir := t.TempDir()
+	setupGitRepo(t, tmpDir)
+
+	// Create and commit a file with initial content
+	initialContent := "version 1"
+	createFile(t, tmpDir, "version.txt", initialContent)
+	gitAdd(t, tmpDir, "version.txt")
+	firstCommit := gitCommitAndGetSHA(t, tmpDir, "Version 1")
+
+	// Modify and commit again
+	modifiedContent := "version 2"
+	createFile(t, tmpDir, "version.txt", modifiedContent)
+	gitAdd(t, tmpDir, "version.txt")
+	gitCommit(t, tmpDir, "Version 2")
+
+	// Read the old content from first commit
+	result, err := GetFileContentFromCommit(tmpDir, firstCommit, "version.txt")
+
+	require.NoError(t, err)
+	assert.Equal(t, initialContent, string(result))
+}
+
+func TestGetFileContentFromCommit_FileInSubdirectory(t *testing.T) {
+	tmpDir := t.TempDir()
+	setupGitRepo(t, tmpDir)
+
+	// Create subdirectory and file
+	subDir := filepath.Join(tmpDir, "lib")
+	err := os.Mkdir(subDir, 0755)
+	require.NoError(t, err)
+
+	content := "library code"
+	createFile(t, subDir, "lib.go", content)
+	gitAdd(t, tmpDir, "lib/lib.go")
+	commitID := gitCommitAndGetSHA(t, tmpDir, "Add lib.go")
+
+	// Read using relative path from repo root
+	result, err := GetFileContentFromCommit(tmpDir, commitID, "lib/lib.go")
+
+	require.NoError(t, err)
+	assert.Equal(t, content, string(result))
+}
+
+func TestGetFileContentFromCommit_FileNotFound(t *testing.T) {
+	tmpDir := t.TempDir()
+	setupGitRepo(t, tmpDir)
+
+	// Create a commit with one file
+	createFile(t, tmpDir, "exists.txt", "content")
+	gitAdd(t, tmpDir, "exists.txt")
+	commitID := gitCommitAndGetSHA(t, tmpDir, "Add file")
+
+	// Try to read a non-existent file
+	_, err := GetFileContentFromCommit(tmpDir, commitID, "nonexistent.txt")
+
+	assert.Error(t, err)
+}
+
+func TestGetFileContentFromCommit_InvalidCommit(t *testing.T) {
+	tmpDir := t.TempDir()
+	setupGitRepo(t, tmpDir)
+
+	createFile(t, tmpDir, "test.txt", "content")
+	gitAdd(t, tmpDir, "test.txt")
+	gitCommit(t, tmpDir, "Initial commit")
+
+	_, err := GetFileContentFromCommit(tmpDir, "invalid-sha", "test.txt")
+
+	assert.Error(t, err)
+}
+
+// Tests for GetCurrentCommitHash
+
+func TestGetCurrentCommitHash_Success(t *testing.T) {
+	tmpDir := t.TempDir()
+	setupGitRepo(t, tmpDir)
+
+	createFile(t, tmpDir, "test.txt", "content")
+	gitAdd(t, tmpDir, "test.txt")
+	gitCommit(t, tmpDir, "Initial commit")
+
+	hash, err := GetCurrentCommitHash(tmpDir)
+
+	require.NoError(t, err)
+	assert.NotEmpty(t, hash)
+	// Short hash is typically 7 characters
+	assert.True(t, len(hash) >= 7 && len(hash) <= 12, "hash should be short format")
+}
+
+func TestGetCurrentCommitHash_MatchesHEAD(t *testing.T) {
+	tmpDir := t.TempDir()
+	setupGitRepo(t, tmpDir)
+
+	createFile(t, tmpDir, "test.txt", "content")
+	gitAdd(t, tmpDir, "test.txt")
+	expectedHash := gitCommitAndGetSHA(t, tmpDir, "Initial commit")
+
+	hash, err := GetCurrentCommitHash(tmpDir)
+
+	require.NoError(t, err)
+	// The current hash should be a prefix of the full commit SHA
+	assert.True(t, strings.HasPrefix(expectedHash, hash), "current hash should match HEAD")
+}
+
+func TestGetCurrentCommitHash_NoCommits(t *testing.T) {
+	tmpDir := t.TempDir()
+	setupGitRepo(t, tmpDir)
+
+	// No commits made
+	_, err := GetCurrentCommitHash(tmpDir)
+
+	assert.Error(t, err)
+}
+
+// Tests for GetShortCommitHash
+
+func TestGetShortCommitHash_Success(t *testing.T) {
+	tmpDir := t.TempDir()
+	setupGitRepo(t, tmpDir)
+
+	createFile(t, tmpDir, "test.txt", "content")
+	gitAdd(t, tmpDir, "test.txt")
+	fullHash := gitCommitAndGetSHA(t, tmpDir, "Initial commit")
+
+	shortHash, err := GetShortCommitHash(tmpDir, fullHash)
+
+	require.NoError(t, err)
+	assert.True(t, len(shortHash) >= 7 && len(shortHash) <= 12)
+	assert.True(t, strings.HasPrefix(fullHash, shortHash))
+}
+
+func TestGetShortCommitHash_AlreadyShort(t *testing.T) {
+	tmpDir := t.TempDir()
+	setupGitRepo(t, tmpDir)
+
+	createFile(t, tmpDir, "test.txt", "content")
+	gitAdd(t, tmpDir, "test.txt")
+	fullHash := gitCommitAndGetSHA(t, tmpDir, "Initial commit")
+
+	// Get short hash first
+	shortHash, err := GetShortCommitHash(tmpDir, fullHash[:7])
+
+	require.NoError(t, err)
+	assert.NotEmpty(t, shortHash)
+}
+
+func TestGetShortCommitHash_HEAD(t *testing.T) {
+	tmpDir := t.TempDir()
+	setupGitRepo(t, tmpDir)
+
+	createFile(t, tmpDir, "test.txt", "content")
+	gitAdd(t, tmpDir, "test.txt")
+	gitCommit(t, tmpDir, "Initial commit")
+
+	shortHash, err := GetShortCommitHash(tmpDir, "HEAD")
+
+	require.NoError(t, err)
+	assert.NotEmpty(t, shortHash)
+}
+
+func TestGetShortCommitHash_InvalidCommit(t *testing.T) {
+	tmpDir := t.TempDir()
+	setupGitRepo(t, tmpDir)
+
+	createFile(t, tmpDir, "test.txt", "content")
+	gitAdd(t, tmpDir, "test.txt")
+	gitCommit(t, tmpDir, "Initial commit")
+
+	_, err := GetShortCommitHash(tmpDir, "invalid-sha-that-does-not-exist")
+
+	assert.Error(t, err)
+}
+
+// Tests for HasUncommittedChanges
+
+func TestHasUncommittedChanges_Clean(t *testing.T) {
+	tmpDir := t.TempDir()
+	setupGitRepo(t, tmpDir)
+
+	createFile(t, tmpDir, "test.txt", "content")
+	gitAdd(t, tmpDir, "test.txt")
+	gitCommit(t, tmpDir, "Initial commit")
+
+	hasChanges, err := HasUncommittedChanges(tmpDir)
+
+	require.NoError(t, err)
+	assert.False(t, hasChanges)
+}
+
+func TestHasUncommittedChanges_UntrackedFile(t *testing.T) {
+	tmpDir := t.TempDir()
+	setupGitRepo(t, tmpDir)
+
+	createFile(t, tmpDir, "committed.txt", "content")
+	gitAdd(t, tmpDir, "committed.txt")
+	gitCommit(t, tmpDir, "Initial commit")
+
+	// Create untracked file
+	createFile(t, tmpDir, "untracked.txt", "new content")
+
+	hasChanges, err := HasUncommittedChanges(tmpDir)
+
+	require.NoError(t, err)
+	assert.True(t, hasChanges)
+}
+
+func TestHasUncommittedChanges_ModifiedFile(t *testing.T) {
+	tmpDir := t.TempDir()
+	setupGitRepo(t, tmpDir)
+
+	filePath := createFile(t, tmpDir, "test.txt", "content")
+	gitAdd(t, tmpDir, "test.txt")
+	gitCommit(t, tmpDir, "Initial commit")
+
+	// Modify the file
+	modifyFile(t, filePath)
+
+	hasChanges, err := HasUncommittedChanges(tmpDir)
+
+	require.NoError(t, err)
+	assert.True(t, hasChanges)
+}
+
+func TestHasUncommittedChanges_StagedFile(t *testing.T) {
+	tmpDir := t.TempDir()
+	setupGitRepo(t, tmpDir)
+
+	createFile(t, tmpDir, "first.txt", "content")
+	gitAdd(t, tmpDir, "first.txt")
+	gitCommit(t, tmpDir, "Initial commit")
+
+	// Create and stage a new file
+	createFile(t, tmpDir, "staged.txt", "new content")
+	gitAdd(t, tmpDir, "staged.txt")
+
+	hasChanges, err := HasUncommittedChanges(tmpDir)
+
+	require.NoError(t, err)
+	assert.True(t, hasChanges)
+}
+
+func TestHasUncommittedChanges_EmptyRepo(t *testing.T) {
+	tmpDir := t.TempDir()
+	setupGitRepo(t, tmpDir)
+
+	// Empty repo with no commits
+	hasChanges, err := HasUncommittedChanges(tmpDir)
+
+	require.NoError(t, err)
+	assert.False(t, hasChanges)
+}
+
+// Tests for ParseCommitRange
+
+func TestParseCommitRange_ThreeDotSyntax(t *testing.T) {
+	from, to, isRange := ParseCommitRange("abc123...def456")
+
+	assert.Equal(t, "abc123", from)
+	assert.Equal(t, "def456", to)
+	assert.True(t, isRange)
+}
+
+func TestParseCommitRange_TwoDotSyntax(t *testing.T) {
+	from, to, isRange := ParseCommitRange("abc123..def456")
+
+	assert.Equal(t, "abc123", from)
+	assert.Equal(t, "def456", to)
+	assert.True(t, isRange)
+}
+
+func TestParseCommitRange_SingleCommit(t *testing.T) {
+	from, to, isRange := ParseCommitRange("abc123")
+
+	assert.Equal(t, "", from)
+	assert.Equal(t, "abc123", to)
+	assert.False(t, isRange)
+}
+
+func TestParseCommitRange_HEAD(t *testing.T) {
+	from, to, isRange := ParseCommitRange("HEAD")
+
+	assert.Equal(t, "", from)
+	assert.Equal(t, "HEAD", to)
+	assert.False(t, isRange)
+}
+
+func TestParseCommitRange_HEADTilde(t *testing.T) {
+	from, to, isRange := ParseCommitRange("HEAD~5...HEAD")
+
+	assert.Equal(t, "HEAD~5", from)
+	assert.Equal(t, "HEAD", to)
+	assert.True(t, isRange)
+}
+
+func TestParseCommitRange_ThreeDotPreferredOverTwoDot(t *testing.T) {
+	// Edge case: input contains both ... and ..
+	// Should split on ... first
+	from, to, isRange := ParseCommitRange("a..b...c")
+
+	assert.Equal(t, "a..b", from)
+	assert.Equal(t, "c", to)
+	assert.True(t, isRange)
+}
+
+// Tests for isAncestor
+
+func TestIsAncestor_True(t *testing.T) {
+	tmpDir := t.TempDir()
+	setupGitRepo(t, tmpDir)
+
+	// Create first commit
+	createFile(t, tmpDir, "first.txt", "content")
+	gitAdd(t, tmpDir, "first.txt")
+	firstCommit := gitCommitAndGetSHA(t, tmpDir, "First commit")
+
+	// Create second commit
+	createFile(t, tmpDir, "second.txt", "content")
+	gitAdd(t, tmpDir, "second.txt")
+	secondCommit := gitCommitAndGetSHA(t, tmpDir, "Second commit")
+
+	// First should be ancestor of second
+	result, err := isAncestor(tmpDir, firstCommit, secondCommit)
+
+	require.NoError(t, err)
+	assert.True(t, result)
+}
+
+func TestIsAncestor_False(t *testing.T) {
+	tmpDir := t.TempDir()
+	setupGitRepo(t, tmpDir)
+
+	// Create first commit
+	createFile(t, tmpDir, "first.txt", "content")
+	gitAdd(t, tmpDir, "first.txt")
+	firstCommit := gitCommitAndGetSHA(t, tmpDir, "First commit")
+
+	// Create second commit
+	createFile(t, tmpDir, "second.txt", "content")
+	gitAdd(t, tmpDir, "second.txt")
+	secondCommit := gitCommitAndGetSHA(t, tmpDir, "Second commit")
+
+	// Second should NOT be ancestor of first
+	result, err := isAncestor(tmpDir, secondCommit, firstCommit)
+
+	require.NoError(t, err)
+	assert.False(t, result)
+}
+
+func TestIsAncestor_SameCommit(t *testing.T) {
+	tmpDir := t.TempDir()
+	setupGitRepo(t, tmpDir)
+
+	createFile(t, tmpDir, "test.txt", "content")
+	gitAdd(t, tmpDir, "test.txt")
+	commit := gitCommitAndGetSHA(t, tmpDir, "Commit")
+
+	// A commit is its own ancestor
+	result, err := isAncestor(tmpDir, commit, commit)
+
+	require.NoError(t, err)
+	assert.True(t, result)
+}
+
+// Tests for NormalizeCommitRange
+
+func TestNormalizeCommitRange_AlreadyCorrectOrder(t *testing.T) {
+	tmpDir := t.TempDir()
+	setupGitRepo(t, tmpDir)
+
+	createFile(t, tmpDir, "first.txt", "content")
+	gitAdd(t, tmpDir, "first.txt")
+	older := gitCommitAndGetSHA(t, tmpDir, "First commit")
+
+	createFile(t, tmpDir, "second.txt", "content")
+	gitAdd(t, tmpDir, "second.txt")
+	newer := gitCommitAndGetSHA(t, tmpDir, "Second commit")
+
+	from, to, swapped, err := NormalizeCommitRange(tmpDir, older, newer)
+
+	require.NoError(t, err)
+	assert.Equal(t, older, from)
+	assert.Equal(t, newer, to)
+	assert.False(t, swapped)
+}
+
+func TestNormalizeCommitRange_ReversedOrder(t *testing.T) {
+	tmpDir := t.TempDir()
+	setupGitRepo(t, tmpDir)
+
+	createFile(t, tmpDir, "first.txt", "content")
+	gitAdd(t, tmpDir, "first.txt")
+	older := gitCommitAndGetSHA(t, tmpDir, "First commit")
+
+	createFile(t, tmpDir, "second.txt", "content")
+	gitAdd(t, tmpDir, "second.txt")
+	newer := gitCommitAndGetSHA(t, tmpDir, "Second commit")
+
+	// Pass in reversed order (newer...older)
+	from, to, swapped, err := NormalizeCommitRange(tmpDir, newer, older)
+
+	require.NoError(t, err)
+	assert.Equal(t, older, from)
+	assert.Equal(t, newer, to)
+	assert.True(t, swapped)
+}
+
+func TestNormalizeCommitRange_SameCommit(t *testing.T) {
+	tmpDir := t.TempDir()
+	setupGitRepo(t, tmpDir)
+
+	createFile(t, tmpDir, "test.txt", "content")
+	gitAdd(t, tmpDir, "test.txt")
+	commit := gitCommitAndGetSHA(t, tmpDir, "Commit")
+
+	from, to, swapped, err := NormalizeCommitRange(tmpDir, commit, commit)
+
+	require.NoError(t, err)
+	assert.Equal(t, commit, from)
+	assert.Equal(t, commit, to)
+	assert.False(t, swapped)
+}
+
+// Tests for GetCommitRangeFiles
+
+func TestGetCommitRangeFiles_Success(t *testing.T) {
+	tmpDir := t.TempDir()
+	setupGitRepo(t, tmpDir)
+
+	// Create first commit
+	createFile(t, tmpDir, "first.txt", "content")
+	gitAdd(t, tmpDir, "first.txt")
+	firstCommit := gitCommitAndGetSHA(t, tmpDir, "First commit")
+
+	// Create second commit with new file
+	newFile := createFile(t, tmpDir, "second.txt", "content")
+	gitAdd(t, tmpDir, "second.txt")
+	secondCommit := gitCommitAndGetSHA(t, tmpDir, "Second commit")
+
+	files, err := GetCommitRangeFiles(tmpDir, firstCommit, secondCommit)
+
+	require.NoError(t, err)
+	assert.Len(t, files, 1)
+	resolved, _ := filepath.EvalSymlinks(newFile)
+	assert.Contains(t, files, resolved)
+}
+
+func TestGetCommitRangeFiles_MultipleCommits(t *testing.T) {
+	tmpDir := t.TempDir()
+	setupGitRepo(t, tmpDir)
+
+	// Create first commit
+	createFile(t, tmpDir, "first.txt", "content")
+	gitAdd(t, tmpDir, "first.txt")
+	firstCommit := gitCommitAndGetSHA(t, tmpDir, "First commit")
+
+	// Create second commit
+	file2 := createFile(t, tmpDir, "second.txt", "content")
+	gitAdd(t, tmpDir, "second.txt")
+	gitCommit(t, tmpDir, "Second commit")
+
+	// Create third commit
+	file3 := createFile(t, tmpDir, "third.txt", "content")
+	gitAdd(t, tmpDir, "third.txt")
+	thirdCommit := gitCommitAndGetSHA(t, tmpDir, "Third commit")
+
+	// Get files from first to third commit
+	files, err := GetCommitRangeFiles(tmpDir, firstCommit, thirdCommit)
+
+	require.NoError(t, err)
+	assert.Len(t, files, 2)
+	resolved2, _ := filepath.EvalSymlinks(file2)
+	resolved3, _ := filepath.EvalSymlinks(file3)
+	assert.Contains(t, files, resolved2)
+	assert.Contains(t, files, resolved3)
+}
+
+func TestGetCommitRangeFiles_ModifiedFile(t *testing.T) {
+	tmpDir := t.TempDir()
+	setupGitRepo(t, tmpDir)
+
+	// Create first commit
+	file := createFile(t, tmpDir, "test.txt", "initial content")
+	gitAdd(t, tmpDir, "test.txt")
+	firstCommit := gitCommitAndGetSHA(t, tmpDir, "First commit")
+
+	// Modify and commit again
+	modifyFile(t, file)
+	gitAdd(t, tmpDir, "test.txt")
+	secondCommit := gitCommitAndGetSHA(t, tmpDir, "Second commit")
+
+	files, err := GetCommitRangeFiles(tmpDir, firstCommit, secondCommit)
+
+	require.NoError(t, err)
+	assert.Len(t, files, 1)
+	resolved, _ := filepath.EvalSymlinks(file)
+	assert.Contains(t, files, resolved)
+}
+
+func TestGetCommitRangeFiles_ExcludesDeletedFiles(t *testing.T) {
+	tmpDir := t.TempDir()
+	setupGitRepo(t, tmpDir)
+
+	// Create first commit with two files
+	createFile(t, tmpDir, "keep.txt", "content")
+	toDelete := createFile(t, tmpDir, "delete.txt", "content")
+	gitAdd(t, tmpDir, "keep.txt")
+	gitAdd(t, tmpDir, "delete.txt")
+	firstCommit := gitCommitAndGetSHA(t, tmpDir, "First commit")
+
+	// Delete one file
+	err := os.Remove(toDelete)
+	require.NoError(t, err)
+	cmd := exec.Command("git", "add", "-A")
+	cmd.Dir = tmpDir
+	require.NoError(t, cmd.Run())
+	secondCommit := gitCommitAndGetSHA(t, tmpDir, "Delete file")
+
+	files, err := GetCommitRangeFiles(tmpDir, firstCommit, secondCommit)
+
+	require.NoError(t, err)
+	// Should not contain the deleted file
+	assert.Empty(t, files)
+}
+
+func TestGetCommitRangeFiles_NoChanges(t *testing.T) {
+	tmpDir := t.TempDir()
+	setupGitRepo(t, tmpDir)
+
+	createFile(t, tmpDir, "test.txt", "content")
+	gitAdd(t, tmpDir, "test.txt")
+	commit := gitCommitAndGetSHA(t, tmpDir, "Commit")
+
+	// Same commit for from and to
+	files, err := GetCommitRangeFiles(tmpDir, commit, commit)
+
+	require.NoError(t, err)
+	assert.Empty(t, files)
+}
+
+func TestGetCommitRangeFiles_InvalidFromCommit(t *testing.T) {
+	tmpDir := t.TempDir()
+	setupGitRepo(t, tmpDir)
+
+	createFile(t, tmpDir, "test.txt", "content")
+	gitAdd(t, tmpDir, "test.txt")
+	commit := gitCommitAndGetSHA(t, tmpDir, "Commit")
+
+	_, err := GetCommitRangeFiles(tmpDir, "invalid-sha", commit)
+
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "invalid commit reference")
+}
+
+func TestGetCommitRangeFiles_InvalidToCommit(t *testing.T) {
+	tmpDir := t.TempDir()
+	setupGitRepo(t, tmpDir)
+
+	createFile(t, tmpDir, "test.txt", "content")
+	gitAdd(t, tmpDir, "test.txt")
+	commit := gitCommitAndGetSHA(t, tmpDir, "Commit")
+
+	_, err := GetCommitRangeFiles(tmpDir, commit, "invalid-sha")
+
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "invalid commit reference")
+}
+
+func TestGetCommitRangeFiles_NotGitRepo(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	_, err := GetCommitRangeFiles(tmpDir, "abc", "def")
+
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "not a git repository")
+}
+
+func TestGetCommitRangeFiles_InvalidPath(t *testing.T) {
+	_, err := GetCommitRangeFiles("/nonexistent/path", "abc", "def")
+
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "does not exist")
+}
+
+// Tests for GetCommitRangeFileStats
+
+func TestGetCommitRangeFileStats_AdditionsAndDeletions(t *testing.T) {
+	tmpDir := t.TempDir()
+	setupGitRepo(t, tmpDir)
+
+	// Create first commit
+	file := createFile(t, tmpDir, "test.txt", "line1\nline2\nline3\n")
+	gitAdd(t, tmpDir, "test.txt")
+	firstCommit := gitCommitAndGetSHA(t, tmpDir, "First commit")
+
+	// Modify file: add 2 lines, remove 1
+	createFile(t, tmpDir, "test.txt", "line1\nline3\nnew1\nnew2\n")
+	gitAdd(t, tmpDir, "test.txt")
+	secondCommit := gitCommitAndGetSHA(t, tmpDir, "Second commit")
+
+	stats, err := GetCommitRangeFileStats(tmpDir, firstCommit, secondCommit)
+
+	require.NoError(t, err)
+	resolved, _ := filepath.EvalSymlinks(file)
+	fileStats, ok := stats[resolved]
+	require.True(t, ok)
+	assert.Equal(t, 2, fileStats.Additions)
+	assert.Equal(t, 1, fileStats.Deletions)
+}
+
+func TestGetCommitRangeFileStats_NewFile(t *testing.T) {
+	tmpDir := t.TempDir()
+	setupGitRepo(t, tmpDir)
+
+	// Create first commit
+	createFile(t, tmpDir, "first.txt", "content")
+	gitAdd(t, tmpDir, "first.txt")
+	firstCommit := gitCommitAndGetSHA(t, tmpDir, "First commit")
+
+	// Add new file
+	newFile := createFile(t, tmpDir, "new.txt", "line1\nline2\n")
+	gitAdd(t, tmpDir, "new.txt")
+	secondCommit := gitCommitAndGetSHA(t, tmpDir, "Second commit")
+
+	stats, err := GetCommitRangeFileStats(tmpDir, firstCommit, secondCommit)
+
+	require.NoError(t, err)
+	resolved, _ := filepath.EvalSymlinks(newFile)
+	fileStats, ok := stats[resolved]
+	require.True(t, ok)
+	assert.Equal(t, 2, fileStats.Additions)
+	assert.Equal(t, 0, fileStats.Deletions)
+	assert.True(t, fileStats.IsNew)
+}
+
+func TestGetCommitRangeFileStats_MultipleFiles(t *testing.T) {
+	tmpDir := t.TempDir()
+	setupGitRepo(t, tmpDir)
+
+	// Create first commit
+	file1 := createFile(t, tmpDir, "file1.txt", "content")
+	gitAdd(t, tmpDir, "file1.txt")
+	firstCommit := gitCommitAndGetSHA(t, tmpDir, "First commit")
+
+	// Modify and add new file
+	createFile(t, tmpDir, "file1.txt", "content\nnew line\n")
+	file2 := createFile(t, tmpDir, "file2.txt", "new file\n")
+	gitAdd(t, tmpDir, "file1.txt")
+	gitAdd(t, tmpDir, "file2.txt")
+	secondCommit := gitCommitAndGetSHA(t, tmpDir, "Second commit")
+
+	stats, err := GetCommitRangeFileStats(tmpDir, firstCommit, secondCommit)
+
+	require.NoError(t, err)
+	assert.Len(t, stats, 2)
+
+	resolved1, _ := filepath.EvalSymlinks(file1)
+	resolved2, _ := filepath.EvalSymlinks(file2)
+	_, ok1 := stats[resolved1]
+	_, ok2 := stats[resolved2]
+	assert.True(t, ok1)
+	assert.True(t, ok2)
+}
+
+func TestGetCommitRangeFileStats_InvalidCommit(t *testing.T) {
+	tmpDir := t.TempDir()
+	setupGitRepo(t, tmpDir)
+
+	createFile(t, tmpDir, "test.txt", "content")
+	gitAdd(t, tmpDir, "test.txt")
+	commit := gitCommitAndGetSHA(t, tmpDir, "Commit")
+
+	_, err := GetCommitRangeFileStats(tmpDir, "invalid-sha", commit)
+
+	assert.Error(t, err)
+}
+
+func TestGetCommitRangeFileStats_NotGitRepo(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	_, err := GetCommitRangeFileStats(tmpDir, "abc", "def")
+
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "not a git repository")
+}
+
+// Tests for GetCommitRangeLabel
+
+func TestGetCommitRangeLabel_Success(t *testing.T) {
+	tmpDir := t.TempDir()
+	setupGitRepo(t, tmpDir)
+
+	createFile(t, tmpDir, "first.txt", "content")
+	gitAdd(t, tmpDir, "first.txt")
+	firstCommit := gitCommitAndGetSHA(t, tmpDir, "First commit")
+
+	createFile(t, tmpDir, "second.txt", "content")
+	gitAdd(t, tmpDir, "second.txt")
+	secondCommit := gitCommitAndGetSHA(t, tmpDir, "Second commit")
+
+	label, err := GetCommitRangeLabel(tmpDir, firstCommit, secondCommit)
+
+	require.NoError(t, err)
+	assert.Contains(t, label, "...")
+	// Should be in format "abc123...def456"
+	parts := strings.Split(label, "...")
+	assert.Len(t, parts, 2)
+	assert.True(t, len(parts[0]) >= 7)
+	assert.True(t, len(parts[1]) >= 7)
+}
+
+func TestGetCommitRangeLabel_WithHEAD(t *testing.T) {
+	tmpDir := t.TempDir()
+	setupGitRepo(t, tmpDir)
+
+	createFile(t, tmpDir, "first.txt", "content")
+	gitAdd(t, tmpDir, "first.txt")
+	firstCommit := gitCommitAndGetSHA(t, tmpDir, "First commit")
+
+	createFile(t, tmpDir, "second.txt", "content")
+	gitAdd(t, tmpDir, "second.txt")
+	gitCommit(t, tmpDir, "Second commit")
+
+	label, err := GetCommitRangeLabel(tmpDir, firstCommit, "HEAD")
+
+	require.NoError(t, err)
+	assert.Contains(t, label, "...")
+}
+
+func TestGetCommitRangeLabel_InvalidFromCommit(t *testing.T) {
+	tmpDir := t.TempDir()
+	setupGitRepo(t, tmpDir)
+
+	createFile(t, tmpDir, "test.txt", "content")
+	gitAdd(t, tmpDir, "test.txt")
+	commit := gitCommitAndGetSHA(t, tmpDir, "Commit")
+
+	_, err := GetCommitRangeLabel(tmpDir, "invalid-sha", commit)
+
+	assert.Error(t, err)
+}
+
+func TestGetCommitRangeLabel_InvalidToCommit(t *testing.T) {
+	tmpDir := t.TempDir()
+	setupGitRepo(t, tmpDir)
+
+	createFile(t, tmpDir, "test.txt", "content")
+	gitAdd(t, tmpDir, "test.txt")
+	commit := gitCommitAndGetSHA(t, tmpDir, "Commit")
+
+	_, err := GetCommitRangeLabel(tmpDir, commit, "invalid-sha")
+
+	assert.Error(t, err)
+}
