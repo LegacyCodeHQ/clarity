@@ -18,6 +18,18 @@ type GoSymbolInfo struct {
 	Referenced map[string]bool // Symbols referenced in this file
 }
 
+// GoExportInfo tracks exported symbols and import usage in a Go file
+type GoExportInfo struct {
+	FilePath         string
+	Package          string
+	Exports          map[string]bool            // Exported symbols (capitalized) defined in this file
+	ImportAliases    map[string]string          // Maps import path to alias used (or package name if no alias)
+	QualifiedRefs    map[string]map[string]bool // Maps package alias -> set of symbols accessed
+}
+
+// GoPackageExportIndex maps exported symbols to their defining files within a package directory
+type GoPackageExportIndex map[string][]string // symbol name -> list of files defining it
+
 // ExtractGoSymbols analyzes a Go file and extracts defined and referenced symbols
 func ExtractGoSymbols(filePath string) (*GoSymbolInfo, error) {
 	fset := token.NewFileSet()
@@ -126,6 +138,170 @@ func extractSymbolsFromAST(filePath string, node *ast.File) (*GoSymbolInfo, erro
 	})
 
 	return info, nil
+}
+
+// ExtractGoExportInfo analyzes a Go file and extracts exported symbols and import usage
+func ExtractGoExportInfo(filePath string) (*GoExportInfo, error) {
+	fset := token.NewFileSet()
+	node, err := parser.ParseFile(fset, filePath, nil, parser.ParseComments)
+	if err != nil {
+		return nil, err
+	}
+
+	return extractExportInfoFromAST(filePath, node)
+}
+
+// ExtractGoExportInfoFromContent analyzes Go source code and extracts exported symbols and import usage
+func ExtractGoExportInfoFromContent(filePath string, content []byte) (*GoExportInfo, error) {
+	fset := token.NewFileSet()
+	node, err := parser.ParseFile(fset, filePath, content, parser.ParseComments)
+	if err != nil {
+		return nil, err
+	}
+
+	return extractExportInfoFromAST(filePath, node)
+}
+
+// extractExportInfoFromAST extracts export information from a parsed AST
+func extractExportInfoFromAST(filePath string, node *ast.File) (*GoExportInfo, error) {
+	info := &GoExportInfo{
+		FilePath:      filePath,
+		Package:       node.Name.Name,
+		Exports:       make(map[string]bool),
+		ImportAliases: make(map[string]string),
+		QualifiedRefs: make(map[string]map[string]bool),
+	}
+
+	// Extract import aliases
+	for _, imp := range node.Imports {
+		importPath := strings.Trim(imp.Path.Value, "\"")
+
+		// Determine the alias (explicit or derived from package path)
+		var alias string
+		if imp.Name != nil {
+			alias = imp.Name.Name
+			if alias == "." || alias == "_" {
+				// Dot imports or blank imports - skip for now
+				continue
+			}
+		} else {
+			// Use last component of import path as alias
+			parts := strings.Split(importPath, "/")
+			alias = parts[len(parts)-1]
+		}
+
+		info.ImportAliases[importPath] = alias
+	}
+
+	// Extract exported symbols (capitalized top-level declarations)
+	for _, decl := range node.Decls {
+		switch d := decl.(type) {
+		case *ast.FuncDecl:
+			if d.Name.IsExported() {
+				if d.Recv == nil {
+					// Exported top-level function
+					info.Exports[d.Name.Name] = true
+				} else {
+					// Exported method - track separately if needed
+					info.Exports[d.Name.Name] = true
+				}
+			}
+		case *ast.GenDecl:
+			for _, spec := range d.Specs {
+				switch s := spec.(type) {
+				case *ast.TypeSpec:
+					if s.Name.IsExported() {
+						info.Exports[s.Name.Name] = true
+					}
+				case *ast.ValueSpec:
+					for _, name := range s.Names {
+						if name.IsExported() {
+							info.Exports[name.Name] = true
+						}
+					}
+				}
+			}
+		}
+	}
+
+	// Build reverse map from alias to import path for quick lookup
+	aliasToPath := make(map[string]string)
+	for path, alias := range info.ImportAliases {
+		aliasToPath[alias] = path
+	}
+
+	// Extract qualified references (e.g., formatters.NewFormatter)
+	ast.Inspect(node, func(n ast.Node) bool {
+		if sel, ok := n.(*ast.SelectorExpr); ok {
+			// Check if the X is an identifier (package alias)
+			if ident, ok := sel.X.(*ast.Ident); ok {
+				alias := ident.Name
+				// Check if this alias is an imported package (not a local variable)
+				if _, isImport := aliasToPath[alias]; isImport {
+					// This is a qualified reference to an imported package
+					if info.QualifiedRefs[alias] == nil {
+						info.QualifiedRefs[alias] = make(map[string]bool)
+					}
+					info.QualifiedRefs[alias][sel.Sel.Name] = true
+				}
+			}
+		}
+		return true
+	})
+
+	return info, nil
+}
+
+// BuildPackageExportIndex builds an index of exported symbols for files in a package directory
+func BuildPackageExportIndex(filePaths []string, repoPath, commitID string) (GoPackageExportIndex, error) {
+	index := make(GoPackageExportIndex)
+
+	for _, filePath := range filePaths {
+		// Skip test files for export index
+		if strings.HasSuffix(filePath, "_test.go") {
+			continue
+		}
+
+		var info *GoExportInfo
+		var err error
+
+		if repoPath != "" && commitID != "" {
+			absRepoPath, _ := filepath.Abs(repoPath)
+			relPath, err := filepath.Rel(absRepoPath, filePath)
+			if err != nil {
+				continue
+			}
+
+			content, err := git.GetFileContentFromCommit(repoPath, commitID, relPath)
+			if err != nil {
+				continue
+			}
+			info, err = ExtractGoExportInfoFromContent(filePath, content)
+		} else {
+			info, err = ExtractGoExportInfo(filePath)
+		}
+
+		if err != nil {
+			continue
+		}
+
+		// Add exported symbols to index
+		for symbol := range info.Exports {
+			index[symbol] = append(index[symbol], filePath)
+		}
+	}
+
+	return index, nil
+}
+
+// GetUsedSymbolsFromPackage extracts which symbols from a specific import path are actually used
+func GetUsedSymbolsFromPackage(exportInfo *GoExportInfo, importPath string) map[string]bool {
+	alias, ok := exportInfo.ImportAliases[importPath]
+	if !ok {
+		return nil
+	}
+
+	return exportInfo.QualifiedRefs[alias]
 }
 
 // BuildIntraPackageDependencies builds dependencies between files in the same Go package

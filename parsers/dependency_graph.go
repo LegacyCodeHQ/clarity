@@ -31,6 +31,7 @@ func BuildDependencyGraph(filePaths []string, repoPath, commitID string) (Depend
 	suppliedFiles := make(map[string]bool)
 	dirToFiles := make(map[string][]string)
 	kotlinFiles := []string{}
+	goFiles := []string{}
 
 	for _, filePath := range filePaths {
 		absPath, err := filepath.Abs(filePath)
@@ -46,6 +47,31 @@ func BuildDependencyGraph(filePaths []string, repoPath, commitID string) (Depend
 		// Collect Kotlin files for package indexing
 		if filepath.Ext(absPath) == ".kt" {
 			kotlinFiles = append(kotlinFiles, absPath)
+		}
+
+		// Collect Go files for export indexing
+		if filepath.Ext(absPath) == ".go" {
+			goFiles = append(goFiles, absPath)
+		}
+	}
+
+	// Build Go package export indices for symbol-level cross-package resolution
+	goPackageExportIndices := make(map[string]_go.GoPackageExportIndex) // packageDir -> export index
+	for dir, files := range dirToFiles {
+		// Check if this directory has Go files
+		hasGoFiles := false
+		var goFilesInDir []string
+		for _, f := range files {
+			if filepath.Ext(f) == ".go" {
+				hasGoFiles = true
+				goFilesInDir = append(goFilesInDir, f)
+			}
+		}
+		if hasGoFiles {
+			exportIndex, err := _go.BuildPackageExportIndex(goFilesInDir, repoPath, commitID)
+			if err == nil {
+				goPackageExportIndices[dir] = exportIndex
+			}
 		}
 	}
 
@@ -118,15 +144,16 @@ func BuildDependencyGraph(filePaths []string, repoPath, commitID string) (Depend
 		} else if ext == ".go" {
 			var imports []_go.GoImport
 			var err error
+			var sourceContent []byte
 
 			if repoPath != "" && commitID != "" {
 				// Read file from git commit
 				relPath := getRelativePath(absPath, repoPath)
-				content, err := git.GetFileContentFromCommit(repoPath, commitID, relPath)
+				sourceContent, err = git.GetFileContentFromCommit(repoPath, commitID, relPath)
 				if err != nil {
 					return nil, fmt.Errorf("failed to read %s from commit %s: %w", relPath, commitID, err)
 				}
-				imports, err = _go.ParseGoImports(content)
+				imports, err = _go.ParseGoImports(sourceContent)
 			} else {
 				// Read file from filesystem
 				imports, err = _go.GoImports(filePath)
@@ -134,6 +161,14 @@ func BuildDependencyGraph(filePaths []string, repoPath, commitID string) (Depend
 
 			if err != nil {
 				return nil, fmt.Errorf("failed to parse imports in %s: %w", filePath, err)
+			}
+
+			// Extract export info for symbol-level cross-package resolution
+			var exportInfo *_go.GoExportInfo
+			if sourceContent != nil {
+				exportInfo, _ = _go.ExtractGoExportInfoFromContent(absPath, sourceContent)
+			} else {
+				exportInfo, _ = _go.ExtractGoExportInfo(absPath)
 			}
 
 			// Determine if this is a test file
@@ -162,28 +197,62 @@ func BuildDependencyGraph(filePaths []string, repoPath, commitID string) (Depend
 					continue
 				}
 
-				// Find all files in the supplied list that are in this package
-				if files, ok := dirToFiles[packageDir]; ok {
-					// Check if we're importing from the same directory
-					sourceDir := filepath.Dir(absPath)
-					sameDir := sourceDir == packageDir
+				// Check if we're importing from the same directory
+				sourceDir := filepath.Dir(absPath)
+				sameDir := sourceDir == packageDir
 
+				// Get the export index for this package (if available)
+				exportIndex, hasExportIndex := goPackageExportIndices[packageDir]
+
+				// Get the symbols actually used from this import
+				var usedSymbols map[string]bool
+				if exportInfo != nil {
+					usedSymbols = _go.GetUsedSymbolsFromPackage(exportInfo, importPath)
+				}
+
+				// Find files in the supplied list that are in this package
+				if files, ok := dirToFiles[packageDir]; ok {
 					for _, depFile := range files {
 						// Don't add self-dependencies
-						if depFile != absPath {
-							// Non-test files should not depend on test files from imported packages
-							if !isTestFile && strings.HasSuffix(depFile, "_test.go") {
-								continue
-							}
-
-							// If importing from same directory, only include .go files
-							// If importing from different directory, include all files (including C files for CGo)
-							if sameDir && filepath.Ext(depFile) != ".go" {
-								continue
-							}
-
-							projectImports = append(projectImports, depFile)
+						if depFile == absPath {
+							continue
 						}
+
+						// Non-test files should not depend on test files from imported packages
+						if !isTestFile && strings.HasSuffix(depFile, "_test.go") {
+							continue
+						}
+
+						// If importing from same directory, only include .go files
+						// If importing from different directory, include all files (including C files for CGo)
+						if sameDir && filepath.Ext(depFile) != ".go" {
+							continue
+						}
+
+						// Symbol-level filtering for cross-package imports (different directory)
+						if !sameDir && hasExportIndex && usedSymbols != nil && len(usedSymbols) > 0 {
+							// Only include this file if it defines a symbol we actually use
+							fileDefinesUsedSymbol := false
+							for symbol := range usedSymbols {
+								if definingFiles, ok := exportIndex[symbol]; ok {
+									for _, defFile := range definingFiles {
+										if defFile == depFile {
+											fileDefinesUsedSymbol = true
+											break
+										}
+									}
+								}
+								if fileDefinesUsedSymbol {
+									break
+								}
+							}
+
+							if !fileDefinesUsedSymbol {
+								continue
+							}
+						}
+
+						projectImports = append(projectImports, depFile)
 					}
 				}
 			}
@@ -277,13 +346,7 @@ func BuildDependencyGraph(filePaths []string, repoPath, commitID string) (Depend
 
 	// Third pass: Add intra-package dependencies for Go files
 	// This handles dependencies between files in the same package (which don't import each other)
-	goFiles := []string{}
-	for _, filePath := range filePaths {
-		absPath, _ := filepath.Abs(filePath)
-		if filepath.Ext(absPath) == ".go" {
-			goFiles = append(goFiles, absPath)
-		}
-	}
+	// Note: goFiles was already collected in the first pass
 
 	if len(goFiles) > 0 {
 		intraDeps, err := _go.BuildIntraPackageDependencies(goFiles, repoPath, commitID)
