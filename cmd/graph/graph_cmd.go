@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/url"
+	"os"
 	"path/filepath"
 
 	"github.com/LegacyCodeHQ/sanity/cmd/graph/formatters"
@@ -100,8 +101,15 @@ Example usage:
 				return fmt.Errorf("--commit flag cannot be used with --include flag")
 			}
 
-			// Explicit file mode
-			filePaths = includes
+			// Explicit file mode - expand directories recursively
+			filePaths, err = expandPaths(includes)
+			if err != nil {
+				return fmt.Errorf("failed to expand paths: %w", err)
+			}
+
+			if len(filePaths) == 0 {
+				return fmt.Errorf("no supported files found in specified paths")
+			}
 		}
 
 		// Build the dependency graph
@@ -267,5 +275,57 @@ func init() {
 	// Add URL flag
 	GraphCmd.Flags().BoolVarP(&generateURL, "url", "u", false, "Generate GraphvizOnline URL for visualization")
 	// Add include flag for explicit files
-	GraphCmd.Flags().StringSliceVarP(&includes, "include", "i", nil, "Files to include in the graph (comma-separated)")
+	GraphCmd.Flags().StringSliceVarP(&includes, "include", "i", nil, "Files or directories to include in the graph (comma-separated, directories are expanded recursively)")
+}
+
+// supportedExtensions contains file extensions that the graph command can analyze
+var supportedExtensions = map[string]bool{
+	".dart": true,
+	".go":   true,
+	".kt":   true,
+	".ts":   true,
+	".tsx":  true,
+}
+
+// expandPaths expands file paths and directories into individual file paths.
+// Directories are recursively walked and only files with supported extensions are included.
+func expandPaths(paths []string) ([]string, error) {
+	var result []string
+
+	for _, path := range paths {
+		info, err := os.Stat(path)
+		if err != nil {
+			return nil, fmt.Errorf("failed to access %s: %w", path, err)
+		}
+
+		if info.IsDir() {
+			// Recursively walk directory and collect supported files
+			err := filepath.Walk(path, func(filePath string, fileInfo os.FileInfo, walkErr error) error {
+				if walkErr != nil {
+					return walkErr
+				}
+
+				// Skip directories themselves
+				if fileInfo.IsDir() {
+					return nil
+				}
+
+				// Check if file has a supported extension
+				ext := filepath.Ext(filePath)
+				if supportedExtensions[ext] {
+					result = append(result, filePath)
+				}
+
+				return nil
+			})
+			if err != nil {
+				return nil, fmt.Errorf("failed to walk directory %s: %w", path, err)
+			}
+		} else {
+			// Regular file - include it directly
+			result = append(result, path)
+		}
+	}
+
+	return result, nil
 }
