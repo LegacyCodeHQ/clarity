@@ -17,8 +17,7 @@ func TestDependencyGraph_ToDOT(t *testing.T) {
 		"/project/utils.dart": {},
 	}
 
-	formatter, err := formatters.NewFormatter("dot")
-	require.NoError(t, err)
+	formatter := &formatters.DOTFormatter{}
 	dot, err := formatter.Format(graph, formatters.FormatOptions{})
 	require.NoError(t, err)
 
@@ -49,8 +48,7 @@ func TestDependencyGraph_ToDOT_NewFilesUseSeedlingLabel(t *testing.T) {
 		},
 	}
 
-	formatter, err := formatters.NewFormatter("dot")
-	require.NoError(t, err)
+	formatter := &formatters.DOTFormatter{}
 	dot, err := formatter.Format(graph, formatters.FormatOptions{FileStats: stats})
 	require.NoError(t, err)
 
@@ -68,8 +66,7 @@ func TestDependencyGraph_ToDOT_TestFilesAreLightGreen(t *testing.T) {
 		"/project/utils_test.go": {"/project/utils.go"},
 	}
 
-	formatter, err := formatters.NewFormatter("dot")
-	require.NoError(t, err)
+	formatter := &formatters.DOTFormatter{}
 	dot, err := formatter.Format(graph, formatters.FormatOptions{})
 	require.NoError(t, err)
 
@@ -95,8 +92,7 @@ func TestDependencyGraph_ToDOT_TestFilesAreLightGreen_Dart(t *testing.T) {
 		"/project/test/utils_test.dart": {"/project/lib/utils.dart"},
 	}
 
-	formatter, err := formatters.NewFormatter("dot")
-	require.NoError(t, err)
+	formatter := &formatters.DOTFormatter{}
 	dot, err := formatter.Format(graph, formatters.FormatOptions{})
 	require.NoError(t, err)
 
@@ -123,8 +119,7 @@ func TestDependencyGraph_ToDOT_MajorityExtensionIsWhite(t *testing.T) {
 		"/project/utils.dart": {},
 	}
 
-	formatter, err := formatters.NewFormatter("dot")
-	require.NoError(t, err)
+	formatter := &formatters.DOTFormatter{}
 	dot, err := formatter.Format(graph, formatters.FormatOptions{})
 	require.NoError(t, err)
 
@@ -155,8 +150,7 @@ func TestDependencyGraph_ToDOT_MajorityExtensionIsWhite_WithTestFiles(t *testing
 		"/project/main.dart":     {},
 	}
 
-	formatter, err := formatters.NewFormatter("dot")
-	require.NoError(t, err)
+	formatter := &formatters.DOTFormatter{}
 	dot, err := formatter.Format(graph, formatters.FormatOptions{})
 	require.NoError(t, err)
 
@@ -183,8 +177,7 @@ func TestDependencyGraph_ToDOT_MajorityExtensionTie(t *testing.T) {
 		"/project/utils.dart": {},
 	}
 
-	formatter, err := formatters.NewFormatter("dot")
-	require.NoError(t, err)
+	formatter := &formatters.DOTFormatter{}
 	dot, err := formatter.Format(graph, formatters.FormatOptions{})
 	require.NoError(t, err)
 
@@ -207,8 +200,7 @@ func TestDependencyGraph_ToDOT_SingleExtensionAllWhite(t *testing.T) {
 		"/project/types.go": {},
 	}
 
-	formatter, err := formatters.NewFormatter("dot")
-	require.NoError(t, err)
+	formatter := &formatters.DOTFormatter{}
 	dot, err := formatter.Format(graph, formatters.FormatOptions{})
 	require.NoError(t, err)
 
@@ -228,8 +220,7 @@ func TestDependencyGraph_ToDOT_TypeScriptTestFiles(t *testing.T) {
 		"/project/src/components/Button.spec.tsx": {},
 	}
 
-	formatter, err := formatters.NewFormatter("dot")
-	require.NoError(t, err)
+	formatter := &formatters.DOTFormatter{}
 	dot, err := formatter.Format(graph, formatters.FormatOptions{})
 	require.NoError(t, err)
 
