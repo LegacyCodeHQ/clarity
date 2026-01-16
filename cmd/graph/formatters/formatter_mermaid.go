@@ -5,7 +5,6 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/LegacyCodeHQ/sanity/git"
 	"github.com/LegacyCodeHQ/sanity/parsers"
 )
 
@@ -18,19 +17,12 @@ type MermaidFormatter struct{}
 
 // Format converts the dependency graph to Mermaid.js flowchart format.
 func (f *MermaidFormatter) Format(g parsers.DependencyGraph, opts FormatOptions) (string, error) {
-	return ToMermaid(g, opts.Label, opts.FileStats), nil
-}
-
-// ToMermaid converts the dependency graph to Mermaid.js flowchart format
-// If label is not empty, it will be displayed as a title
-// If fileStats is provided, additions/deletions will be shown in node labels
-func ToMermaid(g parsers.DependencyGraph, label string, fileStats map[string]git.FileStats) string {
 	var sb strings.Builder
 
 	// Add title if label provided
-	if label != "" {
+	if opts.Label != "" {
 		sb.WriteString("---\n")
-		sb.WriteString(fmt.Sprintf("title: %s\n", label))
+		sb.WriteString(fmt.Sprintf("title: %s\n", opts.Label))
 		sb.WriteString("---\n")
 	}
 
@@ -91,8 +83,8 @@ func ToMermaid(g parsers.DependencyGraph, label string, fileStats map[string]git
 		if !definedNodes[sourceBase] {
 			// Build node label with file stats if available
 			nodeLabel := sourceBase
-			if fileStats != nil {
-				if stats, ok := fileStats[source]; ok {
+			if opts.FileStats != nil {
+				if stats, ok := opts.FileStats[source]; ok {
 					labelPrefix := sourceBase
 					if stats.IsNew {
 						labelPrefix = fmt.Sprintf("🪴 %s", labelPrefix)
@@ -149,10 +141,10 @@ func ToMermaid(g parsers.DependencyGraph, label string, fileStats map[string]git
 		sourceBase := filepath.Base(source)
 		nodeID := nodeIDs[sourceBase]
 
-		if isTestFile(source) {
+		if IsTestFile(source) {
 			testNodes = append(testNodes, nodeID)
-		} else if fileStats != nil {
-			if stats, ok := fileStats[source]; ok && stats.IsNew {
+		} else if opts.FileStats != nil {
+			if stats, ok := opts.FileStats[source]; ok && stats.IsNew {
 				newFileNodes = append(newFileNodes, nodeID)
 			}
 		}
@@ -169,6 +161,5 @@ func ToMermaid(g parsers.DependencyGraph, label string, fileStats map[string]git
 	if len(newFileNodes) > 0 {
 		sb.WriteString(fmt.Sprintf("    class %s newFile\n", strings.Join(newFileNodes, ",")))
 	}
-
-	return sb.String()
+	return sb.String(), nil
 }

@@ -211,12 +211,14 @@ func TestDependencyGraph_ToJSON(t *testing.T) {
 		"/project/utils.dart": {},
 	}
 
-	jsonData, err := formatters.ToJSON(graph)
+	formatter, err := formatters.NewFormatter("json")
+	require.NoError(t, err)
+	jsonData, err := formatter.Format(graph, formatters.FormatOptions{})
 
 	require.NoError(t, err)
-	assert.Contains(t, string(jsonData), "/project/main.dart")
-	assert.Contains(t, string(jsonData), "/project/utils.dart")
-	assert.Contains(t, string(jsonData), "/project/models/user.dart")
+	assert.Contains(t, jsonData, "/project/main.dart")
+	assert.Contains(t, jsonData, "/project/utils.dart")
+	assert.Contains(t, jsonData, "/project/models/user.dart")
 }
 
 func TestDependencyGraph_ToDOT(t *testing.T) {
@@ -225,7 +227,10 @@ func TestDependencyGraph_ToDOT(t *testing.T) {
 		"/project/utils.dart": {},
 	}
 
-	dot := formatters.ToDOT(graph, "", nil)
+	formatter, err := formatters.NewFormatter("dot")
+	require.NoError(t, err)
+	dot, err := formatter.Format(graph, formatters.FormatOptions{})
+	require.NoError(t, err)
 
 	assert.Contains(t, dot, "digraph dependencies")
 	assert.Contains(t, dot, "main.dart")
@@ -254,7 +259,10 @@ func TestDependencyGraph_ToDOT_NewFilesUseSeedlingLabel(t *testing.T) {
 		},
 	}
 
-	dot := formatters.ToDOT(graph, "", stats)
+	formatter, err := formatters.NewFormatter("dot")
+	require.NoError(t, err)
+	dot, err := formatter.Format(graph, formatters.FormatOptions{FileStats: stats})
+	require.NoError(t, err)
 
 	assert.Contains(t, dot, "\"new_file.dart\" [label=\"🪴 new_file.dart\",")
 	assert.Contains(t, dot, "\"new_with_stats.dart\" [label=\"🪴 new_with_stats.dart\\n+12 -1\",")
@@ -270,7 +278,10 @@ func TestDependencyGraph_ToDOT_TestFilesAreLightGreen(t *testing.T) {
 		"/project/utils_test.go": {"/project/utils.go"},
 	}
 
-	dot := formatters.ToDOT(graph, "", nil)
+	formatter, err := formatters.NewFormatter("dot")
+	require.NoError(t, err)
+	dot, err := formatter.Format(graph, formatters.FormatOptions{})
+	require.NoError(t, err)
 
 	// Test files should be light green
 	assert.Contains(t, dot, "main_test.go")
@@ -294,7 +305,10 @@ func TestDependencyGraph_ToDOT_TestFilesAreLightGreen_Dart(t *testing.T) {
 		"/project/test/utils_test.dart": {"/project/lib/utils.dart"},
 	}
 
-	dot := formatters.ToDOT(graph, "", nil)
+	formatter, err := formatters.NewFormatter("dot")
+	require.NoError(t, err)
+	dot, err := formatter.Format(graph, formatters.FormatOptions{})
+	require.NoError(t, err)
 
 	// Test files should be light green
 	assert.Contains(t, dot, "main_test.dart")
@@ -319,7 +333,10 @@ func TestDependencyGraph_ToDOT_MajorityExtensionIsWhite(t *testing.T) {
 		"/project/utils.dart": {},
 	}
 
-	dot := formatters.ToDOT(graph, "", nil)
+	formatter, err := formatters.NewFormatter("dot")
+	require.NoError(t, err)
+	dot, err := formatter.Format(graph, formatters.FormatOptions{})
+	require.NoError(t, err)
 
 	// All .go files (majority extension) should be white
 	assert.Contains(t, dot, `"main.go" [label="main.go", style=filled, fillcolor=white]`)
@@ -348,7 +365,10 @@ func TestDependencyGraph_ToDOT_MajorityExtensionIsWhite_WithTestFiles(t *testing
 		"/project/main.dart":     {},
 	}
 
-	dot := formatters.ToDOT(graph, "", nil)
+	formatter, err := formatters.NewFormatter("dot")
+	require.NoError(t, err)
+	dot, err := formatter.Format(graph, formatters.FormatOptions{})
+	require.NoError(t, err)
 
 	// Test files should be light green (priority over majority extension)
 	assert.Contains(t, dot, `"main_test.go" [label="main_test.go", style=filled, fillcolor=lightgreen]`)
@@ -373,7 +393,10 @@ func TestDependencyGraph_ToDOT_MajorityExtensionTie(t *testing.T) {
 		"/project/utils.dart": {},
 	}
 
-	dot := formatters.ToDOT(graph, "", nil)
+	formatter, err := formatters.NewFormatter("dot")
+	require.NoError(t, err)
+	dot, err := formatter.Format(graph, formatters.FormatOptions{})
+	require.NoError(t, err)
 
 	// One extension should be white (the one chosen as majority)
 	// The other should have a different color
@@ -394,7 +417,10 @@ func TestDependencyGraph_ToDOT_SingleExtensionAllWhite(t *testing.T) {
 		"/project/types.go": {},
 	}
 
-	dot := formatters.ToDOT(graph, "", nil)
+	formatter, err := formatters.NewFormatter("dot")
+	require.NoError(t, err)
+	dot, err := formatter.Format(graph, formatters.FormatOptions{})
+	require.NoError(t, err)
 
 	// All files should be white (single extension)
 	assert.Contains(t, dot, `"main.go" [label="main.go", style=filled, fillcolor=white]`)
@@ -1409,7 +1435,10 @@ func TestDependencyGraph_ToDOT_TypeScriptTestFiles(t *testing.T) {
 		"/project/src/components/Button.spec.tsx": {},
 	}
 
-	dot := formatters.ToDOT(graph, "", nil)
+	formatter, err := formatters.NewFormatter("dot")
+	require.NoError(t, err)
+	dot, err := formatter.Format(graph, formatters.FormatOptions{})
+	require.NoError(t, err)
 
 	// Test files with .test.tsx suffix should be light green
 	assert.Contains(t, dot, `"App.test.tsx" [label="App.test.tsx", style=filled, fillcolor=lightgreen]`)

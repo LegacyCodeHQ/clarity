@@ -22,9 +22,3 @@ func (f *JSONFormatter) Format(g parsers.DependencyGraph, opts FormatOptions) (s
 	}
 	return string(data), nil
 }
-
-// ToJSON converts the dependency graph to JSON format.
-// Deprecated: Use JSONFormatter.Format instead.
-func ToJSON(g parsers.DependencyGraph) ([]byte, error) {
-	return json.MarshalIndent(g, "", "  ")
-}

@@ -5,7 +5,6 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/LegacyCodeHQ/sanity/git"
 	"github.com/LegacyCodeHQ/sanity/parsers"
 )
 
@@ -18,21 +17,14 @@ type DOTFormatter struct{}
 
 // Format converts the dependency graph to Graphviz DOT format.
 func (f *DOTFormatter) Format(g parsers.DependencyGraph, opts FormatOptions) (string, error) {
-	return ToDOT(g, opts.Label, opts.FileStats), nil
-}
-
-// ToDOT converts the dependency graph to Graphviz DOT format
-// If label is not empty, it will be displayed at the top of the graph
-// If fileStats is provided, additions/deletions will be shown in node labels
-func ToDOT(g parsers.DependencyGraph, label string, fileStats map[string]git.FileStats) string {
 	var sb strings.Builder
 	sb.WriteString("digraph dependencies {\n")
 	sb.WriteString("  rankdir=LR;\n")
 	sb.WriteString("  node [shape=box];\n")
 
 	// Add label if provided
-	if label != "" {
-		sb.WriteString(fmt.Sprintf("  label=\"%s\";\n", label))
+	if opts.Label != "" {
+		sb.WriteString(fmt.Sprintf("  label=\"%s\";\n", opts.Label))
 		sb.WriteString("  labelloc=t;\n")
 		sb.WriteString("  labeljust=l;\n")
 		sb.WriteString("  fontsize=10;\n")
@@ -103,7 +95,7 @@ func ToDOT(g parsers.DependencyGraph, label string, fileStats map[string]git.Fil
 			var color string
 
 			// Priority 1: Test files are always light green
-			if isTestFile(source) {
+			if IsTestFile(source) {
 				color = "lightgreen"
 			} else if filesWithMajorityExtension[source] {
 				// Priority 2: Files with majority extension count are always white
@@ -119,8 +111,8 @@ func ToDOT(g parsers.DependencyGraph, label string, fileStats map[string]git.Fil
 
 			// Build node label with file stats if available
 			nodeLabel := sourceBase
-			if fileStats != nil {
-				if stats, ok := fileStats[source]; ok {
+			if opts.FileStats != nil {
+				if stats, ok := opts.FileStats[source]; ok {
 					labelPrefix := sourceBase
 					if stats.IsNew {
 						labelPrefix = fmt.Sprintf("🪴 %s", labelPrefix)
@@ -168,5 +160,5 @@ func ToDOT(g parsers.DependencyGraph, label string, fileStats map[string]git.Fil
 	}
 
 	sb.WriteString("}\n")
-	return sb.String()
+	return sb.String(), nil
 }

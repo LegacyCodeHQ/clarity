@@ -37,8 +37,8 @@ func GetExtensionColors(fileNames []string) map[string]string {
 	return extensionColors
 }
 
-// isTestFile checks if a file is a test file based on naming conventions
-func isTestFile(source string) bool {
+// IsTestFile checks if a file is a test file based on naming conventions
+func IsTestFile(source string) bool {
 	sourceBase := filepath.Base(source)
 	if strings.HasSuffix(sourceBase, "_test.go") {
 		return true
