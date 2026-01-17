@@ -4,7 +4,7 @@ import (
 	"testing"
 
 	"github.com/LegacyCodeHQ/sanity/cmd/graph/formatters"
-	"github.com/LegacyCodeHQ/sanity/git"
+	"github.com/LegacyCodeHQ/sanity/vcs"
 	"github.com/LegacyCodeHQ/sanity/parsers"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"

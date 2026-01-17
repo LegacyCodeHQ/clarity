@@ -6,8 +6,8 @@ import (
 	"path/filepath"
 
 	"github.com/LegacyCodeHQ/sanity/cmd/graph/formatters"
-	"github.com/LegacyCodeHQ/sanity/git"
 	"github.com/LegacyCodeHQ/sanity/parsers"
+	"github.com/LegacyCodeHQ/sanity/vcs"
 
 	"github.com/atotto/clipboard"
 	"github.com/spf13/cobra"

@@ -5,7 +5,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/LegacyCodeHQ/sanity/git"
+	"github.com/LegacyCodeHQ/sanity/vcs"
 	"github.com/LegacyCodeHQ/sanity/parsers"
 )
 

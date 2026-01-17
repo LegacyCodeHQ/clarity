@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/LegacyCodeHQ/sanity/git"
+	"github.com/LegacyCodeHQ/sanity/vcs"
 	"github.com/LegacyCodeHQ/sanity/parsers/dart"
 	_go "github.com/LegacyCodeHQ/sanity/parsers/go"
 	"github.com/LegacyCodeHQ/sanity/parsers/kotlin"

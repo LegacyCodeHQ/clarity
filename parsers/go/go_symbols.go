@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/LegacyCodeHQ/sanity/git"
+	"github.com/LegacyCodeHQ/sanity/vcs"
 )
 
 // GoSymbolInfo tracks symbols defined and referenced in a Go file
