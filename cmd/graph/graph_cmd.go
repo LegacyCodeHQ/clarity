@@ -24,27 +24,15 @@ var betweenFiles []string
 // GraphCmd represents the graph command
 var GraphCmd = &cobra.Command{
 	Use:   "graph",
-	Short: "Generate dependency graph for project imports",
-	Long: `Analyzes files and generates a dependency graph showing relationships
-between project files (excluding external package: and dart: imports).
+	Short: "Generate a dependency graph for project files.",
+	Long: `Generate a dependency graph for project files.
 
-All files are included in the graph. Dart files will show their dependencies,
-while non-Dart files appear as standalone nodes with no connections.
-
-Supports three modes:
-  1. Explicit files: Analyze specific files (--input)
-  2. Uncommitted files: Analyze all uncommitted files (default: current directory)
-  3. Commit analysis: Analyze files changed in a commit (--commit)
-
-Output formats:
-  - dot: Graphviz DOT format for visualization (default)
-  - json: JSON format
-  - mermaid: Mermaid.js flowchart format
+By default, graphs uncommitted changes. Use -c for commits or -i for specific files.
 
 Examples:
   sanity graph                                # uncommitted changes
   sanity graph -c HEAD~3                      # single commit
-  sanity graph -c abc123...def456             # commit range
+  sanity graph -c f0459ec...be3d11a           # commit range
   sanity graph -i ./main.go,./lib             # specific files/directories
   sanity graph -w ./main.go,./utils.go        # paths between files
   sanity graph -u                             # generate visualization URL`,
