@@ -9,6 +9,13 @@ import (
 	"github.com/LegacyCodeHQ/sanity/parsers"
 )
 
+// Format name constants
+const (
+	FormatDOT     = "dot"
+	FormatJSON    = "json"
+	FormatMermaid = "mermaid"
+)
+
 // FormatOptions contains optional parameters for formatting dependency graphs.
 type FormatOptions struct {
 	// Label is an optional title or label for the graph

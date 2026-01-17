@@ -183,7 +183,7 @@ Example usage:
 
 		// Get file statistics for DOT/Mermaid formats
 		var fileStats map[string]git.FileStats
-		if (outputFormat == "dot" || outputFormat == "mermaid") && repoPath != "" {
+		if (outputFormat == formatters.FormatDOT || outputFormat == formatters.FormatMermaid) && repoPath != "" {
 			if commitID != "" {
 				if isCommitRange {
 					// Get stats for commit range
@@ -208,7 +208,7 @@ Example usage:
 
 		// Build label with commit hash and dirty status for DOT/Mermaid formats
 		var label string
-		if outputFormat == "dot" || outputFormat == "mermaid" {
+		if outputFormat == formatters.FormatDOT || outputFormat == formatters.FormatMermaid {
 			// Determine the repo path to use (use current directory if not specified)
 			labelRepoPath := repoPath
 			if labelRepoPath == "" {
@@ -275,13 +275,13 @@ Example usage:
 
 		// Handle URL generation and output
 		switch outputFormat {
-		case "dot":
+		case formatters.FormatDOT:
 			if generateURL {
 				fmt.Println(generateGraphvizOnlineURL(output))
 			} else {
 				fmt.Print(output)
 			}
-		case "mermaid":
+		case formatters.FormatMermaid:
 			if generateURL {
 				fmt.Println(generateMermaidLiveURL(output))
 			} else {
@@ -339,7 +339,8 @@ func generateMermaidLiveURL(mermaidCode string) string {
 
 func init() {
 	// Add format flag
-	GraphCmd.Flags().StringVarP(&outputFormat, "format", "f", "dot", "Output format (dot, json, mermaid)")
+	GraphCmd.Flags().StringVarP(&outputFormat, "format", "f", formatters.FormatDOT,
+		fmt.Sprintf("Output format (%s, %s, %s)", formatters.FormatDOT, formatters.FormatJSON, formatters.FormatMermaid))
 	// Add repo flag
 	GraphCmd.Flags().StringVarP(&repoPath, "repo", "r", "", "Git repository path (default: current directory)")
 	// Add commit flag

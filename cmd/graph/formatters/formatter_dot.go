@@ -9,7 +9,7 @@ import (
 )
 
 func init() {
-	Register("dot", func() Formatter { return &DOTFormatter{} })
+	Register(FormatDOT, func() Formatter { return &DOTFormatter{} })
 }
 
 // DOTFormatter formats dependency graphs as Graphviz DOT.
