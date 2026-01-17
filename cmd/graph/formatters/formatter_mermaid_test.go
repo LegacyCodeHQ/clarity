@@ -4,8 +4,8 @@ import (
 	"testing"
 
 	"github.com/LegacyCodeHQ/sanity/cmd/graph/formatters"
-	"github.com/LegacyCodeHQ/sanity/vcs"
 	"github.com/LegacyCodeHQ/sanity/parsers"
+	"github.com/LegacyCodeHQ/sanity/vcs"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -60,7 +60,7 @@ func TestMermaidFormatter_NewFilesUseSeedlingLabel(t *testing.T) {
 		"/project/existing.dart":       {},
 	}
 
-	stats := map[string]git.FileStats{
+	stats := map[string]vcs.FileStats{
 		"/project/new_file.dart": {
 			IsNew: true,
 		},
@@ -137,7 +137,7 @@ func TestMermaidFormatter_NewFilesAreStyled(t *testing.T) {
 		"/project/another_new.go": {},
 	}
 
-	stats := map[string]git.FileStats{
+	stats := map[string]vcs.FileStats{
 		"/project/new_file.dart": {
 			IsNew: true,
 		},
@@ -228,7 +228,7 @@ func TestMermaidFormatter_FileStatsWithOnlyAdditions(t *testing.T) {
 		"/project/modified.go": {},
 	}
 
-	stats := map[string]git.FileStats{
+	stats := map[string]vcs.FileStats{
 		"/project/modified.go": {
 			Additions: 10,
 			Deletions: 0,
@@ -248,7 +248,7 @@ func TestMermaidFormatter_FileStatsWithOnlyDeletions(t *testing.T) {
 		"/project/modified.go": {},
 	}
 
-	stats := map[string]git.FileStats{
+	stats := map[string]vcs.FileStats{
 		"/project/modified.go": {
 			Additions: 0,
 			Deletions: 5,
@@ -269,7 +269,7 @@ func TestMermaidFormatter_TestFileTakesPriorityOverNewFile(t *testing.T) {
 		"/project/main_test.go": {},
 	}
 
-	stats := map[string]git.FileStats{
+	stats := map[string]vcs.FileStats{
 		"/project/main_test.go": {
 			IsNew: true,
 		},

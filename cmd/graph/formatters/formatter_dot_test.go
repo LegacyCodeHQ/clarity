@@ -5,8 +5,8 @@ import (
 	"testing"
 
 	"github.com/LegacyCodeHQ/sanity/cmd/graph/formatters"
-	"github.com/LegacyCodeHQ/sanity/vcs"
 	"github.com/LegacyCodeHQ/sanity/parsers"
+	"github.com/LegacyCodeHQ/sanity/vcs"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -34,7 +34,7 @@ func TestDependencyGraph_ToDOT_NewFilesUseSeedlingLabel(t *testing.T) {
 		"/project/existing.dart":       {},
 	}
 
-	stats := map[string]git.FileStats{
+	stats := map[string]vcs.FileStats{
 		"/project/new_file.dart": {
 			IsNew: true,
 		},

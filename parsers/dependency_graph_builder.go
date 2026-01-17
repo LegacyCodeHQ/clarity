@@ -117,7 +117,7 @@ func BuildDependencyGraph(filePaths []string, repoPath, commitID string) (Depend
 			if repoPath != "" && commitID != "" {
 				// Read file from git commit
 				relPath := getRelativePath(absPath, repoPath)
-				content, err := git.GetFileContentFromCommit(repoPath, commitID, relPath)
+				content, err := vcs.GetFileContentFromCommit(repoPath, commitID, relPath)
 				if err != nil {
 					return nil, fmt.Errorf("failed to read %s from commit %s: %w", relPath, commitID, err)
 				}
@@ -151,7 +151,7 @@ func BuildDependencyGraph(filePaths []string, repoPath, commitID string) (Depend
 			if repoPath != "" && commitID != "" {
 				// Read file from git commit
 				relPath := getRelativePath(absPath, repoPath)
-				sourceContent, err = git.GetFileContentFromCommit(repoPath, commitID, relPath)
+				sourceContent, err = vcs.GetFileContentFromCommit(repoPath, commitID, relPath)
 				if err != nil {
 					return nil, fmt.Errorf("failed to read %s from commit %s: %w", relPath, commitID, err)
 				}
@@ -268,7 +268,7 @@ func BuildDependencyGraph(filePaths []string, repoPath, commitID string) (Depend
 			if repoPath != "" && commitID != "" {
 				// Read file from git commit
 				relPath := getRelativePath(absPath, repoPath)
-				content, err := git.GetFileContentFromCommit(repoPath, commitID, relPath)
+				content, err := vcs.GetFileContentFromCommit(repoPath, commitID, relPath)
 				if err != nil {
 					return nil, fmt.Errorf("failed to read %s from commit %s: %w", relPath, commitID, err)
 				}
@@ -319,7 +319,7 @@ func BuildDependencyGraph(filePaths []string, repoPath, commitID string) (Depend
 			if repoPath != "" && commitID != "" {
 				// Read file from git commit
 				relPath := getRelativePath(absPath, repoPath)
-				content, err := git.GetFileContentFromCommit(repoPath, commitID, relPath)
+				content, err := vcs.GetFileContentFromCommit(repoPath, commitID, relPath)
 				if err != nil {
 					return nil, fmt.Errorf("failed to read %s from commit %s: %w", relPath, commitID, err)
 				}
@@ -506,7 +506,7 @@ func getModuleNameFromCommit(repoPath, commitID, moduleRoot string) string {
 	}
 
 	// Read go.mod from the commit
-	content, err := git.GetFileContentFromCommit(repoPath, commitID, goModPath)
+	content, err := vcs.GetFileContentFromCommit(repoPath, commitID, goModPath)
 	if err != nil {
 		return ""
 	}
@@ -710,7 +710,7 @@ func resolveKotlinSamePackageDependencies(
 func readFileContent(absPath, repoPath, commitID string) ([]byte, error) {
 	if repoPath != "" && commitID != "" {
 		relPath := getRelativePath(absPath, repoPath)
-		return git.GetFileContentFromCommit(repoPath, commitID, relPath)
+		return vcs.GetFileContentFromCommit(repoPath, commitID, relPath)
 	}
 
 	return os.ReadFile(absPath)

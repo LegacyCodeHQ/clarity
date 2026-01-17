@@ -57,11 +57,11 @@ Examples:
 
 		// Parse commit range if --commit is specified
 		if commitID != "" {
-			fromCommit, toCommit, isCommitRange = git.ParseCommitRange(commitID)
+			fromCommit, toCommit, isCommitRange = vcs.ParseCommitRange(commitID)
 
 			if isCommitRange {
 				// Normalize commit range to chronological order (older...newer)
-				fromCommit, toCommit, _, err = git.NormalizeCommitRange(repoPath, fromCommit, toCommit)
+				fromCommit, toCommit, _, err = vcs.NormalizeCommitRange(repoPath, fromCommit, toCommit)
 				if err != nil {
 					return fmt.Errorf("failed to normalize commit range: %w", err)
 				}
@@ -82,7 +82,7 @@ Examples:
 		} else if commitID != "" {
 			// Commit mode without explicit files - get files changed in commit
 			if isCommitRange {
-				filePaths, err = git.GetCommitRangeFiles(repoPath, fromCommit, toCommit)
+				filePaths, err = vcs.GetCommitRangeFiles(repoPath, fromCommit, toCommit)
 				if err != nil {
 					return fmt.Errorf("failed to get files from commit range: %w", err)
 				}
@@ -91,7 +91,7 @@ Examples:
 					return fmt.Errorf("no files changed in commit range %s", commitID)
 				}
 			} else {
-				filePaths, err = git.GetCommitDartFiles(repoPath, toCommit)
+				filePaths, err = vcs.GetCommitDartFiles(repoPath, toCommit)
 				if err != nil {
 					return fmt.Errorf("failed to get files from commit: %w", err)
 				}
@@ -112,7 +112,7 @@ Examples:
 			}
 		} else {
 			// Default: uncommitted files mode
-			filePaths, err = git.GetUncommittedDartFiles(repoPath)
+			filePaths, err = vcs.GetUncommittedDartFiles(repoPath)
 			if err != nil {
 				return fmt.Errorf("failed to get uncommitted files: %w", err)
 			}
@@ -157,16 +157,16 @@ Examples:
 		}
 
 		// Get file statistics for DOT/Mermaid formats
-		var fileStats map[string]git.FileStats
+		var fileStats map[string]vcs.FileStats
 		format := formatters.OutputFormat(outputFormat)
 		if (format == formatters.OutputFormatDOT || format == formatters.OutputFormatMermaid) && repoPath != "" {
 			if commitID != "" {
 				if isCommitRange {
 					// Get stats for commit range
-					fileStats, err = git.GetCommitRangeFileStats(repoPath, fromCommit, toCommit)
+					fileStats, err = vcs.GetCommitRangeFileStats(repoPath, fromCommit, toCommit)
 				} else {
 					// Get stats for single commit
-					fileStats, err = git.GetCommitFileStats(repoPath, toCommit)
+					fileStats, err = vcs.GetCommitFileStats(repoPath, toCommit)
 				}
 				if err != nil {
 					// Don't fail if we can't get stats, just log and continue without them
@@ -174,7 +174,7 @@ Examples:
 				}
 			} else {
 				// Get stats for uncommitted changes
-				fileStats, err = git.GetUncommittedFileStats(repoPath)
+				fileStats, err = vcs.GetUncommittedFileStats(repoPath)
 				if err != nil {
 					// Don't fail if we can't get stats, just log and continue without them
 					fmt.Fprintf(cmd.ErrOrStderr(), "Warning: failed to get file statistics: %v\n", err)
@@ -192,7 +192,7 @@ Examples:
 			}
 
 			// Get repository root and extract directory name
-			repoRoot, err := git.GetRepositoryRoot(labelRepoPath)
+			repoRoot, err := vcs.GetRepositoryRoot(labelRepoPath)
 			if err == nil {
 				projectName := filepath.Base(repoRoot)
 				label = fmt.Sprintf("%s • ", projectName)
@@ -203,21 +203,21 @@ Examples:
 			if commitID != "" {
 				if isCommitRange {
 					// When analyzing a commit range, show "abc123...def456"
-					commitLabel, err = git.GetCommitRangeLabel(labelRepoPath, fromCommit, toCommit)
+					commitLabel, err = vcs.GetCommitRangeLabel(labelRepoPath, fromCommit, toCommit)
 				} else {
 					// When analyzing a specific commit, show that commit's hash
-					commitLabel, err = git.GetShortCommitHash(labelRepoPath, toCommit)
+					commitLabel, err = vcs.GetShortCommitHash(labelRepoPath, toCommit)
 				}
 			} else {
 				// When analyzing uncommitted changes, show current HEAD
-				commitLabel, err = git.GetCurrentCommitHash(labelRepoPath)
+				commitLabel, err = vcs.GetCurrentCommitHash(labelRepoPath)
 			}
 			if err == nil {
 				label += commitLabel
 
 				// Only check for uncommitted changes when analyzing current state (not a specific commit)
 				if commitID == "" {
-					isDirty, err := git.HasUncommittedChanges(labelRepoPath)
+					isDirty, err := vcs.HasUncommittedChanges(labelRepoPath)
 					if err == nil && isDirty {
 						label += "-dirty"
 					}

@@ -5,8 +5,8 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/LegacyCodeHQ/sanity/vcs"
 	"github.com/LegacyCodeHQ/sanity/parsers"
+	"github.com/LegacyCodeHQ/sanity/vcs"
 )
 
 // OutputFormat represents an output format type
@@ -28,7 +28,7 @@ type FormatOptions struct {
 	// Label is an optional title or label for the graph
 	Label string
 	// FileStats contains file statistics (additions/deletions) for display in nodes
-	FileStats map[string]git.FileStats
+	FileStats map[string]vcs.FileStats
 }
 
 // Formatter is the interface that all graph formatters must implement.

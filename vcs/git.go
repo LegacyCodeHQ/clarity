@@ -1,4 +1,4 @@
-package git
+package vcs
 
 import (
 	"bytes"
@@ -9,13 +9,6 @@ import (
 	"strconv"
 	"strings"
 )
-
-// FileStats represents statistics for a file (additions and deletions)
-type FileStats struct {
-	Additions int
-	Deletions int
-	IsNew     bool
-}
 
 // GetUncommittedDartFiles finds all uncommitted files in a git repository.
 // Returns absolute paths to all uncommitted files (staged, unstaged, and untracked).
