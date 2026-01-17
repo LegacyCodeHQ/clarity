@@ -17,6 +17,7 @@ var outputFormat string
 var repoPath string
 var commitID string
 var generateURL bool
+var copyToClipboard bool
 var includes []string
 var betweenFiles []string
 
@@ -284,7 +285,6 @@ Example usage:
 		}
 
 		// Copy to clipboard if flag is enabled
-		copyToClipboard, _ := cmd.Root().PersistentFlags().GetBool("clipboard")
 		if copyToClipboard {
 			if err := clipboard.WriteAll(output); err != nil {
 				return fmt.Errorf("failed to copy to clipboard: %w", err)
@@ -310,6 +310,8 @@ func init() {
 	GraphCmd.Flags().StringSliceVarP(&includes, "input", "i", nil, "Files or directories to analyze (comma-separated, directories are expanded recursively)")
 	// Add between flag for finding paths between files
 	GraphCmd.Flags().StringSliceVarP(&betweenFiles, "between", "w", nil, "Find all files on shortest paths between specified files (comma-separated)")
+	// Add clipboard flag for copying output to clipboard
+	GraphCmd.Flags().BoolVarP(&copyToClipboard, "clipboard", "b", false, "Automatically copy output to clipboard")
 }
 
 // supportedExtensions contains file extensions that the graph command can analyze
