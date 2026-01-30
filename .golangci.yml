@@ -1,0 +1,7 @@
+linters:
+  enable:
+    - exhaustive
+
+linters-settings:
+  exhaustive:
+    default-signifies-exhaustive: false
