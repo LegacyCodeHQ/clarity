@@ -1,4 +1,4 @@
-.PHONY: test test-coverage coverage coverage-html clean help build-dev release-snapshot release-check lint
+.PHONY: test test-coverage coverage coverage-html clean help build-dev release-check lint
 
 # Version information (can be overridden via command line)
 # Try to get version from git tag, otherwise use "dev"
@@ -25,9 +25,8 @@ help:
 	@echo "  build-dev      - Build for current platform with CGO"
 	@echo ""
 	@echo "Releasing:"
-	@echo "  release-snapshot - GoReleaser build for current platform only"
 	@echo "  release-check    - Validate GoReleaser configuration"
-	@echo "  (For multi-platform: push a git tag to trigger GitHub Actions)"
+	@echo "  (For actual releases: push a git tag to trigger GitHub Actions)"
 	@echo ""
 	@echo "Cleanup:"
 	@echo "  clean            - Remove coverage files and binary"
@@ -68,16 +67,6 @@ coverage-html: coverage
 clean:
 	rm -f coverage.out coverage.html coverage.tmp *.coverprofile *.cover sanity
 	rm -rf dist/
-
-# Build a snapshot release locally with GoReleaser
-# NOTE: Due to CGO (tree-sitter), cross-compilation is not supported
-# This will only build for your current platform
-# For multi-platform releases, use GitHub Actions (push a git tag)
-release-snapshot:
-	@echo "NOTE: Building for current platform only (CGO cross-compilation not supported)"
-	@echo "For multi-platform releases, push a git tag to trigger GitHub Actions"
-	@echo ""
-	goreleaser build --snapshot --clean --single-target
 
 # Validate the GoReleaser configuration
 release-check:
