@@ -1,4 +1,4 @@
-.PHONY: test test-coverage coverage coverage-html clean help build build-version build-local release-snapshot release-check lint
+.PHONY: test test-coverage coverage coverage-html clean help build-version build-local release-snapshot release-check lint
 
 # Version information (can be overridden via command line)
 # Try to get version from git tag, otherwise use "dev"
@@ -22,7 +22,6 @@ help:
 	@echo "  lint             - Run golangci-lint"
 	@echo ""
 	@echo "Building:"
-	@echo "  build            - Build the binary (default version: dev)"
 	@echo "  build-version    - Build the binary with version info from git"
 	@echo "  build-local      - Build for current platform with CGO (RECOMMENDED)"
 	@echo ""
@@ -65,10 +64,6 @@ coverage:
 coverage-html: coverage
 	go tool cover -html=coverage.out -o coverage.html
 	@echo "Coverage report generated: coverage.html"
-
-# Build the binary (default version)
-build:
-	go build -o sanity ./main.go
 
 # Build the binary with version information from git
 build-version:
