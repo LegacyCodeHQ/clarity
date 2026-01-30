@@ -13,7 +13,7 @@ jobs:
     strategy:
       matrix:
         # Test against recent Go versions for compatibility
-        go-version: [ '1.21', '1.25' ]
+        go-version: [ '1.24', '1.25' ]
     
     steps:
       - name: Checkout code
