@@ -14,13 +14,6 @@ import (
 	"github.com/LegacyCodeHQ/sanity/vcs"
 )
 
-// FilesystemContentReader returns a ContentReader that reads from the filesystem.
-func FilesystemContentReader() vcs.ContentReader {
-	return func(absPath string) ([]byte, error) {
-		return os.ReadFile(absPath)
-	}
-}
-
 // BuildDependencyGraph analyzes a list of files and builds a dependency graph
 // containing only project imports (excluding package:/dart: imports for Dart,
 // and standard library/external imports for Go).

@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/LegacyCodeHQ/sanity/parsers"
+	"github.com/LegacyCodeHQ/sanity/vcs"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -72,7 +73,7 @@ func TestBuildDependencyGraph(t *testing.T) {
 
 	// Build dependency graph
 	files := []string{mainPath, userPath, apiPath, validatorPath}
-	graph, err := parsers.BuildDependencyGraph(files, parsers.FilesystemContentReader())
+	graph, err := parsers.BuildDependencyGraph(files, vcs.FilesystemContentReader())
 
 	require.NoError(t, err)
 	assert.Len(t, graph, 4)
@@ -128,7 +129,7 @@ data class ActivateLicenseResponse(val license: String)
 	require.NoError(t, os.WriteFile(responsePath, []byte(responseContent), 0644))
 
 	files := []string{clientPath, requestPath, responsePath}
-	graph, err := parsers.BuildDependencyGraph(files, parsers.FilesystemContentReader())
+	graph, err := parsers.BuildDependencyGraph(files, vcs.FilesystemContentReader())
 	require.NoError(t, err)
 
 	deps := graph[clientPath]
@@ -139,14 +140,14 @@ data class ActivateLicenseResponse(val license: String)
 }
 
 func TestBuildDependencyGraph_EmptyFileList(t *testing.T) {
-	graph, err := parsers.BuildDependencyGraph([]string{}, parsers.FilesystemContentReader())
+	graph, err := parsers.BuildDependencyGraph([]string{}, vcs.FilesystemContentReader())
 
 	require.NoError(t, err)
 	assert.Empty(t, graph)
 }
 
 func TestBuildDependencyGraph_NonexistentFile(t *testing.T) {
-	_, err := parsers.BuildDependencyGraph([]string{"/nonexistent/file.dart"}, parsers.FilesystemContentReader())
+	_, err := parsers.BuildDependencyGraph([]string{"/nonexistent/file.dart"}, vcs.FilesystemContentReader())
 
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to read")
@@ -186,7 +187,7 @@ func TestBuildDependencyGraph_FiltersNonSuppliedFiles(t *testing.T) {
 	// Build dependency graph with only main.dart and helper.dart
 	// (utils.dart is NOT supplied, so it should be filtered out)
 	files := []string{mainPath, helperPath}
-	graph, err := parsers.BuildDependencyGraph(files, parsers.FilesystemContentReader())
+	graph, err := parsers.BuildDependencyGraph(files, vcs.FilesystemContentReader())
 
 	require.NoError(t, err)
 	assert.Len(t, graph, 2)
@@ -227,7 +228,7 @@ func TestBuildDependencyGraph_IncludesNonDartFiles(t *testing.T) {
 
 	// Build dependency graph with all files
 	files := []string{dartPath, goPath, readmePath}
-	graph, err := parsers.BuildDependencyGraph(files, parsers.FilesystemContentReader())
+	graph, err := parsers.BuildDependencyGraph(files, vcs.FilesystemContentReader())
 
 	require.NoError(t, err)
 	assert.Len(t, graph, 3, "graph should include all files")
@@ -325,7 +326,7 @@ type Validator struct {}
 	// Note: Go imports refer to packages (directories), but the graph maps
 	// file to file dependencies (all files in the imported package)
 	files := []string{mainPath, userPath, apiPath, validatorPath}
-	graph, err := parsers.BuildDependencyGraph(files, parsers.FilesystemContentReader())
+	graph, err := parsers.BuildDependencyGraph(files, vcs.FilesystemContentReader())
 
 	require.NoError(t, err)
 	assert.Len(t, graph, 4)
@@ -411,7 +412,7 @@ func Helper() {}
 
 	// Build dependency graph with both Dart and Go files
 	files := []string{dartPath, helperPath, goPath, utilsPath}
-	graph, err := parsers.BuildDependencyGraph(files, parsers.FilesystemContentReader())
+	graph, err := parsers.BuildDependencyGraph(files, vcs.FilesystemContentReader())
 
 	require.NoError(t, err)
 	assert.Len(t, graph, 4)
@@ -485,7 +486,7 @@ func main() {
 
 	// Build dependency graph
 	files := []string{typesPath, helpersPath, mainPath}
-	graph, err := parsers.BuildDependencyGraph(files, parsers.FilesystemContentReader())
+	graph, err := parsers.BuildDependencyGraph(files, vcs.FilesystemContentReader())
 
 	require.NoError(t, err)
 	assert.Len(t, graph, 3)
@@ -574,7 +575,7 @@ object Validator {
 
 	// Build dependency graph
 	files := []string{mainPath, userPath, apiPath, validatorPath}
-	graph, err := parsers.BuildDependencyGraph(files, parsers.FilesystemContentReader())
+	graph, err := parsers.BuildDependencyGraph(files, vcs.FilesystemContentReader())
 
 	require.NoError(t, err)
 	assert.Len(t, graph, 4)
@@ -647,7 +648,7 @@ data class Order(val id: Int, val userId: Int)`
 
 	// Build dependency graph
 	files := []string{mainPath, userPath, productPath, orderPath}
-	graph, err := parsers.BuildDependencyGraph(files, parsers.FilesystemContentReader())
+	graph, err := parsers.BuildDependencyGraph(files, vcs.FilesystemContentReader())
 
 	require.NoError(t, err)
 	assert.Len(t, graph, 4)
@@ -733,7 +734,7 @@ export function validateName(name: string): boolean {
 
 	// Build dependency graph
 	files := []string{indexPath, userPath, apiPath, validatorPath}
-	graph, err := parsers.BuildDependencyGraph(files, parsers.FilesystemContentReader())
+	graph, err := parsers.BuildDependencyGraph(files, vcs.FilesystemContentReader())
 
 	require.NoError(t, err)
 	assert.Len(t, graph, 4)
@@ -822,7 +823,7 @@ export const useUser = () => {
 
 	// Build dependency graph
 	files := []string{appPath, buttonPath, useUserPath}
-	graph, err := parsers.BuildDependencyGraph(files, parsers.FilesystemContentReader())
+	graph, err := parsers.BuildDependencyGraph(files, vcs.FilesystemContentReader())
 
 	require.NoError(t, err)
 	assert.Len(t, graph, 3)
@@ -892,7 +893,7 @@ export function helper() {}
 
 	// Build dependency graph
 	files := []string{indexPath, userPath, apiPath, utilsPath}
-	graph, err := parsers.BuildDependencyGraph(files, parsers.FilesystemContentReader())
+	graph, err := parsers.BuildDependencyGraph(files, vcs.FilesystemContentReader())
 
 	require.NoError(t, err)
 	assert.Len(t, graph, 4)

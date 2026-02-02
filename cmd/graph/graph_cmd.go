@@ -165,7 +165,7 @@ Examples:
 				return vcs.GetFileContentFromCommit(repoPath, toCommit, relPath)
 			}
 		} else {
-			contentReader = parsers.FilesystemContentReader()
+			contentReader = vcs.FilesystemContentReader()
 		}
 
 		graph, err := parsers.BuildDependencyGraph(filePaths, contentReader)
