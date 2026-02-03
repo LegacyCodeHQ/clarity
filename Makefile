@@ -32,13 +32,17 @@ help:
 	@echo "Cleanup:"
 	@echo "  clean              - Remove coverage files and binary"
 
+# Run linter
+lint:
+	golangci-lint run ./...
+
 # Run all tests
 test:
 	go test ./...
 
-# Run linter
-lint:
-	golangci-lint run ./...
+# Update golden test fixtures (only packages using goldie)
+test-update-golden:
+	go test ./litmus/... ./cmd/graph/formatters/dot/... ./cmd/graph/formatters/mermaid/... -args -update
 
 # Run tests with coverage percentage (excludes cmd packages which have no tests)
 test-coverage:
@@ -60,15 +64,6 @@ coverage-html: coverage
 	go tool cover -html=coverage.out -o coverage.html
 	@echo "Coverage report generated: coverage.html"
 
-# Clean coverage files and binary
-clean:
-	rm -f coverage.out coverage.html coverage.tmp *.coverprofile *.cover sanity
-	rm -rf dist/
-
-# Validate the GoReleaser configuration
-release-check:
-	goreleaser check
-
 # Build for current platform only (RECOMMENDED for local testing)
 # No cross-compilation, no GoReleaser, no Zig required
 build-dev:
@@ -76,3 +71,12 @@ build-dev:
 	CGO_ENABLED=1 go build -ldflags "-s -w -X github.com/LegacyCodeHQ/sanity/cmd.version=$(VERSION) -X github.com/LegacyCodeHQ/sanity/cmd.buildDate=$(BUILD_DATE) -X github.com/LegacyCodeHQ/sanity/cmd.commit=$(COMMIT)" -o sanity ./main.go
 	@echo ""
 	@echo "Build successful! Run './sanity --version' to test"
+
+# Validate the GoReleaser configuration
+release-check:
+	goreleaser check
+
+# Clean coverage files and binary
+clean:
+	rm -f coverage.out coverage.html coverage.tmp *.coverprofile *.cover sanity
+	rm -rf dist/
