@@ -19,12 +19,12 @@ var commit = "unknown"
 // rootCmd represents the base command when called without any subcommands
 var rootCmd = &cobra.Command{
 	Use:   "sanity",
-	Short: "Assess risk and confidently review AI-generated code before you commit it.",
-	Long: `Sanity helps you assess risk and confidently review AI-generated code before
-you commit it.
+	Short: "Audit AI-generated code, stabilize vibe-coded apps, and understand unfamiliar codebases.",
+	Long: `Sanity helps you audit AI-generated code, stabilize vibe-coded apps, and build
+a solid understanding of unfamiliar codebases.
 
-It generates a file-level dependency graph showing relationships between
-project files.
+It uses a file-based dependency graph to visualize the impact of changes,
+showing you the relationships between files and the order to review them.
 
 Use 'sanity --help' to see all available commands, or 'sanity <command> --help'
 for detailed information about a specific command.`,
