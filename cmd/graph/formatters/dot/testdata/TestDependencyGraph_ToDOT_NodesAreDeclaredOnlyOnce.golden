@@ -1,0 +1,12 @@
+digraph dependencies {
+  rankdir=LR;
+  node [shape=box];
+
+  "config.go" [label="config.go", style=filled, fillcolor=white];
+  "main.go" [label="main.go", style=filled, fillcolor=white];
+  "standalone.go" [label="standalone.go", style=filled, fillcolor=white];
+  "utils.go" [label="utils.go", style=filled, fillcolor=white];
+
+  "config.go" -> "standalone.go";
+  "main.go" -> "utils.go";
+}

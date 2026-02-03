@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/url"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/LegacyCodeHQ/sanity/cmd/graph/formatters"
@@ -32,10 +33,12 @@ func (f *DOTFormatter) Format(g parsers.DependencyGraph, opts formatters.FormatO
 	sb.WriteString("\n")
 
 	// Collect all file paths from the graph to determine extension colors
+	// Sort for deterministic output
 	filePaths := make([]string, 0, len(g))
 	for source := range g {
 		filePaths = append(filePaths, source)
 	}
+	sort.Strings(filePaths)
 
 	// Get extension colors using the shared function
 	extensionColors := common.GetExtensionColors(filePaths)
@@ -48,9 +51,17 @@ func (f *DOTFormatter) Format(g parsers.DependencyGraph, opts formatters.FormatO
 	}
 
 	// Find the extension with the majority count
+	// Sort extensions for deterministic selection when counts are tied
+	sortedExtensions := make([]string, 0, len(extensionCounts))
+	for ext := range extensionCounts {
+		sortedExtensions = append(sortedExtensions, ext)
+	}
+	sort.Strings(sortedExtensions)
+
 	maxCount := 0
 	majorityExtension := ""
-	for ext, count := range extensionCounts {
+	for _, ext := range sortedExtensions {
+		count := extensionCounts[ext]
 		if count > maxCount {
 			maxCount = count
 			majorityExtension = ext
@@ -87,7 +98,7 @@ func (f *DOTFormatter) Format(g parsers.DependencyGraph, opts formatters.FormatO
 	styledNodes := make(map[string]bool)
 
 	// First, define node styles based on file extensions
-	for source := range g {
+	for _, source := range filePaths {
 		sourceBase := filepath.Base(source)
 
 		if !styledNodes[sourceBase] {
@@ -145,9 +156,14 @@ func (f *DOTFormatter) Format(g parsers.DependencyGraph, opts formatters.FormatO
 	}
 
 	// Write edges (nodes are already declared above with styling)
-	for source, deps := range g {
+	for _, source := range filePaths {
+		deps := g[source]
+		sortedDeps := make([]string, len(deps))
+		copy(sortedDeps, deps)
+		sort.Strings(sortedDeps)
+
 		sourceBase := filepath.Base(source)
-		for _, dep := range deps {
+		for _, dep := range sortedDeps {
 			depBase := filepath.Base(dep)
 			sb.WriteString(fmt.Sprintf("  %q -> %q;\n", sourceBase, depBase))
 		}

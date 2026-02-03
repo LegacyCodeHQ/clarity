@@ -1,0 +1,14 @@
+digraph dependencies {
+  rankdir=LR;
+  node [shape=box];
+
+  "App.test.tsx" [label="App.test.tsx", style=filled, fillcolor=lightgreen];
+  "App.tsx" [label="App.tsx", style=filled, fillcolor=white];
+  "utils.test.tsx" [label="utils.test.tsx", style=filled, fillcolor=lightgreen];
+  "Button.spec.tsx" [label="Button.spec.tsx", style=filled, fillcolor=lightgreen];
+  "utils.tsx" [label="utils.tsx", style=filled, fillcolor=white];
+
+  "App.test.tsx" -> "App.tsx";
+  "App.tsx" -> "utils.tsx";
+  "utils.test.tsx" -> "utils.tsx";
+}

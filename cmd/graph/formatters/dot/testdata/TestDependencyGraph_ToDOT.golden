@@ -1,0 +1,9 @@
+digraph dependencies {
+  rankdir=LR;
+  node [shape=box];
+
+  "main.dart" [label="main.dart", style=filled, fillcolor=white];
+  "utils.dart" [label="utils.dart", style=filled, fillcolor=white];
+
+  "main.dart" -> "utils.dart";
+}

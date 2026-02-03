@@ -1,0 +1,9 @@
+digraph dependencies {
+  rankdir=LR;
+  node [shape=box];
+
+  "existing.dart" [label="existing.dart\n+3", style=filled, fillcolor=white];
+  "new_file.dart" [label="🪴 new_file.dart", style=filled, fillcolor=white];
+  "new_with_stats.dart" [label="🪴 new_with_stats.dart\n+12 -1", style=filled, fillcolor=white];
+
+}

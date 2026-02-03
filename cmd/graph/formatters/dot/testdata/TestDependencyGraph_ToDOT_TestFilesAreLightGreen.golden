@@ -1,0 +1,13 @@
+digraph dependencies {
+  rankdir=LR;
+  node [shape=box];
+
+  "main.go" [label="main.go", style=filled, fillcolor=white];
+  "main_test.go" [label="main_test.go", style=filled, fillcolor=lightgreen];
+  "utils.go" [label="utils.go", style=filled, fillcolor=white];
+  "utils_test.go" [label="utils_test.go", style=filled, fillcolor=lightgreen];
+
+  "main.go" -> "utils.go";
+  "main_test.go" -> "main.go";
+  "utils_test.go" -> "utils.go";
+}

@@ -1,0 +1,10 @@
+digraph dependencies {
+  rankdir=LR;
+  node [shape=box];
+
+  "main.dart" [label="main.dart", style=filled, fillcolor=white];
+  "main.go" [label="main.go", style=filled, fillcolor=lightyellow];
+  "utils.dart" [label="utils.dart", style=filled, fillcolor=white];
+  "utils.go" [label="utils.go", style=filled, fillcolor=lightyellow];
+
+}

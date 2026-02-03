@@ -1,14 +1,13 @@
 package dot_test
 
 import (
-	"strings"
 	"testing"
 
 	"github.com/LegacyCodeHQ/sanity/cmd/graph/formatters"
 	"github.com/LegacyCodeHQ/sanity/cmd/graph/formatters/dot"
 	"github.com/LegacyCodeHQ/sanity/parsers"
 	"github.com/LegacyCodeHQ/sanity/vcs"
-	"github.com/stretchr/testify/assert"
+	"github.com/sebdah/goldie/v2"
 	"github.com/stretchr/testify/require"
 )
 
@@ -19,13 +18,11 @@ func TestDependencyGraph_ToDOT(t *testing.T) {
 	}
 
 	formatter := &dot.DOTFormatter{}
-	dot, err := formatter.Format(graph, formatters.FormatOptions{})
+	output, err := formatter.Format(graph, formatters.FormatOptions{})
 	require.NoError(t, err)
 
-	assert.Contains(t, dot, "digraph dependencies")
-	assert.Contains(t, dot, "main.dart")
-	assert.Contains(t, dot, "utils.dart")
-	assert.Contains(t, dot, "->")
+	g := goldie.New(t)
+	g.Assert(t, t.Name(), []byte(output))
 }
 
 func TestDependencyGraph_ToDOT_NewFilesUseSeedlingLabel(t *testing.T) {
@@ -50,16 +47,14 @@ func TestDependencyGraph_ToDOT_NewFilesUseSeedlingLabel(t *testing.T) {
 	}
 
 	formatter := &dot.DOTFormatter{}
-	dot, err := formatter.Format(graph, formatters.FormatOptions{FileStats: stats})
+	output, err := formatter.Format(graph, formatters.FormatOptions{FileStats: stats})
 	require.NoError(t, err)
 
-	assert.Contains(t, dot, "\"new_file.dart\" [label=\"🪴 new_file.dart\",")
-	assert.Contains(t, dot, "\"new_with_stats.dart\" [label=\"🪴 new_with_stats.dart\\n+12 -1\",")
-	assert.Contains(t, dot, "\"existing.dart\" [label=\"existing.dart\\n+3\",")
+	g := goldie.New(t)
+	g.Assert(t, t.Name(), []byte(output))
 }
 
 func TestDependencyGraph_ToDOT_TestFilesAreLightGreen(t *testing.T) {
-	// Test Go test files
 	graph := parsers.DependencyGraph{
 		"/project/main.go":       {"/project/utils.go"},
 		"/project/utils.go":      {},
@@ -68,24 +63,14 @@ func TestDependencyGraph_ToDOT_TestFilesAreLightGreen(t *testing.T) {
 	}
 
 	formatter := &dot.DOTFormatter{}
-	dot, err := formatter.Format(graph, formatters.FormatOptions{})
+	output, err := formatter.Format(graph, formatters.FormatOptions{})
 	require.NoError(t, err)
 
-	// Test files should be light green
-	assert.Contains(t, dot, "main_test.go")
-	assert.Contains(t, dot, "utils_test.go")
-	assert.Contains(t, dot, `"main_test.go" [label="main_test.go", style=filled, fillcolor=lightgreen]`)
-	assert.Contains(t, dot, `"utils_test.go" [label="utils_test.go", style=filled, fillcolor=lightgreen]`)
-
-	// Non-test files should not be light green
-	assert.Contains(t, dot, `"main.go" [label="main.go", style=filled, fillcolor=white]`)
-	assert.Contains(t, dot, `"utils.go" [label="utils.go", style=filled, fillcolor=white]`)
-	assert.NotContains(t, dot, `"main.go" [label="main.go", style=filled, fillcolor=lightgreen]`)
-	assert.NotContains(t, dot, `"utils.go" [label="utils.go", style=filled, fillcolor=lightgreen]`)
+	g := goldie.New(t)
+	g.Assert(t, t.Name(), []byte(output))
 }
 
 func TestDependencyGraph_ToDOT_TestFilesAreLightGreen_Dart(t *testing.T) {
-	// Test Dart test files (in test/ directory)
 	graph := parsers.DependencyGraph{
 		"/project/lib/main.dart":        {"/project/lib/utils.dart"},
 		"/project/lib/utils.dart":       {},
@@ -94,22 +79,14 @@ func TestDependencyGraph_ToDOT_TestFilesAreLightGreen_Dart(t *testing.T) {
 	}
 
 	formatter := &dot.DOTFormatter{}
-	dot, err := formatter.Format(graph, formatters.FormatOptions{})
+	output, err := formatter.Format(graph, formatters.FormatOptions{})
 	require.NoError(t, err)
 
-	// Test files should be light green
-	assert.Contains(t, dot, "main_test.dart")
-	assert.Contains(t, dot, "utils_test.dart")
-	assert.Contains(t, dot, `"main_test.dart" [label="main_test.dart", style=filled, fillcolor=lightgreen]`)
-	assert.Contains(t, dot, `"utils_test.dart" [label="utils_test.dart", style=filled, fillcolor=lightgreen]`)
-
-	// Non-test files should not be light green
-	assert.Contains(t, dot, `"main.dart" [label="main.dart", style=filled, fillcolor=white]`)
-	assert.Contains(t, dot, `"utils.dart" [label="utils.dart", style=filled, fillcolor=white]`)
+	g := goldie.New(t)
+	g.Assert(t, t.Name(), []byte(output))
 }
 
 func TestDependencyGraph_ToDOT_MajorityExtensionIsWhite(t *testing.T) {
-	// Create graph with majority .go files (5 files) and minority .dart files (2 files)
 	graph := parsers.DependencyGraph{
 		"/project/main.go":          {"/project/utils.go"},
 		"/project/utils.go":         {},
@@ -121,27 +98,14 @@ func TestDependencyGraph_ToDOT_MajorityExtensionIsWhite(t *testing.T) {
 	}
 
 	formatter := &dot.DOTFormatter{}
-	dot, err := formatter.Format(graph, formatters.FormatOptions{})
+	output, err := formatter.Format(graph, formatters.FormatOptions{})
 	require.NoError(t, err)
 
-	// All .go files (majority extension) should be white
-	assert.Contains(t, dot, `"main.go" [label="main.go", style=filled, fillcolor=white]`)
-	assert.Contains(t, dot, `"utils.go" [label="utils.go", style=filled, fillcolor=white]`)
-	assert.Contains(t, dot, `"output_format.go" [label="output_format.go", style=filled, fillcolor=white]`)
-	assert.Contains(t, dot, `"helpers.go" [label="helpers.go", style=filled, fillcolor=white]`)
-	assert.Contains(t, dot, `"config.go" [label="config.go", style=filled, fillcolor=white]`)
-
-	// .dart files (minority extension) should have a different color (not white)
-	// They should have a color from the extension color palette
-	assert.Contains(t, dot, "main.dart")
-	assert.Contains(t, dot, "utils.dart")
-	// Verify they are not white
-	assert.NotContains(t, dot, `"main.dart" [label="main.dart", style=filled, fillcolor=white]`)
-	assert.NotContains(t, dot, `"utils.dart" [label="utils.dart", style=filled, fillcolor=white]`)
+	g := goldie.New(t)
+	g.Assert(t, t.Name(), []byte(output))
 }
 
 func TestDependencyGraph_ToDOT_MajorityExtensionIsWhite_WithTestFiles(t *testing.T) {
-	// Test that test files are light green even if they're part of majority extension
 	graph := parsers.DependencyGraph{
 		"/project/main.go":          {"/project/utils.go"},
 		"/project/utils.go":         {},
@@ -152,25 +116,14 @@ func TestDependencyGraph_ToDOT_MajorityExtensionIsWhite_WithTestFiles(t *testing
 	}
 
 	formatter := &dot.DOTFormatter{}
-	dot, err := formatter.Format(graph, formatters.FormatOptions{})
+	output, err := formatter.Format(graph, formatters.FormatOptions{})
 	require.NoError(t, err)
 
-	// Test files should be light green (priority over majority extension)
-	assert.Contains(t, dot, `"main_test.go" [label="main_test.go", style=filled, fillcolor=lightgreen]`)
-	assert.Contains(t, dot, `"utils_test.go" [label="utils_test.go", style=filled, fillcolor=lightgreen]`)
-
-	// Non-test .go files (majority extension) should be white
-	assert.Contains(t, dot, `"main.go" [label="main.go", style=filled, fillcolor=white]`)
-	assert.Contains(t, dot, `"utils.go" [label="utils.go", style=filled, fillcolor=white]`)
-	assert.Contains(t, dot, `"output_format.go" [label="output_format.go", style=filled, fillcolor=white]`)
-
-	// .dart file (minority extension) should not be white
-	assert.Contains(t, dot, "main.dart")
-	assert.NotContains(t, dot, `"main.dart" [label="main.dart", style=filled, fillcolor=white]`)
+	g := goldie.New(t)
+	g.Assert(t, t.Name(), []byte(output))
 }
 
 func TestDependencyGraph_ToDOT_MajorityExtensionTie(t *testing.T) {
-	// Test when there's a tie for majority (should pick one deterministically)
 	graph := parsers.DependencyGraph{
 		"/project/main.go":    {},
 		"/project/utils.go":   {},
@@ -179,22 +132,14 @@ func TestDependencyGraph_ToDOT_MajorityExtensionTie(t *testing.T) {
 	}
 
 	formatter := &dot.DOTFormatter{}
-	dot, err := formatter.Format(graph, formatters.FormatOptions{})
+	output, err := formatter.Format(graph, formatters.FormatOptions{})
 	require.NoError(t, err)
 
-	// One extension should be white (the one chosen as majority)
-	// The other should have a different color
-	goIsWhite := strings.Contains(dot, `"main.go" [label="main.go", style=filled, fillcolor=white]`) &&
-		strings.Contains(dot, `"utils.go" [label="utils.go", style=filled, fillcolor=white]`)
-	dartIsWhite := strings.Contains(dot, `"main.dart" [label="main.dart", style=filled, fillcolor=white]`) &&
-		strings.Contains(dot, `"utils.dart" [label="utils.dart", style=filled, fillcolor=white]`)
-
-	// Exactly one extension should be white (not both)
-	assert.True(t, goIsWhite != dartIsWhite, "Exactly one extension should be white, not both")
+	g := goldie.New(t)
+	g.Assert(t, t.Name(), []byte(output))
 }
 
 func TestDependencyGraph_ToDOT_SingleExtensionAllWhite(t *testing.T) {
-	// When all files have the same extension, they should all be white
 	graph := parsers.DependencyGraph{
 		"/project/main.go":          {"/project/utils.go"},
 		"/project/utils.go":         {},
@@ -202,17 +147,14 @@ func TestDependencyGraph_ToDOT_SingleExtensionAllWhite(t *testing.T) {
 	}
 
 	formatter := &dot.DOTFormatter{}
-	dot, err := formatter.Format(graph, formatters.FormatOptions{})
+	output, err := formatter.Format(graph, formatters.FormatOptions{})
 	require.NoError(t, err)
 
-	// All files should be white (single extension)
-	assert.Contains(t, dot, `"main.go" [label="main.go", style=filled, fillcolor=white]`)
-	assert.Contains(t, dot, `"utils.go" [label="utils.go", style=filled, fillcolor=white]`)
-	assert.Contains(t, dot, `"output_format.go" [label="output_format.go", style=filled, fillcolor=white]`)
+	g := goldie.New(t)
+	g.Assert(t, t.Name(), []byte(output))
 }
 
 func TestDependencyGraph_ToDOT_TypeScriptTestFiles(t *testing.T) {
-	// Test TypeScript test files are styled as light green
 	graph := parsers.DependencyGraph{
 		"/project/src/App.tsx":                    {"/project/src/utils.tsx"},
 		"/project/src/utils.tsx":                  {},
@@ -222,49 +164,25 @@ func TestDependencyGraph_ToDOT_TypeScriptTestFiles(t *testing.T) {
 	}
 
 	formatter := &dot.DOTFormatter{}
-	dot, err := formatter.Format(graph, formatters.FormatOptions{})
+	output, err := formatter.Format(graph, formatters.FormatOptions{})
 	require.NoError(t, err)
 
-	// Test files with .test.tsx suffix should be light green
-	assert.Contains(t, dot, `"App.test.tsx" [label="App.test.tsx", style=filled, fillcolor=lightgreen]`)
-
-	// Test files in __tests__ directory should be light green
-	assert.Contains(t, dot, `"utils.test.tsx" [label="utils.test.tsx", style=filled, fillcolor=lightgreen]`)
-
-	// Test files with .spec.tsx suffix should be light green
-	assert.Contains(t, dot, `"Button.spec.tsx" [label="Button.spec.tsx", style=filled, fillcolor=lightgreen]`)
-
-	// Non-test files should NOT be light green (they should be white as majority extension)
-	assert.Contains(t, dot, `"App.tsx" [label="App.tsx", style=filled, fillcolor=white]`)
-	assert.Contains(t, dot, `"utils.tsx" [label="utils.tsx", style=filled, fillcolor=white]`)
+	g := goldie.New(t)
+	g.Assert(t, t.Name(), []byte(output))
 }
 
 func TestDependencyGraph_ToDOT_NodesAreDeclaredOnlyOnce(t *testing.T) {
-	// Test that nodes are declared exactly once, even when they have no dependencies
 	graph := parsers.DependencyGraph{
 		"/project/main.go":       {"/project/utils.go"},
-		"/project/utils.go":      {}, // No dependencies - should not be re-declared
-		"/project/standalone.go": {}, // No dependencies - should not be re-declared
+		"/project/utils.go":      {},
+		"/project/standalone.go": {},
 		"/project/config.go":     {"/project/standalone.go"},
 	}
 
 	formatter := &dot.DOTFormatter{}
-	dot, err := formatter.Format(graph, formatters.FormatOptions{})
+	output, err := formatter.Format(graph, formatters.FormatOptions{})
 	require.NoError(t, err)
 
-	// Each node should appear exactly once as a node declaration (with style attributes)
-	// Node declarations look like: "filename.go" [label=...
-	nodeFiles := []string{"main.go", "utils.go", "standalone.go", "config.go"}
-	for _, file := range nodeFiles {
-		// Count occurrences of the node declaration pattern
-		nodeDecl := `"` + file + `" [label=`
-		count := strings.Count(dot, nodeDecl)
-		assert.Equal(t, 1, count, "Node %q should be declared exactly once, found %d times", file, count)
-	}
-
-	// Verify standalone nodes (no dependencies) are NOT re-declared as bare nodes
-	// A bare node looks like: "filename.go";
-	// These should only appear for nodes that have outgoing edges or as part of the styled declaration
-	assert.NotContains(t, dot, "\n  \"utils.go\";\n", "utils.go should not be re-declared as bare node")
-	assert.NotContains(t, dot, "\n  \"standalone.go\";\n", "standalone.go should not be re-declared as bare node")
+	g := goldie.New(t)
+	g.Assert(t, t.Name(), []byte(output))
 }

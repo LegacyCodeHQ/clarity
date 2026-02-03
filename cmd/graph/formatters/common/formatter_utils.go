@@ -2,6 +2,7 @@ package common
 
 import (
 	"path/filepath"
+	"sort"
 	"strings"
 )
 
@@ -25,13 +26,18 @@ func GetExtensionColors(fileNames []string) map[string]string {
 		}
 	}
 
+	// Sort extensions for deterministic color assignment
+	sortedExtensions := make([]string, 0, len(uniqueExtensions))
+	for ext := range uniqueExtensions {
+		sortedExtensions = append(sortedExtensions, ext)
+	}
+	sort.Strings(sortedExtensions)
+
 	// Assign colors to extensions
 	extensionColors := make(map[string]string)
-	colorIndex := 0
-	for ext := range uniqueExtensions {
-		color := availableColors[colorIndex%len(availableColors)]
+	for i, ext := range sortedExtensions {
+		color := availableColors[i%len(availableColors)]
 		extensionColors[ext] = color
-		colorIndex++
 	}
 
 	return extensionColors
