@@ -1450,3 +1450,206 @@ func TestGetCommitRangeLabel_InvalidToCommit(t *testing.T) {
 
 	assert.Error(t, err)
 }
+
+// Tests for GetCommitTreeFiles
+
+func TestGetCommitTreeFiles_SingleFile(t *testing.T) {
+	tmpDir := t.TempDir()
+	setupGitRepo(t, tmpDir)
+
+	// Create and commit a file
+	file := createFile(t, tmpDir, "test.txt", "content")
+	gitAdd(t, tmpDir, "test.txt")
+	commitID := gitCommitAndGetSHA(t, tmpDir, "Initial commit")
+
+	// Get all files in the commit tree
+	files, err := GetCommitTreeFiles(tmpDir, commitID)
+
+	require.NoError(t, err)
+	assert.Len(t, files, 1)
+	resolved, _ := filepath.EvalSymlinks(file)
+	assert.Contains(t, files, resolved)
+}
+
+func TestGetCommitTreeFiles_MultipleFiles(t *testing.T) {
+	tmpDir := t.TempDir()
+	setupGitRepo(t, tmpDir)
+
+	// Create and commit multiple files
+	file1 := createFile(t, tmpDir, "file1.txt", "content1")
+	file2 := createFile(t, tmpDir, "file2.txt", "content2")
+	file3 := createFile(t, tmpDir, "file3.txt", "content3")
+	gitAdd(t, tmpDir, "file1.txt")
+	gitAdd(t, tmpDir, "file2.txt")
+	gitAdd(t, tmpDir, "file3.txt")
+	commitID := gitCommitAndGetSHA(t, tmpDir, "Add multiple files")
+
+	files, err := GetCommitTreeFiles(tmpDir, commitID)
+
+	require.NoError(t, err)
+	assert.Len(t, files, 3)
+	resolved1, _ := filepath.EvalSymlinks(file1)
+	resolved2, _ := filepath.EvalSymlinks(file2)
+	resolved3, _ := filepath.EvalSymlinks(file3)
+	assert.Contains(t, files, resolved1)
+	assert.Contains(t, files, resolved2)
+	assert.Contains(t, files, resolved3)
+}
+
+func TestGetCommitTreeFiles_FilesInSubdirectories(t *testing.T) {
+	tmpDir := t.TempDir()
+	setupGitRepo(t, tmpDir)
+
+	// Create subdirectories
+	libDir := filepath.Join(tmpDir, "lib")
+	srcDir := filepath.Join(tmpDir, "src", "utils")
+	require.NoError(t, os.MkdirAll(libDir, 0755))
+	require.NoError(t, os.MkdirAll(srcDir, 0755))
+
+	// Create files in various locations
+	rootFile := createFile(t, tmpDir, "main.go", "package main")
+	libFile := createFile(t, libDir, "lib.go", "package lib")
+	srcFile := createFile(t, srcDir, "utils.go", "package utils")
+
+	gitAdd(t, tmpDir, "main.go")
+	gitAdd(t, tmpDir, "lib/lib.go")
+	gitAdd(t, tmpDir, "src/utils/utils.go")
+	commitID := gitCommitAndGetSHA(t, tmpDir, "Add files in subdirectories")
+
+	files, err := GetCommitTreeFiles(tmpDir, commitID)
+
+	require.NoError(t, err)
+	assert.Len(t, files, 3)
+	resolvedRoot, _ := filepath.EvalSymlinks(rootFile)
+	resolvedLib, _ := filepath.EvalSymlinks(libFile)
+	resolvedSrc, _ := filepath.EvalSymlinks(srcFile)
+	assert.Contains(t, files, resolvedRoot)
+	assert.Contains(t, files, resolvedLib)
+	assert.Contains(t, files, resolvedSrc)
+}
+
+func TestGetCommitTreeFiles_HEAD(t *testing.T) {
+	tmpDir := t.TempDir()
+	setupGitRepo(t, tmpDir)
+
+	file := createFile(t, tmpDir, "test.txt", "content")
+	gitAdd(t, tmpDir, "test.txt")
+	gitCommit(t, tmpDir, "Initial commit")
+
+	// Use HEAD reference
+	files, err := GetCommitTreeFiles(tmpDir, "HEAD")
+
+	require.NoError(t, err)
+	assert.Len(t, files, 1)
+	resolved, _ := filepath.EvalSymlinks(file)
+	assert.Contains(t, files, resolved)
+}
+
+func TestGetCommitTreeFiles_OlderCommit(t *testing.T) {
+	tmpDir := t.TempDir()
+	setupGitRepo(t, tmpDir)
+
+	// First commit with one file
+	file1 := createFile(t, tmpDir, "first.txt", "first content")
+	gitAdd(t, tmpDir, "first.txt")
+	firstCommit := gitCommitAndGetSHA(t, tmpDir, "First commit")
+
+	// Second commit adds another file
+	createFile(t, tmpDir, "second.txt", "second content")
+	gitAdd(t, tmpDir, "second.txt")
+	gitCommit(t, tmpDir, "Second commit")
+
+	// Get tree from first commit - should only have first file
+	files, err := GetCommitTreeFiles(tmpDir, firstCommit)
+
+	require.NoError(t, err)
+	assert.Len(t, files, 1)
+	resolved1, _ := filepath.EvalSymlinks(file1)
+	assert.Contains(t, files, resolved1)
+}
+
+func TestGetCommitTreeFiles_AfterFileDeleted(t *testing.T) {
+	tmpDir := t.TempDir()
+	setupGitRepo(t, tmpDir)
+
+	// First commit with two files
+	file1 := createFile(t, tmpDir, "keep.txt", "keep")
+	file2 := createFile(t, tmpDir, "delete.txt", "delete")
+	gitAdd(t, tmpDir, "keep.txt")
+	gitAdd(t, tmpDir, "delete.txt")
+	firstCommit := gitCommitAndGetSHA(t, tmpDir, "Add two files")
+
+	// Resolve paths while files still exist
+	resolved1, _ := filepath.EvalSymlinks(file1)
+	resolved2, _ := filepath.EvalSymlinks(file2)
+
+	// Second commit deletes one file
+	require.NoError(t, os.Remove(file2))
+	cmd := exec.Command("git", "add", "-A")
+	cmd.Dir = tmpDir
+	require.NoError(t, cmd.Run())
+	gitCommit(t, tmpDir, "Delete file")
+
+	// First commit tree should still have both files
+	files, err := GetCommitTreeFiles(tmpDir, firstCommit)
+
+	require.NoError(t, err)
+	assert.Len(t, files, 2)
+	assert.Contains(t, files, resolved1)
+	assert.Contains(t, files, resolved2)
+}
+
+func TestGetCommitTreeFiles_ReturnsAllFilesAcrossCommits(t *testing.T) {
+	tmpDir := t.TempDir()
+	setupGitRepo(t, tmpDir)
+
+	// Create files in multiple commits
+	file1 := createFile(t, tmpDir, "first.txt", "first")
+	gitAdd(t, tmpDir, "first.txt")
+	gitCommit(t, tmpDir, "First commit")
+
+	file2 := createFile(t, tmpDir, "second.txt", "second")
+	gitAdd(t, tmpDir, "second.txt")
+	commitID := gitCommitAndGetSHA(t, tmpDir, "Second commit")
+
+	// Should return all files that exist at this commit
+	files, err := GetCommitTreeFiles(tmpDir, commitID)
+
+	require.NoError(t, err)
+	assert.Len(t, files, 2)
+	resolved1, _ := filepath.EvalSymlinks(file1)
+	resolved2, _ := filepath.EvalSymlinks(file2)
+	assert.Contains(t, files, resolved1)
+	assert.Contains(t, files, resolved2)
+}
+
+func TestGetCommitTreeFiles_InvalidCommit(t *testing.T) {
+	tmpDir := t.TempDir()
+	setupGitRepo(t, tmpDir)
+
+	createFile(t, tmpDir, "test.txt", "content")
+	gitAdd(t, tmpDir, "test.txt")
+	gitCommit(t, tmpDir, "Initial commit")
+
+	_, err := GetCommitTreeFiles(tmpDir, "invalid-sha-that-does-not-exist")
+
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "invalid commit reference")
+}
+
+func TestGetCommitTreeFiles_NotGitRepo(t *testing.T) {
+	tmpDir := t.TempDir()
+	// Don't initialize git
+
+	_, err := GetCommitTreeFiles(tmpDir, "HEAD")
+
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "not a git repository")
+}
+
+func TestGetCommitTreeFiles_InvalidPath(t *testing.T) {
+	_, err := GetCommitTreeFiles("/nonexistent/path", "HEAD")
+
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "does not exist")
+}
