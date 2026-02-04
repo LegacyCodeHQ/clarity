@@ -281,3 +281,144 @@ func main() {}
 	assert.Contains(t, imports, ExternalImport{"github.com/smacker/go-tree-sitter"})
 	assert.Contains(t, imports, ExternalImport{"github.com/smacker/go-tree-sitter/golang"})
 }
+
+func TestParseGoEmbeds_SingleFile(t *testing.T) {
+	source := `
+package main
+
+import _ "embed"
+
+//go:embed README.md
+var readme string
+
+func main() {}
+`
+	embeds, err := ParseGoEmbeds([]byte(source))
+
+	require.NoError(t, err)
+	assert.Len(t, embeds, 1)
+	assert.Equal(t, "README.md", embeds[0].Pattern)
+}
+
+func TestParseGoEmbeds_MultipleEmbeds(t *testing.T) {
+	source := `
+package main
+
+import _ "embed"
+
+//go:embed config.json
+var config string
+
+//go:embed templates/index.html
+var indexTemplate string
+
+func main() {}
+`
+	embeds, err := ParseGoEmbeds([]byte(source))
+
+	require.NoError(t, err)
+	assert.Len(t, embeds, 2)
+	assert.Equal(t, "config.json", embeds[0].Pattern)
+	assert.Equal(t, "templates/index.html", embeds[1].Pattern)
+}
+
+func TestParseGoEmbeds_MultiplePatternsSingleLine(t *testing.T) {
+	source := `
+package main
+
+import "embed"
+
+//go:embed file1.txt file2.txt file3.txt
+var content embed.FS
+
+func main() {}
+`
+	embeds, err := ParseGoEmbeds([]byte(source))
+
+	require.NoError(t, err)
+	assert.Len(t, embeds, 3)
+	assert.Equal(t, "file1.txt", embeds[0].Pattern)
+	assert.Equal(t, "file2.txt", embeds[1].Pattern)
+	assert.Equal(t, "file3.txt", embeds[2].Pattern)
+}
+
+func TestParseGoEmbeds_GlobPattern(t *testing.T) {
+	source := `
+package main
+
+import "embed"
+
+//go:embed templates/*.html
+var templates embed.FS
+
+func main() {}
+`
+	embeds, err := ParseGoEmbeds([]byte(source))
+
+	require.NoError(t, err)
+	assert.Len(t, embeds, 1)
+	assert.Equal(t, "templates/*.html", embeds[0].Pattern)
+}
+
+func TestParseGoEmbeds_AllPrefix(t *testing.T) {
+	source := `
+package main
+
+import "embed"
+
+//go:embed all:templates
+var templates embed.FS
+
+func main() {}
+`
+	embeds, err := ParseGoEmbeds([]byte(source))
+
+	require.NoError(t, err)
+	assert.Len(t, embeds, 1)
+	// The all: prefix should be stripped
+	assert.Equal(t, "templates", embeds[0].Pattern)
+}
+
+func TestParseGoEmbeds_NoEmbeds(t *testing.T) {
+	source := `
+package main
+
+import "fmt"
+
+func main() {
+	fmt.Println("No embeds here")
+}
+`
+	embeds, err := ParseGoEmbeds([]byte(source))
+
+	require.NoError(t, err)
+	assert.Empty(t, embeds)
+}
+
+func TestParseGoEmbeds_EmptyFile(t *testing.T) {
+	source := ``
+	embeds, err := ParseGoEmbeds([]byte(source))
+
+	require.NoError(t, err)
+	assert.Empty(t, embeds)
+}
+
+func TestParseGoEmbeds_RegularComments(t *testing.T) {
+	source := `
+package main
+
+import "fmt"
+
+// This is a regular comment
+// go:embed is not at the start, so it's not an embed directive
+// Not a directive: go:embed fake.txt
+
+func main() {
+	fmt.Println("Hello")
+}
+`
+	embeds, err := ParseGoEmbeds([]byte(source))
+
+	require.NoError(t, err)
+	assert.Empty(t, embeds)
+}

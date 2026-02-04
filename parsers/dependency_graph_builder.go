@@ -139,6 +139,16 @@ func BuildDependencyGraph(filePaths []string, contentReader vcs.ContentReader) (
 				return nil, fmt.Errorf("failed to parse imports in %s: %w", filePath, err)
 			}
 
+			// Parse //go:embed directives
+			embeds, _ := _go.ParseGoEmbeds(sourceContent)
+			for _, embed := range embeds {
+				// Resolve embed pattern relative to the source file's directory
+				embedPath := resolveGoEmbedPath(absPath, embed.Pattern, suppliedFiles)
+				if embedPath != "" {
+					projectImports = append(projectImports, embedPath)
+				}
+			}
+
 			// Extract export info for symbol-level cross-package resolution
 			exportInfo, _ := _go.ExtractGoExportInfoFromContent(absPath, sourceContent)
 
@@ -194,9 +204,9 @@ func BuildDependencyGraph(filePaths []string, contentReader vcs.ContentReader) (
 							continue
 						}
 
-						// If importing from same directory, only include .go files
-						// If importing from different directory, include all files (including C files for CGo)
-						if sameDir && filepath.Ext(depFile) != ".go" {
+						// Go imports only create dependencies on Go source files
+						// Non-Go file dependencies should come from //go:embed directives
+						if filepath.Ext(depFile) != ".go" {
 							continue
 						}
 
@@ -417,6 +427,41 @@ func getModuleName(moduleRoot string, contentReader vcs.ContentReader) string {
 		line := strings.TrimSpace(scanner.Text())
 		if strings.HasPrefix(line, "module ") {
 			return strings.TrimSpace(strings.TrimPrefix(line, "module"))
+		}
+	}
+
+	return ""
+}
+
+// resolveGoEmbedPath resolves a Go embed pattern to an absolute file path
+// Returns empty string if the pattern doesn't match any supplied file
+func resolveGoEmbedPath(sourceFile, pattern string, suppliedFiles map[string]bool) string {
+	// Get directory of source file
+	sourceDir := filepath.Dir(sourceFile)
+
+	// For simple file patterns (no glob characters), just resolve directly
+	if !strings.ContainsAny(pattern, "*?[") {
+		absPath := filepath.Join(sourceDir, pattern)
+		absPath = filepath.Clean(absPath)
+
+		// Check if this file is in the supplied files
+		if suppliedFiles[absPath] {
+			return absPath
+		}
+		return ""
+	}
+
+	// For glob patterns, we need to match against supplied files
+	// Create a glob pattern with the full path
+	globPattern := filepath.Join(sourceDir, pattern)
+
+	// Check each supplied file to see if it matches the pattern
+	for file := range suppliedFiles {
+		matched, err := filepath.Match(globPattern, file)
+		if err == nil && matched {
+			// Return the first match (for simple cases)
+			// TODO: For full glob support, return all matches
+			return file
 		}
 	}
 

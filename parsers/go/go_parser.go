@@ -157,3 +157,67 @@ func cleanGoImportPath(raw string) string {
 	cleaned := strings.Trim(raw, "`\"")
 	return strings.TrimSpace(cleaned)
 }
+
+// GoEmbed represents an embedded file from a //go:embed directive
+type GoEmbed struct {
+	Pattern string // The embed pattern (file path or glob)
+}
+
+// ParseGoEmbeds parses Go source code and extracts //go:embed directives
+func ParseGoEmbeds(sourceCode []byte) ([]GoEmbed, error) {
+	lang := golang.GetLanguage()
+
+	parser := sitter.NewParser()
+	parser.SetLanguage(lang)
+
+	tree, err := parser.ParseCtx(context.Background(), nil, sourceCode)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse Go code: %w", err)
+	}
+	defer tree.Close()
+
+	return queryGoEmbeds(tree.RootNode(), sourceCode)
+}
+
+// queryGoEmbeds extracts //go:embed directives from comments
+func queryGoEmbeds(rootNode *sitter.Node, sourceCode []byte) ([]GoEmbed, error) {
+	lang := golang.GetLanguage()
+
+	// Query for comment nodes
+	query, err := sitter.NewQuery([]byte(`(comment) @comment`), lang)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create query: %w", err)
+	}
+	defer query.Close()
+
+	cursor := sitter.NewQueryCursor()
+	defer cursor.Close()
+
+	cursor.Exec(query, rootNode)
+
+	var embeds []GoEmbed
+
+	for {
+		match, ok := cursor.NextMatch()
+		if !ok {
+			break
+		}
+
+		for _, capture := range match.Captures {
+			content := capture.Node.Content(sourceCode)
+			// Check if this is a go:embed directive
+			if strings.HasPrefix(content, "//go:embed ") {
+				// Extract the patterns after "//go:embed "
+				patterns := strings.TrimPrefix(content, "//go:embed ")
+				// Split by whitespace to get individual patterns
+				for _, pattern := range strings.Fields(patterns) {
+					// Remove "all:" prefix if present (used for including hidden files)
+					pattern = strings.TrimPrefix(pattern, "all:")
+					embeds = append(embeds, GoEmbed{Pattern: pattern})
+				}
+			}
+		}
+	}
+
+	return embeds, nil
+}

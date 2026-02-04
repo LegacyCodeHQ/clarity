@@ -905,3 +905,191 @@ export function helper() {}
 	assert.Contains(t, indexDeps, apiPath)
 	assert.Contains(t, indexDeps, utilsPath)
 }
+
+func TestBuildDependencyGraph_GoEmbed(t *testing.T) {
+	// Create temporary directory with Go files using //go:embed
+	tmpDir := t.TempDir()
+
+	// Create go.mod
+	goModContent := `module embedtest
+
+go 1.25
+`
+	goModPath := filepath.Join(tmpDir, "go.mod")
+	err := os.WriteFile(goModPath, []byte(goModContent), 0644)
+	require.NoError(t, err)
+
+	// Create cmd directory
+	cmdDir := filepath.Join(tmpDir, "cmd")
+	err = os.Mkdir(cmdDir, 0755)
+	require.NoError(t, err)
+
+	// Create main.go that embeds a markdown file
+	mainContent := `package main
+
+import _ "embed"
+
+//go:embed README.md
+var readme string
+
+func main() {
+	println(readme)
+}
+`
+	mainPath := filepath.Join(cmdDir, "main.go")
+	err = os.WriteFile(mainPath, []byte(mainContent), 0644)
+	require.NoError(t, err)
+
+	// Create README.md in the same directory
+	readmePath := filepath.Join(cmdDir, "README.md")
+	err = os.WriteFile(readmePath, []byte("# Test README"), 0644)
+	require.NoError(t, err)
+
+	// Build dependency graph
+	files := []string{mainPath, readmePath}
+	graph, err := parsers.BuildDependencyGraph(files, vcs.FilesystemContentReader())
+
+	require.NoError(t, err)
+	assert.Len(t, graph, 2)
+
+	// Check main.go dependencies - should include README.md via embed directive
+	mainDeps := graph[mainPath]
+	assert.Len(t, mainDeps, 1, "main.go should have exactly 1 dependency (README.md via embed)")
+	assert.Contains(t, mainDeps, readmePath, "main.go should depend on README.md via //go:embed")
+
+	// Check README.md has no dependencies
+	readmeDeps := graph[readmePath]
+	assert.Empty(t, readmeDeps)
+}
+
+func TestBuildDependencyGraph_GoImportDoesNotIncludeNonGoFiles(t *testing.T) {
+	// This test verifies that Go imports only create dependencies on .go files,
+	// not on non-Go files that happen to be in the same package directory.
+	// Non-Go file dependencies should only come from //go:embed directives.
+	tmpDir := t.TempDir()
+
+	// Create go.mod
+	goModContent := `module importtest
+
+go 1.25
+`
+	goModPath := filepath.Join(tmpDir, "go.mod")
+	err := os.WriteFile(goModPath, []byte(goModContent), 0644)
+	require.NoError(t, err)
+
+	// Create pkg directory with a Go file AND a markdown file
+	pkgDir := filepath.Join(tmpDir, "pkg")
+	err = os.Mkdir(pkgDir, 0755)
+	require.NoError(t, err)
+
+	// Create pkg/lib.go with an exported function
+	libContent := `package pkg
+
+func Helper() string {
+	return "hello"
+}
+`
+	libPath := filepath.Join(pkgDir, "lib.go")
+	err = os.WriteFile(libPath, []byte(libContent), 0644)
+	require.NoError(t, err)
+
+	// Create pkg/README.md (non-Go file in the package directory)
+	pkgReadmePath := filepath.Join(pkgDir, "README.md")
+	err = os.WriteFile(pkgReadmePath, []byte("# Package docs"), 0644)
+	require.NoError(t, err)
+
+	// Create main.go that imports the pkg package
+	mainContent := `package main
+
+import "importtest/pkg"
+
+func main() {
+	println(pkg.Helper())
+}
+`
+	mainPath := filepath.Join(tmpDir, "main.go")
+	err = os.WriteFile(mainPath, []byte(mainContent), 0644)
+	require.NoError(t, err)
+
+	// Build dependency graph with all files including the README
+	files := []string{mainPath, libPath, pkgReadmePath}
+	graph, err := parsers.BuildDependencyGraph(files, vcs.FilesystemContentReader())
+
+	require.NoError(t, err)
+	assert.Len(t, graph, 3)
+
+	// Check main.go dependencies - should only include lib.go, NOT README.md
+	mainDeps := graph[mainPath]
+	assert.Len(t, mainDeps, 1, "main.go should only depend on lib.go, not README.md")
+	assert.Contains(t, mainDeps, libPath, "main.go should depend on lib.go via import")
+	assert.NotContains(t, mainDeps, pkgReadmePath, "main.go should NOT depend on README.md via import")
+
+	// Check lib.go has no dependencies
+	libDeps := graph[libPath]
+	assert.Empty(t, libDeps)
+
+	// Check README.md has no dependencies
+	readmeDeps := graph[pkgReadmePath]
+	assert.Empty(t, readmeDeps)
+}
+
+func TestBuildDependencyGraph_GoEmbedMultipleFiles(t *testing.T) {
+	// Test that multiple embed directives create multiple dependencies
+	tmpDir := t.TempDir()
+
+	// Create go.mod
+	goModContent := `module multiembed
+
+go 1.25
+`
+	goModPath := filepath.Join(tmpDir, "go.mod")
+	err := os.WriteFile(goModPath, []byte(goModContent), 0644)
+	require.NoError(t, err)
+
+	// Create main.go with multiple embed directives
+	mainContent := `package main
+
+import _ "embed"
+
+//go:embed config.json
+var config string
+
+//go:embed templates/index.html
+var indexTemplate string
+
+func main() {
+	println(config)
+	println(indexTemplate)
+}
+`
+	mainPath := filepath.Join(tmpDir, "main.go")
+	err = os.WriteFile(mainPath, []byte(mainContent), 0644)
+	require.NoError(t, err)
+
+	// Create config.json
+	configPath := filepath.Join(tmpDir, "config.json")
+	err = os.WriteFile(configPath, []byte(`{"key": "value"}`), 0644)
+	require.NoError(t, err)
+
+	// Create templates directory and index.html
+	templatesDir := filepath.Join(tmpDir, "templates")
+	err = os.Mkdir(templatesDir, 0755)
+	require.NoError(t, err)
+
+	indexPath := filepath.Join(templatesDir, "index.html")
+	err = os.WriteFile(indexPath, []byte("<html></html>"), 0644)
+	require.NoError(t, err)
+
+	// Build dependency graph
+	files := []string{mainPath, configPath, indexPath}
+	graph, err := parsers.BuildDependencyGraph(files, vcs.FilesystemContentReader())
+
+	require.NoError(t, err)
+	assert.Len(t, graph, 3)
+
+	// Check main.go dependencies - should include both embedded files
+	mainDeps := graph[mainPath]
+	assert.Len(t, mainDeps, 2, "main.go should have 2 dependencies via embed directives")
+	assert.Contains(t, mainDeps, configPath, "main.go should depend on config.json")
+	assert.Contains(t, mainDeps, indexPath, "main.go should depend on index.html")
+}
