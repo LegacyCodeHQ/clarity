@@ -49,7 +49,27 @@ After generating or modifying code, run `sanity graph` to visualize the relation
 - `sanity graph -f mermaid`  - Output mermaid diagram for IDE/desktop rendering
 - `sanity graph -c HEAD~3`   - Graph files from recent commits
 
-For all options: `sanity graph --help`
+### Examining Software Design
+
+Use `sanity graph` to understand and analyze your codebase architecture. This is useful for:
+
+- Understanding how specific files or modules interact with each other
+- Identifying coupling and dependency patterns
+- Spotting cyclic dependencies
+- Finding dependency paths between components
+- Analyzing the impact of potential refactoring changes
+- Onboarding to unfamiliar codebases
+
+**Quick Reference:**
+
+- `sanity graph -i ./src/auth,./src/api`         - Graph specific files/directories
+- `sanity graph -w ./src/api.go,./src/db.go`     - Find all dependency paths between two files
+- `sanity graph -c d2c2965`                      - View design changes in a single commit
+- `sanity graph -c d2c2965...0de124f`            - View design changes across a range of commits
+- `sanity graph -p ./src/core/engine.go`         - Show outgoing dependencies for a specific file (1 level)
+- `sanity graph -p ./src/core/engine.go -l 3`    - Show dependencies up to 3 levels deep
+
+**Note:** For all options: `sanity graph --help`
 
 ---
 --- END AGENTS.MD CONTENT ---
