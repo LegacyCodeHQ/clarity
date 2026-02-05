@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"errors"
 	"fmt"
-	"os"
 	"path/filepath"
 	"strings"
 
@@ -92,10 +91,7 @@ func ResolveGoProjectImports(
 	// Parse //go:embed directives
 	embeds, _ := ParseGoEmbeds(sourceContent)
 	for _, embed := range embeds {
-		embedPath := resolveGoEmbedPath(absPath, embed.Pattern, suppliedFiles)
-		if embedPath != "" {
-			projectImports = append(projectImports, embedPath)
-		}
+		projectImports = append(projectImports, resolveGoEmbedPaths(absPath, embed.Pattern, suppliedFiles)...)
 	}
 
 	// Extract export info for symbol-level cross-package resolution
@@ -212,44 +208,46 @@ func resolveGoImportPath(sourceFile, importPath string, contentReader vcs.Conten
 	// This is a simplified version that assumes the project follows standard Go module structure
 
 	// Find the go.mod file by walking up from the source file
-	moduleRoot := findModuleRoot(filepath.Dir(sourceFile))
+	moduleRoot := findModuleRootWithReader(filepath.Dir(sourceFile), contentReader)
 	if moduleRoot == "" {
 		// If no module root found, return empty string
 		return ""
 	}
 
-	// Get the module name from go.mod using the content reader
-	moduleName := getModuleName(moduleRoot, contentReader)
+	// Get module metadata from go.mod using the content reader
+	moduleName, replacePaths := getModuleInfo(moduleRoot, contentReader)
 	if moduleName == "" {
 		return ""
 	}
 
 	// Check if the import path starts with the module name
-	if !strings.HasPrefix(importPath, moduleName) {
-		// Not an internal import relative to this module
-		return ""
+	if strings.HasPrefix(importPath, moduleName) {
+		// Remove module name prefix to get relative path
+		relativePath := strings.TrimPrefix(importPath, moduleName+"/")
+
+		// Construct absolute path
+		absPath := filepath.Join(moduleRoot, relativePath)
+
+		// For Go, we don't add .go extension here because imports refer to packages (directories)
+		return filepath.Clean(absPath)
 	}
 
-	// Remove module name prefix to get relative path
-	relativePath := strings.TrimPrefix(importPath, moduleName+"/")
+	// Check go.mod replace directives for local replacement targets.
+	replacedPath := resolveViaReplace(importPath, replacePaths)
+	if replacedPath != "" {
+		return replacedPath
+	}
 
-	// Construct absolute path
-	absPath := filepath.Join(moduleRoot, relativePath)
-
-	// For Go, we don't add .go extension here because imports refer to packages (directories)
-	// We'll need to look for any .go file in that directory
-	// For now, we'll return the directory path
-	return filepath.Clean(absPath)
+	// Not an internal import relative to this module.
+	return ""
 }
 
-// findModuleRoot walks up the directory tree to find the go.mod file
-func findModuleRoot(startDir string) string {
+// findModuleRootWithReader walks up the directory tree to find go.mod using the provided content reader.
+func findModuleRootWithReader(startDir string, contentReader vcs.ContentReader) string {
 	dir := startDir
 	for {
 		goModPath := filepath.Join(dir, "go.mod")
-		if _, err := os.Stat(goModPath); err != nil {
-			// keep walking up the tree
-		} else {
+		if _, err := contentReader(goModPath); err == nil {
 			return dir
 		}
 
@@ -262,29 +260,110 @@ func findModuleRoot(startDir string) string {
 	}
 }
 
-// getModuleName reads the module name from go.mod using the content reader
-func getModuleName(moduleRoot string, contentReader vcs.ContentReader) string {
+// getModuleInfo reads module metadata from go.mod using the content reader.
+func getModuleInfo(moduleRoot string, contentReader vcs.ContentReader) (string, map[string]string) {
 	goModPath := filepath.Join(moduleRoot, "go.mod")
 	content, err := contentReader(goModPath)
 	if err != nil {
-		return ""
+		return "", make(map[string]string)
 	}
 
-	// Parse the module name from the content
+	moduleName := ""
+	replacePaths := make(map[string]string)
+	inReplaceBlock := false
+
+	// Parse module name and local replace directives from the content.
 	scanner := bufio.NewScanner(strings.NewReader(string(content)))
 	for scanner.Scan() {
 		line := strings.TrimSpace(scanner.Text())
 		if strings.HasPrefix(line, "module ") {
-			return strings.TrimSpace(strings.TrimPrefix(line, "module"))
+			moduleName = strings.Trim(strings.TrimSpace(strings.TrimPrefix(line, "module")), "\"")
+			continue
+		}
+
+		if strings.HasPrefix(line, "replace ") && strings.HasSuffix(line, "(") {
+			inReplaceBlock = true
+			continue
+		}
+		if inReplaceBlock && line == ")" {
+			inReplaceBlock = false
+			continue
+		}
+
+		if strings.HasPrefix(line, "replace ") {
+			line = strings.TrimSpace(strings.TrimPrefix(line, "replace "))
+		}
+
+		if inReplaceBlock || strings.Contains(line, "=>") {
+			oldPath, newPath, ok := parseReplaceLine(line)
+			if !ok {
+				continue
+			}
+			if !isLocalGoReplaceTarget(newPath) {
+				continue
+			}
+			if !filepath.IsAbs(newPath) {
+				newPath = filepath.Join(moduleRoot, newPath)
+			}
+			replacePaths[oldPath] = filepath.Clean(newPath)
 		}
 	}
 
-	return ""
+	return moduleName, replacePaths
 }
 
-// resolveGoEmbedPath resolves a Go embed pattern to an absolute file path
-// Returns empty string if the pattern doesn't match any supplied file
-func resolveGoEmbedPath(sourceFile, pattern string, suppliedFiles map[string]bool) string {
+func parseReplaceLine(line string) (string, string, bool) {
+	parts := strings.Split(line, "=>")
+	if len(parts) != 2 {
+		return "", "", false
+	}
+
+	oldPart := strings.TrimSpace(parts[0])
+	newPart := strings.TrimSpace(parts[1])
+	if oldPart == "" || newPart == "" {
+		return "", "", false
+	}
+
+	oldFields := strings.Fields(oldPart)
+	newFields := strings.Fields(newPart)
+	if len(oldFields) == 0 || len(newFields) == 0 {
+		return "", "", false
+	}
+
+	return oldFields[0], strings.Trim(newFields[0], "\""), true
+}
+
+func isLocalGoReplaceTarget(target string) bool {
+	return strings.HasPrefix(target, "./") ||
+		strings.HasPrefix(target, "../") ||
+		strings.HasPrefix(target, "/")
+}
+
+func resolveViaReplace(importPath string, replacePaths map[string]string) string {
+	bestOldPath := ""
+	bestNewPath := ""
+	for oldPath, newPath := range replacePaths {
+		if importPath == oldPath || strings.HasPrefix(importPath, oldPath+"/") {
+			if len(oldPath) > len(bestOldPath) {
+				bestOldPath = oldPath
+				bestNewPath = newPath
+			}
+		}
+	}
+	if bestOldPath == "" {
+		return ""
+	}
+
+	suffix := strings.TrimPrefix(importPath, bestOldPath)
+	suffix = strings.TrimPrefix(suffix, "/")
+	if suffix == "" {
+		return filepath.Clean(bestNewPath)
+	}
+	return filepath.Clean(filepath.Join(bestNewPath, suffix))
+}
+
+// resolveGoEmbedPaths resolves a Go embed pattern to absolute file paths.
+func resolveGoEmbedPaths(sourceFile, pattern string, suppliedFiles map[string]bool) []string {
 	// Get directory of source file
 	sourceDir := filepath.Dir(sourceFile)
 
@@ -295,27 +374,25 @@ func resolveGoEmbedPath(sourceFile, pattern string, suppliedFiles map[string]boo
 
 		// Check if this file is in the supplied files
 		if suppliedFiles[absPath] {
-			return absPath
+			return []string{absPath}
 		}
-		return ""
+		return nil
 	}
 
 	// For glob patterns, we need to match against supplied files
 	// Create a glob pattern with the full path
 	globPattern := filepath.Join(sourceDir, pattern)
 
-	// Check each supplied file to see if it matches the pattern
+	var matches []string
 	for file := range suppliedFiles {
 		matched, err := filepath.Match(globPattern, file)
 		if err != nil {
 			continue
 		}
 		if matched {
-			// Return the first match (for simple cases)
-			// TODO: For full glob support, return all matches
-			return file
+			matches = append(matches, file)
 		}
 	}
 
-	return ""
+	return matches
 }

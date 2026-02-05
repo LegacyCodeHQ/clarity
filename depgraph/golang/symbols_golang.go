@@ -24,7 +24,9 @@ type GoExportInfo struct {
 	Package       string
 	Exports       map[string]bool            // Exported symbols (capitalized) defined in this file
 	ImportAliases map[string]string          // Maps import path to alias used (or package name if no alias)
+	DotImports    map[string]bool            // Tracks import paths imported via dot import
 	QualifiedRefs map[string]map[string]bool // Maps package alias -> set of symbols accessed
+	UnqualRefs    map[string]bool            // Unqualified refs, used for dot-import symbol filtering
 }
 
 // GoPackageExportIndex maps exported symbols to their defining files within a package directory
@@ -166,7 +168,9 @@ func extractExportInfoFromAST(filePath string, node *ast.File) (*GoExportInfo, e
 		Package:       node.Name.Name,
 		Exports:       make(map[string]bool),
 		ImportAliases: make(map[string]string),
+		DotImports:    make(map[string]bool),
 		QualifiedRefs: make(map[string]map[string]bool),
+		UnqualRefs:    make(map[string]bool),
 	}
 
 	// Extract import aliases
@@ -177,7 +181,11 @@ func extractExportInfoFromAST(filePath string, node *ast.File) (*GoExportInfo, e
 		var alias string
 		if imp.Name != nil {
 			alias = imp.Name.Name
-			if alias == "." || alias == "_" {
+			if alias == "." {
+				info.DotImports[importPath] = true
+				continue
+			}
+			if alias == "_" {
 				// Dot imports or blank imports - skip for now
 				continue
 			}
@@ -246,6 +254,36 @@ func extractExportInfoFromAST(filePath string, node *ast.File) (*GoExportInfo, e
 		return true
 	})
 
+	builtins := map[string]bool{
+		"bool": true, "byte": true, "complex64": true, "complex128": true,
+		"error": true, "float32": true, "float64": true, "int": true,
+		"int8": true, "int16": true, "int32": true, "int64": true,
+		"rune": true, "string": true, "uint": true, "uint8": true,
+		"uint16": true, "uint32": true, "uint64": true, "uintptr": true,
+		"true": true, "false": true, "iota": true, "nil": true,
+		"append": true, "cap": true, "close": true, "complex": true,
+		"copy": true, "delete": true, "imag": true, "len": true,
+		"make": true, "new": true, "panic": true, "print": true,
+		"println": true, "real": true, "recover": true,
+		"init": true, "main": true,
+	}
+
+	// Extract unqualified references used for dot-import resolution.
+	ast.Inspect(node, func(n ast.Node) bool {
+		ident, ok := n.(*ast.Ident)
+		if !ok {
+			return true
+		}
+		if ident.Obj != nil {
+			return true
+		}
+		if ident.Name == "_" || ident.Name == info.Package || builtins[ident.Name] {
+			return true
+		}
+		info.UnqualRefs[ident.Name] = true
+		return true
+	})
+
 	return info, nil
 }
 
@@ -282,6 +320,10 @@ func BuildPackageExportIndex(filePaths []string, contentReader vcs.ContentReader
 
 // GetUsedSymbolsFromPackage extracts which symbols from a specific import path are actually used
 func GetUsedSymbolsFromPackage(exportInfo *GoExportInfo, importPath string) map[string]bool {
+	if exportInfo.DotImports[importPath] {
+		return exportInfo.UnqualRefs
+	}
+
 	alias, ok := exportInfo.ImportAliases[importPath]
 	if !ok {
 		return nil
