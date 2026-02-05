@@ -10,7 +10,6 @@ import (
 	"strings"
 
 	"github.com/LegacyCodeHQ/sanity/cmd/graph/formatters"
-	"github.com/LegacyCodeHQ/sanity/cmd/graph/formatters/common"
 	"github.com/LegacyCodeHQ/sanity/depgraph"
 )
 
@@ -157,7 +156,7 @@ func (f *MermaidFormatter) Format(g depgraph.DependencyGraph, opts formatters.Fo
 		sourceBase := filepath.Base(source)
 		nodeID := nodeIDs[sourceBase]
 
-		if common.IsTestFile(source) {
+		if depgraph.IsTestFile(source) {
 			testNodes = append(testNodes, nodeID)
 		} else if opts.FileStats != nil {
 			if stats, ok := opts.FileStats[source]; ok && stats.IsNew {

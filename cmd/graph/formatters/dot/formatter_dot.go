@@ -105,7 +105,7 @@ func (f *DOTFormatter) Format(g depgraph.DependencyGraph, opts formatters.Format
 			var color string
 
 			// Priority 1: Test files are always light green
-			if common.IsTestFile(source) {
+			if depgraph.IsTestFile(source) {
 				color = "lightgreen"
 			} else if filesWithMajorityExtension[source] {
 				// Priority 2: Files with majority extension count are always white
