@@ -1,0 +1,43 @@
+digraph dependencies {
+  rankdir=LR;
+  node [shape=box];
+  label="sanity • b7bb3fc • 15 files";
+  labelloc=t;
+  labeljust=l;
+  fontsize=10;
+  fontname=Courier;
+
+  "issues.jsonl" [label="issues.jsonl\n+1 -1", style=filled, fillcolor=lightyellow];
+  "formatter_dot.go" [label="formatter_dot.go\n+11 -6", style=filled, fillcolor=white];
+  "formatter_dot_test.go" [label="formatter_dot_test.go\n+24 -20", style=filled, fillcolor=lightgreen];
+  "formatter_mermaid.go" [label="formatter_mermaid.go\n+8 -3", style=filled, fillcolor=white];
+  "formatter_mermaid_test.go" [label="formatter_mermaid_test.go\n+31 -27", style=filled, fillcolor=lightgreen];
+  "graph_cmd.go" [label="graph_cmd.go\n+18 -9", style=filled, fillcolor=white];
+  "dependency_graph.go" [label="dependency_graph.go\n+109 -2", style=filled, fillcolor=white];
+  "dependency_graph_builder.go" [label="dependency_graph_builder.go\n+18 -4", style=filled, fillcolor=white];
+  "dependency_graph_builder_test.go" [label="dependency_graph_builder_test.go\n+2 -2", style=filled, fillcolor=lightgreen];
+  "dependency_graph_test.go" [label="dependency_graph_test.go\n+83 -60", style=filled, fillcolor=lightgreen];
+  "dependency_resolver_golang.go" [label="dependency_resolver_golang.go\n+11 -13", style=filled, fillcolor=white];
+  "graph_paths.go" [label="graph_paths.go\n+16 -11", style=filled, fillcolor=white];
+  "graph_paths_test.go" [label="graph_paths_test.go\n+81 -110", style=filled, fillcolor=lightgreen];
+  "go.mod" [label="go.mod\n+1", style=filled, fillcolor=mistyrose];
+  "go.sum" [label="go.sum\n+2", style=filled, fillcolor=lightcyan];
+
+  "formatter_dot.go" -> "dependency_graph.go";
+  "formatter_dot_test.go" -> "formatter_dot.go";
+  "formatter_dot_test.go" -> "dependency_graph.go";
+  "formatter_mermaid.go" -> "dependency_graph.go";
+  "formatter_mermaid_test.go" -> "formatter_mermaid.go";
+  "formatter_mermaid_test.go" -> "dependency_graph.go";
+  "graph_cmd.go" -> "dependency_graph.go";
+  "graph_cmd.go" -> "dependency_graph_builder.go";
+  "graph_cmd.go" -> "graph_paths.go";
+  "dependency_graph_builder.go" -> "dependency_graph.go";
+  "dependency_graph_builder_test.go" -> "dependency_graph.go";
+  "dependency_graph_builder_test.go" -> "dependency_graph_builder.go";
+  "dependency_graph_test.go" -> "dependency_graph.go";
+  "dependency_graph_test.go" -> "dependency_graph_builder.go";
+  "graph_paths.go" -> "dependency_graph.go";
+  "graph_paths_test.go" -> "dependency_graph.go";
+  "graph_paths_test.go" -> "graph_paths.go";
+}

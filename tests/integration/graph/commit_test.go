@@ -83,3 +83,10 @@ func TestGraphCommit_VerifyMajorityColorWhite(t *testing.T) {
 	g := testhelpers.DotGoldie(t)
 	g.Assert(t, t.Name(), []byte(output))
 }
+
+func TestGraphCommit_VerifyFormatterAndPathRefactor(t *testing.T) {
+	output := internal.GraphSubcommand(t, "b7bb3fcfaad2260e2aa14d3dc9554a83f02084fe")
+
+	g := testhelpers.DotGoldie(t)
+	g.Assert(t, t.Name(), []byte(output))
+}
