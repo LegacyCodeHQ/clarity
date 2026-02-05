@@ -3,6 +3,7 @@ package languages
 import (
 	"fmt"
 	"strings"
+	"text/tabwriter"
 
 	"github.com/LegacyCodeHQ/sanity/depgraph"
 	"github.com/spf13/cobra"
@@ -29,11 +30,20 @@ Examples:
 func runLanguages(cmd *cobra.Command, _ []string) error {
 	languages := depgraph.SupportedLanguages()
 
+	writer := tabwriter.NewWriter(cmd.OutOrStdout(), 0, 0, 2, ' ', 0)
+
+	if _, err := fmt.Fprintln(writer, "Language\tExtensions"); err != nil {
+		return err
+	}
+	if _, err := fmt.Fprintln(writer, "--------\t----------"); err != nil {
+		return err
+	}
+
 	for _, language := range languages {
-		if _, err := fmt.Fprintf(cmd.OutOrStdout(), "%s (%s)\n", language.Name, strings.Join(language.Extensions, ", ")); err != nil {
+		if _, err := fmt.Fprintf(writer, "%s\t%s\n", language.Name, strings.Join(language.Extensions, ", ")); err != nil {
 			return err
 		}
 	}
 
-	return nil
+	return writer.Flush()
 }

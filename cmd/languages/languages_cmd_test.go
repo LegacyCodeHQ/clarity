@@ -14,11 +14,13 @@ func TestLanguagesCommand_PrintsSupportedLanguagesAndExtensions(t *testing.T) {
 		t.Fatalf("cmd.Execute() error = %v", err)
 	}
 
-	expected := `Dart (.dart)
-Go (.go)
-Java (.java)
-Kotlin (.kt, .kts)
-TypeScript (.ts, .tsx)
+	expected := `Language    Extensions
+--------    ----------
+Dart        .dart
+Go          .go
+Java        .java
+Kotlin      .kt, .kts
+TypeScript  .ts, .tsx
 `
 
 	if out.String() != expected {
