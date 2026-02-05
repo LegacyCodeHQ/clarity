@@ -2,14 +2,11 @@ package golang
 
 import (
 	"bufio"
-	"errors"
 	"fmt"
 	"path/filepath"
 	"strings"
 
-	"github.com/LegacyCodeHQ/sanity/depgraph/langsupport"
 	"github.com/LegacyCodeHQ/sanity/vcs"
-	graphlib "github.com/dominikbraun/graph"
 )
 
 // ProjectImportResolver encapsulates Go-specific dependency resolution caches and logic.
@@ -169,37 +166,6 @@ func fileDefinesAnyUsedSymbol(depFile string, usedSymbols map[string]bool, expor
 	}
 
 	return false
-}
-
-func AddGoIntraPackageDependencies(
-	graph langsupport.Graph,
-	goFiles []string,
-	contentReader vcs.ContentReader,
-) error {
-	if len(goFiles) == 0 {
-		return nil
-	}
-
-	intraDeps, err := BuildIntraPackageDependencies(goFiles, vcs.ContentReader(contentReader))
-	if err != nil {
-		return err
-	}
-
-	for file, deps := range intraDeps {
-		if _, err := graph.Vertex(file); err != nil {
-			continue
-		}
-		for _, dep := range deps {
-			if _, err := graph.Vertex(dep); err != nil {
-				continue
-			}
-			if err := graph.AddEdge(file, dep); err != nil && !errors.Is(err, graphlib.ErrEdgeAlreadyExists) {
-				return err
-			}
-		}
-	}
-
-	return nil
 }
 
 // resolveGoImportPath resolves a Go import path to an absolute file path

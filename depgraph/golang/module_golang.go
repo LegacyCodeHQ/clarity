@@ -1,8 +1,11 @@
 package golang
 
 import (
+	"errors"
+
 	"github.com/LegacyCodeHQ/sanity/depgraph/langsupport"
 	"github.com/LegacyCodeHQ/sanity/vcs"
+	graphlib "github.com/dominikbraun/graph"
 )
 
 type Module struct{}
@@ -38,5 +41,36 @@ func (r resolver) ResolveProjectImports(absPath, filePath, _ string) ([]string, 
 }
 
 func (r resolver) FinalizeGraph(graph langsupport.Graph) error {
-	return AddGoIntraPackageDependencies(graph, r.ctx.GoFiles, r.contentReader)
+	return addGoIntraPackageDependencies(graph, r.ctx.GoFiles, r.contentReader)
+}
+
+func addGoIntraPackageDependencies(
+	graph langsupport.Graph,
+	goFiles []string,
+	contentReader vcs.ContentReader,
+) error {
+	if len(goFiles) == 0 {
+		return nil
+	}
+
+	intraDeps, err := BuildIntraPackageDependencies(goFiles, vcs.ContentReader(contentReader))
+	if err != nil {
+		return err
+	}
+
+	for file, deps := range intraDeps {
+		if _, err := graph.Vertex(file); err != nil {
+			continue
+		}
+		for _, dep := range deps {
+			if _, err := graph.Vertex(dep); err != nil {
+				continue
+			}
+			if err := graph.AddEdge(file, dep); err != nil && !errors.Is(err, graphlib.ErrEdgeAlreadyExists) {
+				return err
+			}
+		}
+	}
+
+	return nil
 }
