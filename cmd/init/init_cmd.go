@@ -1,9 +1,12 @@
 package init
 
 import (
+	"bytes"
+	_ "embed"
 	"fmt"
 	"os"
 	"path/filepath"
+	"text/template"
 
 	"github.com/spf13/cobra"
 )
@@ -26,6 +29,9 @@ var (
 	flagForce   bool
 	flagQuiet   bool
 )
+
+//go:embed INIT.md
+var initTemplate string
 
 // Cmd represents the init command
 var Cmd = &cobra.Command{
@@ -78,25 +84,25 @@ func runInit(cmd *cobra.Command, args []string) error {
 			fmt.Println("  - .github/copilot-instructions.md")
 		}
 		fmt.Println("")
-		fmt.Println("What this command does:")
-		fmt.Println("  - Adds a minimal sanity snippet to AGENTS.md")
-		fmt.Println("  - (Optional) Adds the same snippet to .github/copilot-instructions.md")
-		fmt.Println("")
-		fmt.Println("How it relates to other commands:")
-		fmt.Println("  - sanity onboard  -> shows the minimal snippet without changing files")
-		fmt.Println("  - sanity prime    -> prints the full workflow context for this tool")
-		fmt.Println("")
-		fmt.Println("Quick start:")
-		fmt.Println("  - Run 'sanity prime' after a new session or context reset")
-		fmt.Println("  - Run 'sanity graph -u' to visualize dependencies in a browser")
-		fmt.Println("  - Run 'sanity graph -f mermaid' to render in IDEs / applications that support mermaid")
-		fmt.Println("  - Run 'sanity graph' to output Graphviz (dot) for tools that can render it")
-		fmt.Println("")
-		fmt.Println("Re-running init:")
-		fmt.Println("  - Use --force to overwrite files instead of appending")
+		fmt.Print(renderInitTemplate())
 	}
 
 	return nil
+}
+
+func renderInitTemplate() string {
+	tmpl, err := template.New("init").Parse(initTemplate)
+	if err != nil {
+		// Best effort fallback to keep init usable even if the template is broken.
+		return ""
+	}
+
+	var out bytes.Buffer
+	if err := tmpl.Execute(&out, nil); err != nil {
+		return ""
+	}
+
+	return out.String()
 }
 
 func writeAgentsFile(filename string) error {
