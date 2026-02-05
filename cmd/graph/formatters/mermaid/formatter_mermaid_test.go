@@ -17,7 +17,7 @@ func TestMermaidFormatter_BasicFlowchart(t *testing.T) {
 		"/project/utils.dart": {},
 	}
 
-	formatter := &mermaid.MermaidFormatter{}
+	formatter := &mermaid.Formatter{}
 	output, err := formatter.Format(graph, formatters.FormatOptions{})
 	require.NoError(t, err)
 
@@ -30,7 +30,7 @@ func TestMermaidFormatter_WithLabel(t *testing.T) {
 		"/project/main.dart": {},
 	}
 
-	formatter := &mermaid.MermaidFormatter{}
+	formatter := &mermaid.Formatter{}
 	output, err := formatter.Format(graph, formatters.FormatOptions{Label: "My Graph"})
 	require.NoError(t, err)
 
@@ -43,7 +43,7 @@ func TestMermaidFormatter_WithoutLabel(t *testing.T) {
 		"/project/main.dart": {},
 	}
 
-	formatter := &mermaid.MermaidFormatter{}
+	formatter := &mermaid.Formatter{}
 	output, err := formatter.Format(graph, formatters.FormatOptions{})
 	require.NoError(t, err)
 
@@ -72,7 +72,7 @@ func TestMermaidFormatter_NewFilesUseSeedlingLabel(t *testing.T) {
 		},
 	}
 
-	formatter := &mermaid.MermaidFormatter{}
+	formatter := &mermaid.Formatter{}
 	output, err := formatter.Format(graph, formatters.FormatOptions{FileStats: stats})
 	require.NoError(t, err)
 
@@ -88,7 +88,7 @@ func TestMermaidFormatter_TestFilesAreStyled(t *testing.T) {
 		"/project/utils_test.go": {"/project/utils.go"},
 	}
 
-	formatter := &mermaid.MermaidFormatter{}
+	formatter := &mermaid.Formatter{}
 	output, err := formatter.Format(graph, formatters.FormatOptions{})
 	require.NoError(t, err)
 
@@ -104,7 +104,7 @@ func TestMermaidFormatter_DartTestFiles(t *testing.T) {
 		"/project/test/utils_test.dart": {"/project/lib/utils.dart"},
 	}
 
-	formatter := &mermaid.MermaidFormatter{}
+	formatter := &mermaid.Formatter{}
 	output, err := formatter.Format(graph, formatters.FormatOptions{})
 	require.NoError(t, err)
 
@@ -131,7 +131,7 @@ func TestMermaidFormatter_NewFilesAreStyled(t *testing.T) {
 		},
 	}
 
-	formatter := &mermaid.MermaidFormatter{}
+	formatter := &mermaid.Formatter{}
 	output, err := formatter.Format(graph, formatters.FormatOptions{FileStats: stats})
 	require.NoError(t, err)
 
@@ -148,7 +148,7 @@ func TestMermaidFormatter_TypeScriptTestFiles(t *testing.T) {
 		"/project/src/components/Button.spec.tsx": {},
 	}
 
-	formatter := &mermaid.MermaidFormatter{}
+	formatter := &mermaid.Formatter{}
 	output, err := formatter.Format(graph, formatters.FormatOptions{})
 	require.NoError(t, err)
 
@@ -163,7 +163,7 @@ func TestMermaidFormatter_EdgesBetweenNodes(t *testing.T) {
 		"/project/c.go": {},
 	}
 
-	formatter := &mermaid.MermaidFormatter{}
+	formatter := &mermaid.Formatter{}
 	output, err := formatter.Format(graph, formatters.FormatOptions{})
 	require.NoError(t, err)
 
@@ -176,7 +176,7 @@ func TestMermaidFormatter_QuoteEscaping(t *testing.T) {
 		"/project/file.go": {},
 	}
 
-	formatter := &mermaid.MermaidFormatter{}
+	formatter := &mermaid.Formatter{}
 	output, err := formatter.Format(graph, formatters.FormatOptions{})
 	require.NoError(t, err)
 
@@ -187,7 +187,7 @@ func TestMermaidFormatter_QuoteEscaping(t *testing.T) {
 func TestMermaidFormatter_EmptyGraph(t *testing.T) {
 	graph := depgraph.DependencyGraph{}
 
-	formatter := &mermaid.MermaidFormatter{}
+	formatter := &mermaid.Formatter{}
 	output, err := formatter.Format(graph, formatters.FormatOptions{})
 	require.NoError(t, err)
 
@@ -207,7 +207,7 @@ func TestMermaidFormatter_FileStatsWithOnlyAdditions(t *testing.T) {
 		},
 	}
 
-	formatter := &mermaid.MermaidFormatter{}
+	formatter := &mermaid.Formatter{}
 	output, err := formatter.Format(graph, formatters.FormatOptions{FileStats: stats})
 	require.NoError(t, err)
 
@@ -227,7 +227,7 @@ func TestMermaidFormatter_FileStatsWithOnlyDeletions(t *testing.T) {
 		},
 	}
 
-	formatter := &mermaid.MermaidFormatter{}
+	formatter := &mermaid.Formatter{}
 	output, err := formatter.Format(graph, formatters.FormatOptions{FileStats: stats})
 	require.NoError(t, err)
 
@@ -246,7 +246,7 @@ func TestMermaidFormatter_TestFileTakesPriorityOverNewFile(t *testing.T) {
 		},
 	}
 
-	formatter := &mermaid.MermaidFormatter{}
+	formatter := &mermaid.Formatter{}
 	output, err := formatter.Format(graph, formatters.FormatOptions{FileStats: stats})
 	require.NoError(t, err)
 

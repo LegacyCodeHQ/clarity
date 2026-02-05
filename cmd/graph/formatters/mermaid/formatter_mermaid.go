@@ -13,11 +13,11 @@ import (
 	"github.com/LegacyCodeHQ/sanity/depgraph"
 )
 
-// MermaidFormatter formats dependency graphs as Mermaid.js flowcharts.
-type MermaidFormatter struct{}
+// Formatter formats dependency graphs as Mermaid.js flowcharts.
+type Formatter struct{}
 
 // Format converts the dependency graph to Mermaid.js flowchart format.
-func (f *MermaidFormatter) Format(g depgraph.DependencyGraph, opts formatters.FormatOptions) (string, error) {
+func (f *Formatter) Format(g depgraph.DependencyGraph, opts formatters.FormatOptions) (string, error) {
 	var sb strings.Builder
 
 	// Add title if label provided
@@ -180,7 +180,7 @@ func (f *MermaidFormatter) Format(g depgraph.DependencyGraph, opts formatters.Fo
 }
 
 // GenerateURL creates a mermaid.live URL with the diagram embedded.
-func (f *MermaidFormatter) GenerateURL(output string) (string, bool) {
+func (f *Formatter) GenerateURL(output string) (string, bool) {
 	payload := map[string]interface{}{
 		"code": output,
 		"mermaid": map[string]interface{}{

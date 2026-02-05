@@ -19,7 +19,7 @@ func NewFormatter(format string) (formatters.Formatter, error) {
 	case formatters.OutputFormatDOT:
 		return &dot.Formatter{}, nil
 	case formatters.OutputFormatMermaid:
-		return &mermaid.MermaidFormatter{}, nil
+		return &mermaid.Formatter{}, nil
 	default:
 		return nil, fmt.Errorf("unknown format: %s (valid options: %s)", format, formatters.SupportedFormats())
 	}
