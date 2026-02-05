@@ -1,0 +1,12 @@
+digraph dependencies {
+  rankdir=LR;
+  node [shape=box];
+  label="sanity • 67d0be0 • 1 file";
+  labelloc=t;
+  labeljust=l;
+  fontsize=10;
+  fontname=Courier;
+
+  "README.md" [label="README.md\n+139 -1", style=filled, fillcolor=white];
+
+}

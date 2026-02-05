@@ -41,3 +41,10 @@ func TestGraphCommit_VerifyMultipleTestFiles(t *testing.T) {
 	g := testhelpers.DotGoldie(t)
 	g.Assert(t, t.Name(), []byte(output))
 }
+
+func TestGraphCommit_VerifySingleFile(t *testing.T) {
+	output := internal.GraphSubcommand(t, "67d0be00f743d4afdd26387d62d4ba84085e393b")
+
+	g := testhelpers.DotGoldie(t)
+	g.Assert(t, t.Name(), []byte(output))
+}
