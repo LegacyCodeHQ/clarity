@@ -132,9 +132,9 @@ func (f *Formatter) Format(g depgraph.DependencyGraph, opts formatters.FormatOpt
 		}
 	}
 
-	sb.WriteString("\n")
-
 	// Define edges
+	var edgesSB strings.Builder
+	hasEdges := false
 	for _, source := range filePaths {
 		deps := adjacency[source]
 		sortedDeps := make([]string, len(deps))
@@ -146,11 +146,10 @@ func (f *Formatter) Format(g depgraph.DependencyGraph, opts formatters.FormatOpt
 		for _, dep := range sortedDeps {
 			depBase := filepath.Base(dep)
 			depID := nodeIDs[depBase]
-			sb.WriteString(fmt.Sprintf("    %s --> %s\n", sourceID, depID))
+			hasEdges = true
+			edgesSB.WriteString(fmt.Sprintf("    %s --> %s\n", sourceID, depID))
 		}
 	}
-
-	sb.WriteString("\n")
 
 	// Add styles for different node types
 	// Mermaid uses classDef for styling and class for applying styles
@@ -176,19 +175,34 @@ func (f *Formatter) Format(g depgraph.DependencyGraph, opts formatters.FormatOpt
 		}
 	}
 
+	hasStyles := len(testNodes) > 0 || len(majorityExtensionNodes) > 0
+	var stylesSB strings.Builder
+
 	// Define style classes
-	sb.WriteString("    classDef testFile fill:#90EE90,stroke:#228B22,color:#000000\n")
+	if len(testNodes) > 0 {
+		stylesSB.WriteString("    classDef testFile fill:#90EE90,stroke:#228B22,color:#000000\n")
+	}
 	if len(majorityExtensionNodes) > 0 {
-		sb.WriteString("    classDef majorityExtension fill:#FFFFFF,stroke:#999999,color:#000000\n")
+		stylesSB.WriteString("    classDef majorityExtension fill:#FFFFFF,stroke:#999999,color:#000000\n")
 	}
 
 	// Apply styles to nodes
 	if len(testNodes) > 0 {
-		sb.WriteString(fmt.Sprintf("    class %s testFile\n", strings.Join(testNodes, ",")))
+		stylesSB.WriteString(fmt.Sprintf("    class %s testFile\n", strings.Join(testNodes, ",")))
 	}
 	if len(majorityExtensionNodes) > 0 {
-		sb.WriteString(fmt.Sprintf("    class %s majorityExtension\n", strings.Join(majorityExtensionNodes, ",")))
+		stylesSB.WriteString(fmt.Sprintf("    class %s majorityExtension\n", strings.Join(majorityExtensionNodes, ",")))
 	}
+
+	if hasEdges {
+		sb.WriteString("\n")
+		sb.WriteString(edgesSB.String())
+	}
+	if hasStyles {
+		sb.WriteString("\n")
+		sb.WriteString(stylesSB.String())
+	}
+
 	return strings.TrimSuffix(sb.String(), "\n"), nil
 }
 
