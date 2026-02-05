@@ -61,8 +61,7 @@ func BuildDependencyGraph(filePaths []string, contentReader vcs.ContentReader) (
 	// Note: goFiles was already collected in the first pass
 
 	if err := addGoIntraPackageDependencies(graph, ctx.goFiles, contentReader); err != nil {
-		// Don't fail if intra-package analysis fails, just skip it
-		return graph, nil
+		return graph, fmt.Errorf("failed to add intra-package dependencies: %w", err)
 	}
 
 	return graph, nil
@@ -145,9 +144,10 @@ func buildGoPackageExportIndices(dirToFiles map[string][]string, contentReader v
 		}
 		if hasGoFiles {
 			exportIndex, err := _go.BuildPackageExportIndex(goFilesInDir, vcs.ContentReader(contentReader))
-			if err == nil {
-				goPackageExportIndices[dir] = exportIndex
+			if err != nil {
+				continue
 			}
+			goPackageExportIndices[dir] = exportIndex
 		}
 	}
 
@@ -495,7 +495,9 @@ func findModuleRoot(startDir string) string {
 	dir := startDir
 	for {
 		goModPath := filepath.Join(dir, "go.mod")
-		if _, err := os.Stat(goModPath); err == nil {
+		if _, err := os.Stat(goModPath); err != nil {
+			// keep walking up the tree
+		} else {
 			return dir
 		}
 
@@ -553,7 +555,10 @@ func resolveGoEmbedPath(sourceFile, pattern string, suppliedFiles map[string]boo
 	// Check each supplied file to see if it matches the pattern
 	for file := range suppliedFiles {
 		matched, err := filepath.Match(globPattern, file)
-		if err == nil && matched {
+		if err != nil {
+			continue
+		}
+		if matched {
 			// Return the first match (for simple cases)
 			// TODO: For full glob support, return all matches
 			return file
@@ -665,22 +670,22 @@ func resolveKotlinSamePackageDependencies(
 ) []string {
 	pkg, ok := filePackages[sourceFile]
 	if !ok {
-		return nil
+		return []string{}
 	}
 
 	typeIndex, ok := packageTypeIndex[pkg]
 	if !ok {
-		return nil
+		return []string{}
 	}
 
 	sourceCode, err := contentReader(sourceFile)
 	if err != nil {
-		return nil
+		return []string{}
 	}
 
 	typeReferences := kotlin.ExtractTypeIdentifiers(sourceCode)
 	if len(typeReferences) == 0 {
-		return nil
+		return []string{}
 	}
 
 	importedNames := make(map[string]bool)
