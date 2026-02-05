@@ -1,0 +1,17 @@
+digraph dependencies {
+  rankdir=LR;
+  node [shape=box];
+  label="sanity • 29daace • 5 files";
+  labelloc=t;
+  labeljust=l;
+  fontsize=10;
+  fontname=Courier;
+
+  "binding.go" [label="🪴 binding.go\n+17", style=filled, fillcolor=lightyellow];
+  "binding_test.go" [label="🪴 binding_test.go\n+14", style=filled, fillcolor=lightgreen];
+  "parser.c" [label="🪴 parser.c\n+199872", style=filled, fillcolor=white];
+  "parser.h" [label="🪴 parser.h\n+286", style=filled, fillcolor=mistyrose];
+  "scanner.c" [label="🪴 scanner.c\n+130", style=filled, fillcolor=white];
+
+  "binding_test.go" -> "binding.go";
+}

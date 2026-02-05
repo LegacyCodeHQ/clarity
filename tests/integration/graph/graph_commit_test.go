@@ -20,3 +20,10 @@ func TestGraphCommit_VerifyNewFilesAndMixedTypes(t *testing.T) {
 	g := testhelpers.DotGoldie(t)
 	g.Assert(t, t.Name(), []byte(output))
 }
+
+func TestGraphCommit_VerifyAllNewFilesAndTestHighlight(t *testing.T) {
+	output := internal.GraphSubcommand(t, "29daace91e32509eae1ce314623bcdaa1411475d")
+
+	g := testhelpers.DotGoldie(t)
+	g.Assert(t, t.Name(), []byte(output))
+}
