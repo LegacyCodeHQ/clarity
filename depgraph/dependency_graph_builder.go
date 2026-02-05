@@ -1,8 +1,11 @@
 package depgraph
 
 import (
+	"errors"
 	"fmt"
 	"path/filepath"
+
+	graphlib "github.com/dominikbraun/graph"
 
 	"github.com/LegacyCodeHQ/sanity/vcs"
 )
@@ -26,7 +29,7 @@ func BuildDependencyGraphWithResolver(
 	filePaths []string,
 	dependencyResolver DependencyResolver,
 ) (DependencyGraph, error) {
-	graph := make(DependencyGraph)
+	graph := NewDependencyGraph()
 
 	if dependencyResolver == nil {
 		return nil, fmt.Errorf("dependency resolver is required")
@@ -45,7 +48,9 @@ func BuildDependencyGraphWithResolver(
 		// Check if this is a supported file type
 		if !dependencyResolver.SupportsFileExtension(ext) {
 			// Unsupported files are included in the graph with no dependencies
-			graph[absPath] = []string{}
+			if err := graph.AddVertex(absPath); err != nil && !errors.Is(err, graphlib.ErrVertexAlreadyExists) {
+				return nil, fmt.Errorf("failed to add graph vertex %s: %w", absPath, err)
+			}
 			continue
 		}
 
@@ -57,8 +62,17 @@ func BuildDependencyGraphWithResolver(
 		if len(projectImports) > 0 {
 			projectImports = deduplicatePaths(projectImports)
 		}
-
-		graph[absPath] = projectImports
+		if err := graph.AddVertex(absPath); err != nil && !errors.Is(err, graphlib.ErrVertexAlreadyExists) {
+			return nil, fmt.Errorf("failed to add graph vertex %s: %w", absPath, err)
+		}
+		for _, dep := range projectImports {
+			if err := graph.AddVertex(dep); err != nil && !errors.Is(err, graphlib.ErrVertexAlreadyExists) {
+				return nil, fmt.Errorf("failed to add graph dependency vertex %s: %w", dep, err)
+			}
+			if err := graph.AddEdge(absPath, dep); err != nil && !errors.Is(err, graphlib.ErrEdgeAlreadyExists) {
+				return nil, fmt.Errorf("failed to add graph edge %s -> %s: %w", absPath, dep, err)
+			}
+		}
 	}
 
 	// Third pass: add intra-package dependencies for languages that need it.

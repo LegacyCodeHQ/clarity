@@ -18,6 +18,11 @@ type Formatter struct{}
 
 // Format converts the dependency graph to Mermaid.js flowchart format.
 func (f *Formatter) Format(g depgraph.DependencyGraph, opts formatters.FormatOptions) (string, error) {
+	adjacency, err := depgraph.AdjacencyList(g)
+	if err != nil {
+		return "", err
+	}
+
 	var sb strings.Builder
 
 	// Add title if label provided
@@ -30,8 +35,8 @@ func (f *Formatter) Format(g depgraph.DependencyGraph, opts formatters.FormatOpt
 	sb.WriteString("flowchart LR\n")
 
 	// Collect and sort file paths for deterministic output
-	filePaths := make([]string, 0, len(g))
-	for source := range g {
+	filePaths := make([]string, 0, len(adjacency))
+	for source := range adjacency {
 		filePaths = append(filePaths, source)
 	}
 	sort.Strings(filePaths)
@@ -131,7 +136,7 @@ func (f *Formatter) Format(g depgraph.DependencyGraph, opts formatters.FormatOpt
 
 	// Define edges
 	for _, source := range filePaths {
-		deps := g[source]
+		deps := adjacency[source]
 		sortedDeps := make([]string, len(deps))
 		copy(sortedDeps, deps)
 		sort.Strings(sortedDeps)

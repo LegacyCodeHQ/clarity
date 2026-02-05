@@ -11,11 +11,15 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func testGraph(adjacency map[string][]string) depgraph.DependencyGraph {
+	return depgraph.MustDependencyGraph(adjacency)
+}
+
 func TestMermaidFormatter_BasicFlowchart(t *testing.T) {
-	graph := depgraph.DependencyGraph{
+	graph := testGraph(map[string][]string{
 		"/project/main.dart":  {"/project/utils.dart"},
 		"/project/utils.dart": {},
-	}
+	})
 
 	formatter := &mermaid.Formatter{}
 	output, err := formatter.Format(graph, formatters.FormatOptions{})
@@ -26,9 +30,9 @@ func TestMermaidFormatter_BasicFlowchart(t *testing.T) {
 }
 
 func TestMermaidFormatter_WithLabel(t *testing.T) {
-	graph := depgraph.DependencyGraph{
+	graph := testGraph(map[string][]string{
 		"/project/main.dart": {},
-	}
+	})
 
 	formatter := &mermaid.Formatter{}
 	output, err := formatter.Format(graph, formatters.FormatOptions{Label: "My Graph"})
@@ -39,9 +43,9 @@ func TestMermaidFormatter_WithLabel(t *testing.T) {
 }
 
 func TestMermaidFormatter_WithoutLabel(t *testing.T) {
-	graph := depgraph.DependencyGraph{
+	graph := testGraph(map[string][]string{
 		"/project/main.dart": {},
-	}
+	})
 
 	formatter := &mermaid.Formatter{}
 	output, err := formatter.Format(graph, formatters.FormatOptions{})
@@ -52,11 +56,11 @@ func TestMermaidFormatter_WithoutLabel(t *testing.T) {
 }
 
 func TestMermaidFormatter_NewFilesUseSeedlingLabel(t *testing.T) {
-	graph := depgraph.DependencyGraph{
+	graph := testGraph(map[string][]string{
 		"/project/new_file.dart":       {},
 		"/project/new_with_stats.dart": {},
 		"/project/existing.dart":       {},
-	}
+	})
 
 	stats := map[string]vcs.FileStats{
 		"/project/new_file.dart": {
@@ -81,12 +85,12 @@ func TestMermaidFormatter_NewFilesUseSeedlingLabel(t *testing.T) {
 }
 
 func TestMermaidFormatter_TestFilesAreStyled(t *testing.T) {
-	graph := depgraph.DependencyGraph{
+	graph := testGraph(map[string][]string{
 		"/project/main.go":       {"/project/utils.go"},
 		"/project/utils.go":      {},
 		"/project/main_test.go":  {"/project/main.go"},
 		"/project/utils_test.go": {"/project/utils.go"},
-	}
+	})
 
 	formatter := &mermaid.Formatter{}
 	output, err := formatter.Format(graph, formatters.FormatOptions{})
@@ -97,12 +101,12 @@ func TestMermaidFormatter_TestFilesAreStyled(t *testing.T) {
 }
 
 func TestMermaidFormatter_DartTestFiles(t *testing.T) {
-	graph := depgraph.DependencyGraph{
+	graph := testGraph(map[string][]string{
 		"/project/lib/main.dart":        {"/project/lib/utils.dart"},
 		"/project/lib/utils.dart":       {},
 		"/project/test/main_test.dart":  {"/project/lib/main.dart"},
 		"/project/test/utils_test.dart": {"/project/lib/utils.dart"},
-	}
+	})
 
 	formatter := &mermaid.Formatter{}
 	output, err := formatter.Format(graph, formatters.FormatOptions{})
@@ -113,11 +117,11 @@ func TestMermaidFormatter_DartTestFiles(t *testing.T) {
 }
 
 func TestMermaidFormatter_NewFilesAreStyled(t *testing.T) {
-	graph := depgraph.DependencyGraph{
+	graph := testGraph(map[string][]string{
 		"/project/new_file.dart":  {},
 		"/project/existing.dart":  {},
 		"/project/another_new.go": {},
-	}
+	})
 
 	stats := map[string]vcs.FileStats{
 		"/project/new_file.dart": {
@@ -140,13 +144,13 @@ func TestMermaidFormatter_NewFilesAreStyled(t *testing.T) {
 }
 
 func TestMermaidFormatter_TypeScriptTestFiles(t *testing.T) {
-	graph := depgraph.DependencyGraph{
+	graph := testGraph(map[string][]string{
 		"/project/src/App.tsx":                    {"/project/src/utils.tsx"},
 		"/project/src/utils.tsx":                  {},
 		"/project/src/App.test.tsx":               {"/project/src/App.tsx"},
 		"/project/src/__tests__/utils.test.tsx":   {"/project/src/utils.tsx"},
 		"/project/src/components/Button.spec.tsx": {},
-	}
+	})
 
 	formatter := &mermaid.Formatter{}
 	output, err := formatter.Format(graph, formatters.FormatOptions{})
@@ -157,11 +161,11 @@ func TestMermaidFormatter_TypeScriptTestFiles(t *testing.T) {
 }
 
 func TestMermaidFormatter_EdgesBetweenNodes(t *testing.T) {
-	graph := depgraph.DependencyGraph{
+	graph := testGraph(map[string][]string{
 		"/project/a.go": {"/project/b.go", "/project/c.go"},
 		"/project/b.go": {"/project/c.go"},
 		"/project/c.go": {},
-	}
+	})
 
 	formatter := &mermaid.Formatter{}
 	output, err := formatter.Format(graph, formatters.FormatOptions{})
@@ -172,9 +176,9 @@ func TestMermaidFormatter_EdgesBetweenNodes(t *testing.T) {
 }
 
 func TestMermaidFormatter_QuoteEscaping(t *testing.T) {
-	graph := depgraph.DependencyGraph{
+	graph := testGraph(map[string][]string{
 		"/project/file.go": {},
-	}
+	})
 
 	formatter := &mermaid.Formatter{}
 	output, err := formatter.Format(graph, formatters.FormatOptions{})
@@ -185,7 +189,7 @@ func TestMermaidFormatter_QuoteEscaping(t *testing.T) {
 }
 
 func TestMermaidFormatter_EmptyGraph(t *testing.T) {
-	graph := depgraph.DependencyGraph{}
+	graph := testGraph(make(map[string][]string))
 
 	formatter := &mermaid.Formatter{}
 	output, err := formatter.Format(graph, formatters.FormatOptions{})
@@ -196,9 +200,9 @@ func TestMermaidFormatter_EmptyGraph(t *testing.T) {
 }
 
 func TestMermaidFormatter_FileStatsWithOnlyAdditions(t *testing.T) {
-	graph := depgraph.DependencyGraph{
+	graph := testGraph(map[string][]string{
 		"/project/modified.go": {},
-	}
+	})
 
 	stats := map[string]vcs.FileStats{
 		"/project/modified.go": {
@@ -216,9 +220,9 @@ func TestMermaidFormatter_FileStatsWithOnlyAdditions(t *testing.T) {
 }
 
 func TestMermaidFormatter_FileStatsWithOnlyDeletions(t *testing.T) {
-	graph := depgraph.DependencyGraph{
+	graph := testGraph(map[string][]string{
 		"/project/modified.go": {},
-	}
+	})
 
 	stats := map[string]vcs.FileStats{
 		"/project/modified.go": {
@@ -236,9 +240,9 @@ func TestMermaidFormatter_FileStatsWithOnlyDeletions(t *testing.T) {
 }
 
 func TestMermaidFormatter_TestFileTakesPriorityOverNewFile(t *testing.T) {
-	graph := depgraph.DependencyGraph{
+	graph := testGraph(map[string][]string{
 		"/project/main_test.go": {},
-	}
+	})
 
 	stats := map[string]vcs.FileStats{
 		"/project/main_test.go": {

@@ -47,10 +47,10 @@ func TestBuildDependencyGraphWithResolver_UsesResolverExtensionSupport(t *testin
 		t.Fatalf("filepath.Abs(README.md) error = %v", err)
 	}
 
-	if _, ok := graph[goPath]; !ok {
+	if !ContainsNode(graph, goPath) {
 		t.Fatalf("expected graph to contain %s", goPath)
 	}
-	if _, ok := graph[readmePath]; !ok {
+	if !ContainsNode(graph, readmePath) {
 		t.Fatalf("expected graph to contain %s", readmePath)
 	}
 	if len(resolver.resolvedFiles) != 1 || resolver.resolvedFiles[0] != goPath {

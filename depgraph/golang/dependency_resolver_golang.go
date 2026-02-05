@@ -2,12 +2,14 @@ package golang
 
 import (
 	"bufio"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 
 	"github.com/LegacyCodeHQ/sanity/vcs"
+	graphlib "github.com/dominikbraun/graph"
 )
 
 // ProjectImportResolver encapsulates Go-specific dependency resolution caches and logic.
@@ -174,7 +176,7 @@ func fileDefinesAnyUsedSymbol(depFile string, usedSymbols map[string]bool, expor
 }
 
 func AddGoIntraPackageDependencies(
-	graph map[string][]string,
+	graph graphlib.Graph[string, string],
 	goFiles []string,
 	contentReader vcs.ContentReader,
 ) error {
@@ -188,20 +190,16 @@ func AddGoIntraPackageDependencies(
 	}
 
 	for file, deps := range intraDeps {
-		if existingDeps, ok := graph[file]; ok {
-			depSet := make(map[string]bool)
-			for _, dep := range existingDeps {
-				depSet[dep] = true
+		if _, err := graph.Vertex(file); err != nil {
+			continue
+		}
+		for _, dep := range deps {
+			if _, err := graph.Vertex(dep); err != nil {
+				continue
 			}
-			for _, dep := range deps {
-				depSet[dep] = true
+			if err := graph.AddEdge(file, dep); err != nil && !errors.Is(err, graphlib.ErrEdgeAlreadyExists) {
+				return err
 			}
-
-			merged := make([]string, 0, len(depSet))
-			for dep := range depSet {
-				merged = append(merged, dep)
-			}
-			graph[file] = merged
 		}
 	}
 

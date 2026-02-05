@@ -312,7 +312,7 @@ func applyTargetFileFilter(opts *graphOptions, graph depgraph.DependencyGraph, f
 		return nil, nil, fmt.Errorf("failed to resolve file path: %w", err)
 	}
 
-	if _, ok := graph[absTargetFile]; !ok {
+	if !depgraph.ContainsNode(graph, absTargetFile) {
 		return nil, nil, fmt.Errorf("file not found in graph: %s", opts.targetFile)
 	}
 
@@ -342,8 +342,12 @@ func applyBetweenFilter(opts *graphOptions, graph depgraph.DependencyGraph, file
 }
 
 func graphFiles(graph depgraph.DependencyGraph) []string {
-	filePaths := make([]string, 0, len(graph))
-	for f := range graph {
+	adjacency, err := depgraph.AdjacencyList(graph)
+	if err != nil {
+		return nil
+	}
+	filePaths := make([]string, 0, len(adjacency))
+	for f := range adjacency {
 		filePaths = append(filePaths, f)
 	}
 	return filePaths
@@ -511,7 +515,7 @@ func resolveAndValidatePaths(paths []string, graph depgraph.DependencyGraph) (re
 			continue
 		}
 
-		if _, ok := graph[absPath]; ok {
+		if depgraph.ContainsNode(graph, absPath) {
 			resolved = append(resolved, absPath)
 		} else {
 			missing = append(missing, p)
@@ -525,9 +529,14 @@ func resolveAndValidatePaths(paths []string, graph depgraph.DependencyGraph) (re
 // dependencies (files the target imports) and reverse dependencies (files that
 // import the target).
 func filterGraphByLevel(graph depgraph.DependencyGraph, targetFile string, level int) depgraph.DependencyGraph {
+	adjacency, err := depgraph.AdjacencyList(graph)
+	if err != nil {
+		return depgraph.NewDependencyGraph()
+	}
+
 	// Build reverse adjacency map (who depends on this file)
 	reverseDeps := make(map[string][]string)
-	for file, deps := range graph {
+	for file, deps := range adjacency {
 		for _, dep := range deps {
 			reverseDeps[dep] = append(reverseDeps[dep], file)
 		}
@@ -542,7 +551,7 @@ func filterGraphByLevel(graph depgraph.DependencyGraph, targetFile string, level
 		nextLevel := []string{}
 		for _, file := range currentLevel {
 			// Add direct dependencies (files this file imports)
-			for _, dep := range graph[file] {
+			for _, dep := range adjacency[file] {
 				if !visited[dep] {
 					visited[dep] = true
 					nextLevel = append(nextLevel, dep)
@@ -560,11 +569,11 @@ func filterGraphByLevel(graph depgraph.DependencyGraph, targetFile string, level
 	}
 
 	// Build filtered graph with only visited nodes
-	filtered := make(depgraph.DependencyGraph)
+	filtered := make(map[string][]string)
 	for file := range visited {
 		// Only include edges where both source and target are in the filtered set
 		var filteredDeps []string
-		for _, dep := range graph[file] {
+		for _, dep := range adjacency[file] {
 			if visited[dep] {
 				filteredDeps = append(filteredDeps, dep)
 			}
@@ -572,5 +581,5 @@ func filterGraphByLevel(graph depgraph.DependencyGraph, targetFile string, level
 		filtered[file] = filteredDeps
 	}
 
-	return filtered
+	return depgraph.MustDependencyGraph(filtered)
 }

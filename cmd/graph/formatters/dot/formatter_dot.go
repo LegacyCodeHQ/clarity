@@ -16,6 +16,11 @@ type Formatter struct{}
 
 // Format converts the dependency graph to Graphviz DOT format.
 func (f *Formatter) Format(g depgraph.DependencyGraph, opts formatters.FormatOptions) (string, error) {
+	adjacency, err := depgraph.AdjacencyList(g)
+	if err != nil {
+		return "", err
+	}
+
 	var sb strings.Builder
 	sb.WriteString("digraph dependencies {\n")
 	sb.WriteString("  rankdir=LR;\n")
@@ -33,8 +38,8 @@ func (f *Formatter) Format(g depgraph.DependencyGraph, opts formatters.FormatOpt
 
 	// Collect all file paths from the graph to determine extension colors
 	// Sort for deterministic output
-	filePaths := make([]string, 0, len(g))
-	for source := range g {
+	filePaths := make([]string, 0, len(adjacency))
+	for source := range adjacency {
 		filePaths = append(filePaths, source)
 	}
 	sort.Strings(filePaths)
@@ -43,7 +48,7 @@ func (f *Formatter) Format(g depgraph.DependencyGraph, opts formatters.FormatOpt
 
 	// Count files by extension to find the majority extension
 	extensionCounts := make(map[string]int)
-	for source := range g {
+	for source := range adjacency {
 		ext := filepath.Ext(filepath.Base(source))
 		extensionCounts[ext]++
 	}
@@ -68,7 +73,7 @@ func (f *Formatter) Format(g depgraph.DependencyGraph, opts formatters.FormatOpt
 
 	// Track all files that have the majority extension
 	filesWithMajorityExtension := make(map[string]bool)
-	for source := range g {
+	for source := range adjacency {
 		ext := filepath.Ext(filepath.Base(source))
 		if ext == majorityExtension {
 			filesWithMajorityExtension[source] = true
@@ -77,7 +82,7 @@ func (f *Formatter) Format(g depgraph.DependencyGraph, opts formatters.FormatOpt
 
 	// Count unique file extensions to determine if we need extension-based coloring
 	uniqueExtensions := make(map[string]bool)
-	for source := range g {
+	for source := range adjacency {
 		ext := filepath.Ext(filepath.Base(source))
 		uniqueExtensions[ext] = true
 	}
@@ -155,7 +160,7 @@ func (f *Formatter) Format(g depgraph.DependencyGraph, opts formatters.FormatOpt
 
 	// Write edges (nodes are already declared above with styling)
 	for _, source := range filePaths {
-		deps := g[source]
+		deps := adjacency[source]
 		sortedDeps := make([]string, len(deps))
 		copy(sortedDeps, deps)
 		sort.Strings(sortedDeps)

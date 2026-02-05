@@ -11,6 +11,13 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func mustAdjacency(t *testing.T, g depgraph.DependencyGraph) map[string][]string {
+	t.Helper()
+	adj, err := depgraph.AdjacencyList(g)
+	require.NoError(t, err)
+	return adj
+}
+
 func TestBuildDependencyGraph(t *testing.T) {
 	// Create temporary directory with test files
 	tmpDir := t.TempDir()
@@ -76,26 +83,27 @@ func TestBuildDependencyGraph(t *testing.T) {
 	graph, err := depgraph.BuildDependencyGraph(files, vcs.FilesystemContentReader())
 
 	require.NoError(t, err)
-	assert.Len(t, graph, 4)
+	adj := mustAdjacency(t, graph)
+	assert.Len(t, adj, 4)
 
 	// Check main.dart dependencies (should have 2 project imports)
-	mainDeps := graph[mainPath]
+	mainDeps := adj[mainPath]
 	assert.Len(t, mainDeps, 2)
 	assert.Contains(t, mainDeps, userPath)
 	assert.Contains(t, mainDeps, apiPath)
 
 	// Check user.dart dependencies (should have 1 project import)
-	userDeps := graph[userPath]
+	userDeps := adj[userPath]
 	assert.Len(t, userDeps, 1)
 	assert.Contains(t, userDeps, validatorPath)
 
 	// Check api.dart dependencies (should have 1 project import)
-	apiDeps := graph[apiPath]
+	apiDeps := adj[apiPath]
 	assert.Len(t, apiDeps, 1)
 	assert.Contains(t, apiDeps, userPath)
 
 	// Check validator.dart dependencies (should have none)
-	validatorDeps := graph[validatorPath]
+	validatorDeps := adj[validatorPath]
 	assert.Empty(t, validatorDeps)
 }
 
@@ -131,19 +139,21 @@ data class ActivateLicenseResponse(val license: String)
 	files := []string{clientPath, requestPath, responsePath}
 	graph, err := depgraph.BuildDependencyGraph(files, vcs.FilesystemContentReader())
 	require.NoError(t, err)
+	adj := mustAdjacency(t, graph)
 
-	deps := graph[clientPath]
+	deps := adj[clientPath]
 	assert.Contains(t, deps, requestPath)
 	assert.Contains(t, deps, responsePath)
-	assert.Empty(t, graph[requestPath])
-	assert.Empty(t, graph[responsePath])
+	assert.Empty(t, adj[requestPath])
+	assert.Empty(t, adj[responsePath])
 }
 
 func TestBuildDependencyGraph_EmptyFileList(t *testing.T) {
 	graph, err := depgraph.BuildDependencyGraph([]string{}, vcs.FilesystemContentReader())
 
 	require.NoError(t, err)
-	assert.Empty(t, graph)
+	adj := mustAdjacency(t, graph)
+	assert.Empty(t, adj)
 }
 
 func TestBuildDependencyGraph_NonexistentFile(t *testing.T) {
@@ -190,16 +200,17 @@ func TestBuildDependencyGraph_FiltersNonSuppliedFiles(t *testing.T) {
 	graph, err := depgraph.BuildDependencyGraph(files, vcs.FilesystemContentReader())
 
 	require.NoError(t, err)
-	assert.Len(t, graph, 2)
+	adj := mustAdjacency(t, graph)
+	assert.Len(t, adj, 2)
 
 	// Check main.dart dependencies (should only contain helper.dart, NOT utils.dart)
-	mainDeps := graph[mainPath]
+	mainDeps := adj[mainPath]
 	assert.Len(t, mainDeps, 1, "main.dart should only have 1 dependency (helper.dart)")
 	assert.Contains(t, mainDeps, helperPath)
 	assert.NotContains(t, mainDeps, utilsPath, "utils.dart should be filtered out since it wasn't supplied")
 
 	// Check helper.dart dependencies (should have none)
-	helperDeps := graph[helperPath]
+	helperDeps := adj[helperPath]
 	assert.Empty(t, helperDeps)
 }
 
@@ -231,17 +242,18 @@ func TestBuildDependencyGraph_IncludesNonDartFiles(t *testing.T) {
 	graph, err := depgraph.BuildDependencyGraph(files, vcs.FilesystemContentReader())
 
 	require.NoError(t, err)
-	assert.Len(t, graph, 3, "graph should include all files")
+	adj := mustAdjacency(t, graph)
+	assert.Len(t, adj, 3, "graph should include all files")
 
 	// Verify .dart file is in the graph (may have dependencies parsed)
-	assert.Contains(t, graph, dartPath)
+	assert.Contains(t, adj, dartPath)
 
 	// Verify non-.dart files are in the graph with empty dependencies
-	assert.Contains(t, graph, goPath)
-	assert.Empty(t, graph[goPath], "non-dart file should have no dependencies")
+	assert.Contains(t, adj, goPath)
+	assert.Empty(t, adj[goPath], "non-dart file should have no dependencies")
 
-	assert.Contains(t, graph, readmePath)
-	assert.Empty(t, graph[readmePath], "non-dart file should have no dependencies")
+	assert.Contains(t, adj, readmePath)
+	assert.Empty(t, adj[readmePath], "non-dart file should have no dependencies")
 }
 
 func TestBuildDependencyGraph_GoFiles(t *testing.T) {
@@ -329,26 +341,27 @@ type Validator struct {}
 	graph, err := depgraph.BuildDependencyGraph(files, vcs.FilesystemContentReader())
 
 	require.NoError(t, err)
-	assert.Len(t, graph, 4)
+	adj := mustAdjacency(t, graph)
+	assert.Len(t, adj, 4)
 
 	// Check main.go dependencies (should reference user.go and api.go files)
-	mainDeps := graph[mainPath]
+	mainDeps := adj[mainPath]
 	assert.Len(t, mainDeps, 2)
 	assert.Contains(t, mainDeps, userPath)
 	assert.Contains(t, mainDeps, apiPath)
 
 	// Check user.go dependencies (should reference validator.go file)
-	userDeps := graph[userPath]
+	userDeps := adj[userPath]
 	assert.Len(t, userDeps, 1)
 	assert.Contains(t, userDeps, validatorPath)
 
 	// Check api.go dependencies (should reference user.go file)
-	apiDeps := graph[apiPath]
+	apiDeps := adj[apiPath]
 	assert.Len(t, apiDeps, 1)
 	assert.Contains(t, apiDeps, userPath)
 
 	// Check validator.go dependencies (should have none)
-	validatorDeps := graph[validatorPath]
+	validatorDeps := adj[validatorPath]
 	assert.Empty(t, validatorDeps)
 }
 
@@ -415,15 +428,16 @@ func Helper() {}
 	graph, err := depgraph.BuildDependencyGraph(files, vcs.FilesystemContentReader())
 
 	require.NoError(t, err)
-	assert.Len(t, graph, 4)
+	adj := mustAdjacency(t, graph)
+	assert.Len(t, adj, 4)
 
 	// Check Dart file dependencies
-	dartDeps := graph[dartPath]
+	dartDeps := adj[dartPath]
 	assert.Len(t, dartDeps, 1)
 	assert.Contains(t, dartDeps, helperPath)
 
 	// Check Go file dependencies (should reference helper.go file in utils package)
-	goDeps := graph[goPath]
+	goDeps := adj[goPath]
 	assert.Len(t, goDeps, 1)
 	assert.Contains(t, goDeps, utilsPath)
 }
@@ -489,23 +503,24 @@ func main() {
 	graph, err := depgraph.BuildDependencyGraph(files, vcs.FilesystemContentReader())
 
 	require.NoError(t, err)
-	assert.Len(t, graph, 3)
+	adj := mustAdjacency(t, graph)
+	assert.Len(t, adj, 3)
 
 	// Check main.go dependencies (should depend on both output_format.go and helpers.go)
 	// because it uses User and Product from output_format.go, and FormatUser from helpers.go
-	mainDeps := graph[mainPath]
+	mainDeps := adj[mainPath]
 	assert.Len(t, mainDeps, 2, "main.go should depend on both output_format.go and helpers.go")
 	assert.Contains(t, mainDeps, typesPath, "main.go uses User and Product")
 	assert.Contains(t, mainDeps, helpersPath, "main.go uses FormatUser")
 
 	// Check helpers.go dependencies (should depend on output_format.go)
 	// because it uses User type
-	helpersDeps := graph[helpersPath]
+	helpersDeps := adj[helpersPath]
 	assert.Len(t, helpersDeps, 1, "helpers.go should depend on output_format.go")
 	assert.Contains(t, helpersDeps, typesPath, "helpers.go uses User type")
 
 	// Check output_format.go dependencies (should have none)
-	typesDeps := graph[typesPath]
+	typesDeps := adj[typesPath]
 	assert.Empty(t, typesDeps, "output_format.go has no dependencies")
 }
 
@@ -578,29 +593,30 @@ object Validator {
 	graph, err := depgraph.BuildDependencyGraph(files, vcs.FilesystemContentReader())
 
 	require.NoError(t, err)
-	assert.Len(t, graph, 4)
+	adj := mustAdjacency(t, graph)
+	assert.Len(t, adj, 4)
 
 	// Check MainActivity.kt dependencies (should have 2 project imports - User and ApiService)
 	// External imports like Gson should be filtered out
 	// Standard library imports like kotlin.collections should be filtered out
-	mainDeps := graph[mainPath]
+	mainDeps := adj[mainPath]
 	assert.Len(t, mainDeps, 2)
 	assert.Contains(t, mainDeps, userPath)
 	assert.Contains(t, mainDeps, apiPath)
 
 	// Check User.kt dependencies (should have 1 project import - Validator)
-	userDeps := graph[userPath]
+	userDeps := adj[userPath]
 	assert.Len(t, userDeps, 1)
 	assert.Contains(t, userDeps, validatorPath)
 
 	// Check ApiService.kt dependencies (should have 1 project import - User)
 	// External import retrofit2 should be filtered out
-	apiDeps := graph[apiPath]
+	apiDeps := adj[apiPath]
 	assert.Len(t, apiDeps, 1)
 	assert.Contains(t, apiDeps, userPath)
 
 	// Check Validator.kt dependencies (should have none)
-	validatorDeps := graph[validatorPath]
+	validatorDeps := adj[validatorPath]
 	assert.Empty(t, validatorDeps)
 }
 
@@ -651,19 +667,20 @@ data class Order(val id: Int, val userId: Int)`
 	graph, err := depgraph.BuildDependencyGraph(files, vcs.FilesystemContentReader())
 
 	require.NoError(t, err)
-	assert.Len(t, graph, 4)
+	adj := mustAdjacency(t, graph)
+	assert.Len(t, adj, 4)
 
 	// Check MainActivity.kt dependencies (should have all 3 model files due to wildcard import)
-	mainDeps := graph[mainPath]
+	mainDeps := adj[mainPath]
 	assert.Len(t, mainDeps, 3, "Wildcard import should include all files in the package")
 	assert.Contains(t, mainDeps, userPath)
 	assert.Contains(t, mainDeps, productPath)
 	assert.Contains(t, mainDeps, orderPath)
 
 	// Check model files have no dependencies
-	assert.Empty(t, graph[userPath])
-	assert.Empty(t, graph[productPath])
-	assert.Empty(t, graph[orderPath])
+	assert.Empty(t, adj[userPath])
+	assert.Empty(t, adj[productPath])
+	assert.Empty(t, adj[orderPath])
 }
 
 func TestBuildDependencyGraph_TypeScriptFiles(t *testing.T) {
@@ -737,28 +754,29 @@ export function validateName(name: string): boolean {
 	graph, err := depgraph.BuildDependencyGraph(files, vcs.FilesystemContentReader())
 
 	require.NoError(t, err)
-	assert.Len(t, graph, 4)
+	adj := mustAdjacency(t, graph)
+	assert.Len(t, adj, 4)
 
 	// Check index.ts dependencies (should have 2 project imports - user and api)
 	// External imports like fs and React should be filtered out
-	indexDeps := graph[indexPath]
+	indexDeps := adj[indexPath]
 	assert.Len(t, indexDeps, 2)
 	assert.Contains(t, indexDeps, userPath)
 	assert.Contains(t, indexDeps, apiPath)
 
 	// Check user.ts dependencies (should have 1 project import - validator)
-	userDeps := graph[userPath]
+	userDeps := adj[userPath]
 	assert.Len(t, userDeps, 1)
 	assert.Contains(t, userDeps, validatorPath)
 
 	// Check api.ts dependencies (should have 1 project import - user)
 	// External import axios should be filtered out
-	apiDeps := graph[apiPath]
+	apiDeps := adj[apiPath]
 	assert.Len(t, apiDeps, 1)
 	assert.Contains(t, apiDeps, userPath)
 
 	// Check validator.ts dependencies (should have none)
-	validatorDeps := graph[validatorPath]
+	validatorDeps := adj[validatorPath]
 	assert.Empty(t, validatorDeps)
 }
 
@@ -826,20 +844,21 @@ export const useUser = () => {
 	graph, err := depgraph.BuildDependencyGraph(files, vcs.FilesystemContentReader())
 
 	require.NoError(t, err)
-	assert.Len(t, graph, 3)
+	adj := mustAdjacency(t, graph)
+	assert.Len(t, adj, 3)
 
 	// Check App.tsx dependencies (should have Button.tsx and useUser.ts)
-	appDeps := graph[appPath]
+	appDeps := adj[appPath]
 	assert.Len(t, appDeps, 2)
 	assert.Contains(t, appDeps, buttonPath)
 	assert.Contains(t, appDeps, useUserPath)
 
 	// Check Button.tsx dependencies (should have none - only external React)
-	buttonDeps := graph[buttonPath]
+	buttonDeps := adj[buttonPath]
 	assert.Empty(t, buttonDeps)
 
 	// Check useUser.ts dependencies (should have none - only external React)
-	useUserDeps := graph[useUserPath]
+	useUserDeps := adj[useUserPath]
 	assert.Empty(t, useUserDeps)
 }
 
@@ -896,10 +915,11 @@ export function helper() {}
 	graph, err := depgraph.BuildDependencyGraph(files, vcs.FilesystemContentReader())
 
 	require.NoError(t, err)
-	assert.Len(t, graph, 4)
+	adj := mustAdjacency(t, graph)
+	assert.Len(t, adj, 4)
 
 	// Check index.ts dependencies (should have all 3 re-exported files)
-	indexDeps := graph[indexPath]
+	indexDeps := adj[indexPath]
 	assert.Len(t, indexDeps, 3)
 	assert.Contains(t, indexDeps, userPath)
 	assert.Contains(t, indexDeps, apiPath)
@@ -950,15 +970,16 @@ func main() {
 	graph, err := depgraph.BuildDependencyGraph(files, vcs.FilesystemContentReader())
 
 	require.NoError(t, err)
-	assert.Len(t, graph, 2)
+	adj := mustAdjacency(t, graph)
+	assert.Len(t, adj, 2)
 
 	// Check main.go dependencies - should include README.md via embed directive
-	mainDeps := graph[mainPath]
+	mainDeps := adj[mainPath]
 	assert.Len(t, mainDeps, 1, "main.go should have exactly 1 dependency (README.md via embed)")
 	assert.Contains(t, mainDeps, readmePath, "main.go should depend on README.md via //go:embed")
 
 	// Check README.md has no dependencies
-	readmeDeps := graph[readmePath]
+	readmeDeps := adj[readmePath]
 	assert.Empty(t, readmeDeps)
 }
 
@@ -1016,20 +1037,21 @@ func main() {
 	graph, err := depgraph.BuildDependencyGraph(files, vcs.FilesystemContentReader())
 
 	require.NoError(t, err)
-	assert.Len(t, graph, 3)
+	adj := mustAdjacency(t, graph)
+	assert.Len(t, adj, 3)
 
 	// Check main.go dependencies - should only include lib.go, NOT README.md
-	mainDeps := graph[mainPath]
+	mainDeps := adj[mainPath]
 	assert.Len(t, mainDeps, 1, "main.go should only depend on lib.go, not README.md")
 	assert.Contains(t, mainDeps, libPath, "main.go should depend on lib.go via import")
 	assert.NotContains(t, mainDeps, pkgReadmePath, "main.go should NOT depend on README.md via import")
 
 	// Check lib.go has no dependencies
-	libDeps := graph[libPath]
+	libDeps := adj[libPath]
 	assert.Empty(t, libDeps)
 
 	// Check README.md has no dependencies
-	readmeDeps := graph[pkgReadmePath]
+	readmeDeps := adj[pkgReadmePath]
 	assert.Empty(t, readmeDeps)
 }
 
@@ -1085,10 +1107,11 @@ func main() {
 	graph, err := depgraph.BuildDependencyGraph(files, vcs.FilesystemContentReader())
 
 	require.NoError(t, err)
-	assert.Len(t, graph, 3)
+	adj := mustAdjacency(t, graph)
+	assert.Len(t, adj, 3)
 
 	// Check main.go dependencies - should include both embedded files
-	mainDeps := graph[mainPath]
+	mainDeps := adj[mainPath]
 	assert.Len(t, mainDeps, 2, "main.go should have 2 dependencies via embed directives")
 	assert.Contains(t, mainDeps, configPath, "main.go should depend on config.json")
 	assert.Contains(t, mainDeps, indexPath, "main.go should depend on index.html")
