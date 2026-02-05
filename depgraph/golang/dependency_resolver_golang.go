@@ -146,22 +146,7 @@ func ResolveGoProjectImports(
 				}
 
 				if (!sameDir || isTestFile) && hasExportIndex && usedSymbols != nil && len(usedSymbols) > 0 {
-					fileDefinesUsedSymbol := false
-					for symbol := range usedSymbols {
-						if definingFiles, ok := exportIndex[symbol]; ok {
-							for _, defFile := range definingFiles {
-								if defFile == depFile {
-									fileDefinesUsedSymbol = true
-									break
-								}
-							}
-						}
-						if fileDefinesUsedSymbol {
-							break
-						}
-					}
-
-					if !fileDefinesUsedSymbol {
+					if !fileDefinesAnyUsedSymbol(depFile, usedSymbols, exportIndex) {
 						continue
 					}
 				}
@@ -172,6 +157,20 @@ func ResolveGoProjectImports(
 	}
 
 	return projectImports, nil
+}
+
+func fileDefinesAnyUsedSymbol(depFile string, usedSymbols map[string]bool, exportIndex GoPackageExportIndex) bool {
+	for symbol := range usedSymbols {
+		if definingFiles, ok := exportIndex[symbol]; ok {
+			for _, defFile := range definingFiles {
+				if defFile == depFile {
+					return true
+				}
+			}
+		}
+	}
+
+	return false
 }
 
 func AddGoIntraPackageDependencies(
