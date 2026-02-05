@@ -49,8 +49,7 @@ func ResolveKotlinProjectImports(
 			kotlinFilePackages,
 			kotlinPackageTypes,
 			imports,
-			suppliedFiles,
-		)
+			suppliedFiles)
 		projectImports = append(projectImports, samePackageDeps...)
 	}
 

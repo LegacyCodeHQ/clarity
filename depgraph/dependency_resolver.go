@@ -82,8 +82,7 @@ func (b *defaultDependencyResolver) resolveKotlinImports(absPath, filePath, _ st
 		b.kotlinPackageTypes,
 		b.kotlinFilePackages,
 		b.ctx.suppliedFiles,
-		b.contentReader,
-	)
+		b.contentReader)
 }
 
 func (b *defaultDependencyResolver) resolveTypeScriptImports(absPath, filePath, ext string) ([]string, error) {

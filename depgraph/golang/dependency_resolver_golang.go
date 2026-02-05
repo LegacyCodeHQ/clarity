@@ -42,8 +42,7 @@ func (r *ProjectImportResolver) ResolveProjectImports(absPath, filePath string) 
 		r.dirToFiles,
 		r.goPackageExportIndices,
 		r.suppliedFiles,
-		r.contentReader,
-	)
+		r.contentReader)
 }
 
 func BuildGoPackageExportIndices(dirToFiles map[string][]string, contentReader vcs.ContentReader) map[string]GoPackageExportIndex {
