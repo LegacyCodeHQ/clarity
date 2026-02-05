@@ -150,7 +150,6 @@ func (f *Formatter) Format(g depgraph.DependencyGraph, opts formatters.FormatOpt
 	// Add styles for different node types
 	// Mermaid uses classDef for styling and class for applying styles
 	var testNodes []string
-	var newFileNodes []string
 	var majorityExtensionNodes []string
 
 	// Count unique file extensions to determine if majority styling is meaningful.
@@ -167,12 +166,6 @@ func (f *Formatter) Format(g depgraph.DependencyGraph, opts formatters.FormatOpt
 
 		if depgraph.IsTestFile(source) {
 			testNodes = append(testNodes, nodeID)
-		} else if opts.FileStats != nil {
-			if stats, ok := opts.FileStats[source]; ok && stats.IsNew {
-				newFileNodes = append(newFileNodes, nodeID)
-			} else if hasMultipleExtensions && filesWithMajorityExtension[source] {
-				majorityExtensionNodes = append(majorityExtensionNodes, nodeID)
-			}
 		} else if hasMultipleExtensions && filesWithMajorityExtension[source] {
 			majorityExtensionNodes = append(majorityExtensionNodes, nodeID)
 		}
@@ -180,7 +173,6 @@ func (f *Formatter) Format(g depgraph.DependencyGraph, opts formatters.FormatOpt
 
 	// Define style classes
 	sb.WriteString("    classDef testFile fill:#90EE90,stroke:#228B22,color:#000000\n")
-	sb.WriteString("    classDef newFile fill:#87CEEB,stroke:#4682B4\n")
 	if len(majorityExtensionNodes) > 0 {
 		sb.WriteString("    classDef majorityExtension fill:#FFFFFF,stroke:#999999,color:#000000\n")
 	}
@@ -188,9 +180,6 @@ func (f *Formatter) Format(g depgraph.DependencyGraph, opts formatters.FormatOpt
 	// Apply styles to nodes
 	if len(testNodes) > 0 {
 		sb.WriteString(fmt.Sprintf("    class %s testFile\n", strings.Join(testNodes, ",")))
-	}
-	if len(newFileNodes) > 0 {
-		sb.WriteString(fmt.Sprintf("    class %s newFile\n", strings.Join(newFileNodes, ",")))
 	}
 	if len(majorityExtensionNodes) > 0 {
 		sb.WriteString(fmt.Sprintf("    class %s majorityExtension\n", strings.Join(majorityExtensionNodes, ",")))
