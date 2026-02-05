@@ -1,0 +1,14 @@
+digraph dependencies {
+  rankdir=LR;
+  node [shape=box];
+  label="sanity • d2c2965 • 2 files";
+  labelloc=t;
+  labeljust=l;
+  fontsize=10;
+  fontname=Courier;
+
+  "onboard_cmd.go" [label="🪴 onboard_cmd.go\n+56", style=filled, fillcolor=white];
+  "root.go" [label="root.go\n+2 -1", style=filled, fillcolor=white];
+
+  "root.go" -> "onboard_cmd.go";
+}

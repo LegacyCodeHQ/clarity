@@ -1,0 +1,19 @@
+digraph dependencies {
+  rankdir=LR;
+  node [shape=box];
+  label="sanity • ba7ca46 • 5 files";
+  labelloc=t;
+  labeljust=l;
+  fontsize=10;
+  fontname=Courier;
+
+  "init_cmd.go" [label="🪴 init_cmd.go\n+131", style=filled, fillcolor=white];
+  "ONBOARD.md" [label="ONBOARD.md\n+14 -180", style=filled, fillcolor=lightyellow];
+  "PRIME.md" [label="🪴 PRIME.md\n+187", style=filled, fillcolor=lightyellow];
+  "prime_cmd.go" [label="🪴 prime_cmd.go\n+29", style=filled, fillcolor=white];
+  "root.go" [label="root.go\n+4", style=filled, fillcolor=white];
+
+  "prime_cmd.go" -> "PRIME.md";
+  "root.go" -> "init_cmd.go";
+  "root.go" -> "prime_cmd.go";
+}
