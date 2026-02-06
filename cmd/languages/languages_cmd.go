@@ -30,26 +30,40 @@ Examples:
 func runLanguages(cmd *cobra.Command, _ []string) error {
 	languages := depgraph.SupportedLanguages()
 
-	writer := tabwriter.NewWriter(cmd.OutOrStdout(), 0, 0, 2, ' ', 0)
+	if _, err := fmt.Fprintln(cmd.OutOrStdout()); err != nil {
+		return err
+	}
 
-	if _, err := fmt.Fprintln(writer, "Language\tMaturity\tExtensions"); err != nil {
-		return err
-	}
-	if _, err := fmt.Fprintln(writer, "--------\t--------\t----------"); err != nil {
-		return err
-	}
+	writer := tabwriter.NewWriter(cmd.OutOrStdout(), 0, 0, 2, ' ', 0)
 
 	for _, language := range languages {
 		if _, err := fmt.Fprintf(
 			writer,
-			"%s\t%s\t%s\n",
+			"%s %s\t%s\n",
+			language.Maturity.Symbol(),
 			language.Name,
-			language.Maturity,
 			strings.Join(language.Extensions, ", "),
 		); err != nil {
 			return err
 		}
 	}
 
-	return writer.Flush()
+	if err := writer.Flush(); err != nil {
+		return err
+	}
+
+	if _, err := fmt.Fprintln(cmd.OutOrStdout()); err != nil {
+		return err
+	}
+	if _, err := fmt.Fprintln(cmd.OutOrStdout(), "----------------------------------------------------"); err != nil {
+		return err
+	}
+	if _, err := fmt.Fprintln(cmd.OutOrStdout(), "○ Vibed  ◐ Basic Testing  ● Active Testing  ✓ Stable"); err != nil {
+		return err
+	}
+	if _, err := fmt.Fprintln(cmd.OutOrStdout()); err != nil {
+		return err
+	}
+
+	return nil
 }

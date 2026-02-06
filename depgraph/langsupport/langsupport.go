@@ -50,6 +50,21 @@ func (level MaturityLevel) String() string {
 	}
 }
 
+func (level MaturityLevel) Symbol() string {
+	switch level {
+	case MaturityVibed:
+		return "○"
+	case MaturityBasicTesting:
+		return "◐"
+	case MaturityActiveTesting:
+		return "●"
+	case MaturityStable:
+		return "✓"
+	default:
+		return "?"
+	}
+}
+
 // Module describes pluggable language support.
 type Module interface {
 	Name() string
