@@ -81,13 +81,28 @@ func ResolveJavaProjectImports(
 	}
 
 	imports := ParseJavaImports(content, projectPackages)
+	typeReferences := ExtractTypeIdentifiers(content)
+	declaredNames := make(map[string]bool)
+	for _, name := range ParseTopLevelTypeNames(content) {
+		if name != "" {
+			declaredNames[name] = true
+		}
+	}
 	projectImports := make([]string, 0, len(imports))
 	for _, imp := range imports {
 		internalImp, ok := imp.(InternalImport)
 		if !ok {
 			continue
 		}
-		projectImports = append(projectImports, resolveJavaImportPath(absPath, internalImp, javaPackageIndex, javaPackageTypes, suppliedFiles)...)
+		projectImports = append(projectImports, resolveJavaImportPath(
+			absPath,
+			internalImp,
+			javaPackageIndex,
+			javaPackageTypes,
+			suppliedFiles,
+			typeReferences,
+			declaredNames,
+		)...)
 	}
 
 	samePackageDeps := resolveJavaSamePackageDependencies(
@@ -108,6 +123,8 @@ func resolveJavaImportPath(
 	packageIndex map[string][]string,
 	packageTypeIndex map[string]map[string][]string,
 	suppliedFiles map[string]bool,
+	typeReferences []string,
+	declaredNames map[string]bool,
 ) []string {
 	pkg := imp.Package()
 	resolved := []string{}
@@ -122,8 +139,17 @@ func resolveJavaImportPath(
 	}
 
 	if imp.IsWildcard() {
-		for _, file := range packageIndex[pkg] {
-			addFile(file)
+		typeMap, ok := packageTypeIndex[pkg]
+		if !ok {
+			return resolved
+		}
+		for _, ref := range typeReferences {
+			if declaredNames[ref] {
+				continue
+			}
+			for _, file := range typeMap[ref] {
+				addFile(file)
+			}
 		}
 		return resolved
 	}
