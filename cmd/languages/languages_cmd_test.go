@@ -25,6 +25,7 @@ JavaScript  .js, .jsx
 Java        .java
 Kotlin      .kt, .kts
 Python      .py
+Rust        .rs
 Swift       .swift
 TypeScript  .ts, .tsx
 `

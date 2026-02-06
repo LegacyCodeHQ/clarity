@@ -114,6 +114,16 @@ func TestIsTestFile(t *testing.T) {
 			want:     false,
 		},
 		{
+			name:     "rust tests directory",
+			filePath: "/project/tests/lib_test.rs",
+			want:     true,
+		},
+		{
+			name:     "rust non-test file",
+			filePath: "/project/src/lib.rs",
+			want:     false,
+		},
+		{
 			name:     "python test prefix",
 			filePath: "/project/tests/test_handlers.py",
 			want:     true,

@@ -54,6 +54,7 @@ Sanity uses a file-based dependency graph to visualize the impact of AI-generate
 - Java
 - Kotlin
 - Python
+- Rust
 - Swift
 - TypeScript
 
@@ -76,7 +77,7 @@ the [Installation Guide](docs/usage/installation.md).
 
 #### `sanity graph`
 
-Generate dependency graphs for C, C++, C#, Dart, Go, JavaScript, Java, Kotlin, Python, Swift, and TypeScript files.
+Generate file-based dependency graphs for supported files.
 
 **Flags**:
 
