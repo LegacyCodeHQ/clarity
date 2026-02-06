@@ -29,20 +29,20 @@ type MaturityLevel int
 
 const (
 	MaturityUnknown MaturityLevel = iota
-	MaturityVibed
-	MaturityBasicTesting
-	MaturityActiveTesting
+	MaturityUntested
+	MaturityBasicTests
+	MaturityActivelyTested
 	MaturityStable
 )
 
 func (level MaturityLevel) DisplayName() string {
 	switch level {
-	case MaturityVibed:
-		return "Vibed"
-	case MaturityBasicTesting:
-		return "Basic Testing"
-	case MaturityActiveTesting:
-		return "Active Testing"
+	case MaturityUntested:
+		return "Untested"
+	case MaturityBasicTests:
+		return "Basic Tests"
+	case MaturityActivelyTested:
+		return "Actively Tested"
 	case MaturityStable:
 		return "Stable"
 	default:
@@ -52,11 +52,11 @@ func (level MaturityLevel) DisplayName() string {
 
 func (level MaturityLevel) Symbol() string {
 	switch level {
-	case MaturityVibed:
+	case MaturityUntested:
 		return "○"
-	case MaturityBasicTesting:
+	case MaturityBasicTests:
 		return "◐"
-	case MaturityActiveTesting:
+	case MaturityActivelyTested:
 		return "●"
 	case MaturityStable:
 		return "✓"
@@ -68,9 +68,9 @@ func (level MaturityLevel) Symbol() string {
 // MaturityLevels returns the ordered set of known maturity levels.
 func MaturityLevels() []MaturityLevel {
 	return []MaturityLevel{
-		MaturityVibed,
-		MaturityBasicTesting,
-		MaturityActiveTesting,
+		MaturityUntested,
+		MaturityBasicTests,
+		MaturityActivelyTested,
 		MaturityStable,
 	}
 }

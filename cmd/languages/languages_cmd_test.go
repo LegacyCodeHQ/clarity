@@ -32,7 +32,7 @@ func TestLanguagesCommand_PrintsSupportedLanguagesAndExtensions(t *testing.T) {
 	}
 	_ = writer.Flush()
 	expected.WriteString("\n")
-	expected.WriteString("----------------------------------------------------\n")
+	expected.WriteString("------------------------------------------------------\n")
 	legendParts := make([]string, 0, len(langsupport.MaturityLevels()))
 	for _, level := range langsupport.MaturityLevels() {
 		legendParts = append(legendParts, level.Symbol()+" "+level.DisplayName())

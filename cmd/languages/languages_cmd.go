@@ -56,7 +56,7 @@ func runLanguages(cmd *cobra.Command, _ []string) error {
 	if _, err := fmt.Fprintln(cmd.OutOrStdout()); err != nil {
 		return err
 	}
-	if _, err := fmt.Fprintln(cmd.OutOrStdout(), "----------------------------------------------------"); err != nil {
+	if _, err := fmt.Fprintln(cmd.OutOrStdout(), "------------------------------------------------------"); err != nil {
 		return err
 	}
 	legendParts := make([]string, 0, len(langsupport.MaturityLevels()))

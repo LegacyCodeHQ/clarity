@@ -19,7 +19,7 @@ func (Module) Extensions() []string {
 }
 
 func (Module) Maturity() langsupport.MaturityLevel {
-	return langsupport.MaturityActiveTesting
+	return langsupport.MaturityActivelyTested
 }
 
 func (Module) NewResolver(ctx *langsupport.Context, contentReader vcs.ContentReader) langsupport.Resolver {
