@@ -1,8 +1,11 @@
 package java
 
 import (
-	"regexp"
+	"context"
 	"strings"
+
+	sitter "github.com/smacker/go-tree-sitter"
+	tsjava "github.com/smacker/go-tree-sitter/java"
 )
 
 // JavaImport represents a Java import in source code.
@@ -67,63 +70,94 @@ func (i InternalImport) Package() string {
 }
 
 var (
-	packagePattern        = regexp.MustCompile(`(?m)^\s*package\s+([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)\s*;`)
-	importPattern         = regexp.MustCompile(`(?m)^\s*import\s+(?:static\s+)?([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*(?:\.\*)?)\s*;`)
-	typePattern           = regexp.MustCompile(`\b(?:class|interface|enum|record)\s+([A-Za-z_][A-Za-z0-9_]*)\b|@interface\s+([A-Za-z_][A-Za-z0-9_]*)\b`)
-	identifierTypePattern = regexp.MustCompile(`\b[A-Z][A-Za-z0-9_]*\b`)
+	javaTopLevelDeclarationTypes = map[string]bool{
+		"class_declaration":           true,
+		"interface_declaration":       true,
+		"enum_declaration":            true,
+		"record_declaration":          true,
+		"annotation_type_declaration": true,
+	}
 )
 
 // ParsePackageDeclaration extracts the Java package from source code.
 func ParsePackageDeclaration(sourceCode []byte) string {
-	match := packagePattern.FindSubmatch(sourceCode)
-	if len(match) < 2 {
+	tree, err := parseJava(sourceCode)
+	if err != nil {
 		return ""
 	}
-	return strings.TrimSpace(string(match[1]))
+	defer tree.Close()
+
+	node := findFirstNodeOfType(tree.RootNode(), "package_declaration")
+	if node == nil {
+		return ""
+	}
+
+	if name := node.ChildByFieldName("name"); name != nil {
+		return strings.TrimSpace(name.Content(sourceCode))
+	}
+
+	if name := findFirstChildOfType(node, "scoped_identifier", "identifier"); name != nil {
+		return strings.TrimSpace(name.Content(sourceCode))
+	}
+
+	return ""
 }
 
 // ParseTopLevelTypeNames extracts declared type names from Java source code.
 func ParseTopLevelTypeNames(sourceCode []byte) []string {
-	matches := typePattern.FindAllSubmatch(sourceCode, -1)
-	if len(matches) == 0 {
+	tree, err := parseJava(sourceCode)
+	if err != nil {
 		return []string{}
 	}
+	defer tree.Close()
 
 	seen := make(map[string]bool)
-	result := make([]string, 0, len(matches))
-	for _, m := range matches {
-		name := ""
-		if len(m) > 1 && len(m[1]) > 0 {
-			name = string(m[1])
+	result := []string{}
+
+	var walk func(*sitter.Node)
+	walk = func(node *sitter.Node) {
+		if node == nil {
+			return
 		}
-		if name == "" && len(m) > 2 && len(m[2]) > 0 {
-			name = string(m[2])
+
+		if javaTopLevelDeclarationTypes[node.Type()] && isTopLevelDeclaration(node) {
+			if name := extractDeclarationName(node, sourceCode); name != "" && !seen[name] {
+				seen[name] = true
+				result = append(result, name)
+			}
 		}
-		if name == "" || seen[name] {
-			continue
+
+		for i := 0; i < int(node.NamedChildCount()); i++ {
+			walk(node.NamedChild(i))
 		}
-		seen[name] = true
-		result = append(result, name)
 	}
+
+	walk(tree.RootNode())
 
 	return result
 }
 
 // ParseJavaImports parses Java source code and classifies imports.
 func ParseJavaImports(sourceCode []byte, projectPackages map[string]bool) []JavaImport {
-	matches := importPattern.FindAllSubmatch(sourceCode, -1)
-	if len(matches) == 0 {
+	tree, err := parseJava(sourceCode)
+	if err != nil {
+		return []JavaImport{}
+	}
+	defer tree.Close()
+
+	importDecls := findNodesOfType(tree.RootNode(), "import_declaration")
+	if len(importDecls) == 0 {
 		return []JavaImport{}
 	}
 
-	imports := make([]JavaImport, 0, len(matches))
-	for _, m := range matches {
-		if len(m) < 2 {
-			continue
-		}
-		path := strings.TrimSpace(string(m[1]))
+	imports := make([]JavaImport, 0, len(importDecls))
+	for _, node := range importDecls {
+		path, isWildcard := extractImportPath(node, sourceCode)
 		if path == "" {
 			continue
+		}
+		if isWildcard && !strings.HasSuffix(path, ".*") {
+			path += ".*"
 		}
 		imports = append(imports, classifyJavaImport(path, projectPackages))
 	}
@@ -210,36 +244,158 @@ func simpleTypeName(path string) string {
 
 // ExtractTypeIdentifiers returns referenced type-like identifiers in Java source.
 func ExtractTypeIdentifiers(sourceCode []byte) []string {
-	cleaned := stripJavaCommentsAndStrings(string(sourceCode))
-	matches := identifierTypePattern.FindAllString(cleaned, -1)
-	if len(matches) == 0 {
+	tree, err := parseJava(sourceCode)
+	if err != nil {
 		return []string{}
 	}
+	defer tree.Close()
 
-	seen := make(map[string]bool, len(matches))
-	result := make([]string, 0, len(matches))
-	for _, m := range matches {
-		if seen[m] {
-			continue
+	seen := make(map[string]bool)
+	result := []string{}
+
+	query, err := sitter.NewQuery([]byte(javaTypeIdentifierQuery), tsjava.GetLanguage())
+	if err == nil {
+		cursor := sitter.NewQueryCursor()
+		cursor.Exec(query, tree.RootNode())
+
+		for {
+			match, ok := cursor.NextMatch()
+			if !ok {
+				break
+			}
+
+			match = cursor.FilterPredicates(match, sourceCode)
+			for _, capture := range match.Captures {
+				name := strings.TrimSpace(capture.Node.Content(sourceCode))
+				name = simpleTypeName(name)
+				if name == "" || seen[name] {
+					continue
+				}
+				seen[name] = true
+				result = append(result, name)
+			}
 		}
-		seen[m] = true
-		result = append(result, m)
+
+		cursor.Close()
+		query.Close()
 	}
+
+	for _, name := range ParseTopLevelTypeNames(sourceCode) {
+		if name != "" && !seen[name] {
+			seen[name] = true
+			result = append(result, name)
+		}
+	}
+
 	return result
 }
 
-func stripJavaCommentsAndStrings(s string) string {
-	// Remove block comments.
-	reBlock := regexp.MustCompile(`(?s)/\*.*?\*/`)
-	s = reBlock.ReplaceAllString(s, " ")
-	// Remove line comments.
-	reLine := regexp.MustCompile(`(?m)//.*$`)
-	s = reLine.ReplaceAllString(s, " ")
-	// Remove string literals.
-	reString := regexp.MustCompile(`"(?:\\.|[^"\\])*"`)
-	s = reString.ReplaceAllString(s, " ")
-	// Remove char literals.
-	reChar := regexp.MustCompile(`'(?:\\.|[^'\\])'`)
-	s = reChar.ReplaceAllString(s, " ")
-	return s
+const javaTypeIdentifierQuery = `
+((type_identifier) @type.name)
+((scoped_type_identifier) @type.name)
+`
+
+func parseJava(sourceCode []byte) (*sitter.Tree, error) {
+	parser := sitter.NewParser()
+	parser.SetLanguage(tsjava.GetLanguage())
+	return parser.ParseCtx(context.Background(), nil, sourceCode)
+}
+
+func isTopLevelDeclaration(node *sitter.Node) bool {
+	if node == nil {
+		return false
+	}
+	parent := node.Parent()
+	return parent != nil && parent.Type() == "program"
+}
+
+func extractDeclarationName(node *sitter.Node, sourceCode []byte) string {
+	if node == nil {
+		return ""
+	}
+	if name := node.ChildByFieldName("name"); name != nil {
+		return strings.TrimSpace(name.Content(sourceCode))
+	}
+	if name := findFirstChildOfType(node, "type_identifier", "identifier"); name != nil {
+		return strings.TrimSpace(name.Content(sourceCode))
+	}
+	return ""
+}
+
+func extractImportPath(node *sitter.Node, sourceCode []byte) (string, bool) {
+	if node == nil {
+		return "", false
+	}
+
+	if name := node.ChildByFieldName("name"); name != nil {
+		return strings.TrimSpace(name.Content(sourceCode)), hasChildOfType(node, "asterisk")
+	}
+
+	nameNode := findFirstChildOfType(node, "scoped_identifier", "identifier")
+	if nameNode == nil {
+		return "", false
+	}
+
+	return strings.TrimSpace(nameNode.Content(sourceCode)), hasChildOfType(node, "asterisk")
+}
+
+func hasChildOfType(node *sitter.Node, nodeType string) bool {
+	for i := 0; i < int(node.NamedChildCount()); i++ {
+		child := node.NamedChild(i)
+		if child == nil {
+			continue
+		}
+		if child.Type() == nodeType {
+			return true
+		}
+		if hasChildOfType(child, nodeType) {
+			return true
+		}
+	}
+	return false
+}
+
+func findFirstChildOfType(node *sitter.Node, types ...string) *sitter.Node {
+	for i := 0; i < int(node.NamedChildCount()); i++ {
+		child := node.NamedChild(i)
+		if child == nil {
+			continue
+		}
+		for _, t := range types {
+			if child.Type() == t {
+				return child
+			}
+		}
+	}
+	return nil
+}
+
+func findFirstNodeOfType(node *sitter.Node, nodeType string) *sitter.Node {
+	if node == nil {
+		return nil
+	}
+	if node.Type() == nodeType {
+		return node
+	}
+	for i := 0; i < int(node.NamedChildCount()); i++ {
+		found := findFirstNodeOfType(node.NamedChild(i), nodeType)
+		if found != nil {
+			return found
+		}
+	}
+	return nil
+}
+
+func findNodesOfType(node *sitter.Node, nodeType string) []*sitter.Node {
+	if node == nil {
+		return nil
+	}
+	nodes := []*sitter.Node{}
+	if node.Type() == nodeType {
+		nodes = append(nodes, node)
+	}
+	for i := 0; i < int(node.NamedChildCount()); i++ {
+		nodes = append(nodes, findNodesOfType(node.NamedChild(i), nodeType)...)
+	}
+	return nodes
 }
