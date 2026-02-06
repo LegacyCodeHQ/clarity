@@ -24,7 +24,7 @@ func TestGetCommitTreeFiles_SingleFile(t *testing.T) {
 	files, err := GetCommitTreeFiles(tmpDir, commitID)
 
 	require.NoError(t, err)
-	g := testhelpers.GitGoldie(t)
+	g := testhelpers.TextGoldie(t)
 	g.Assert(t, t.Name(), []byte(normalizeFilePaths(tmpDir, files)))
 }
 
@@ -44,7 +44,7 @@ func TestGetCommitTreeFiles_MultipleFiles(t *testing.T) {
 	files, err := GetCommitTreeFiles(tmpDir, commitID)
 
 	require.NoError(t, err)
-	g := testhelpers.GitGoldie(t)
+	g := testhelpers.TextGoldie(t)
 	g.Assert(t, t.Name(), []byte(normalizeFilePaths(tmpDir, files)))
 }
 
@@ -71,7 +71,7 @@ func TestGetCommitTreeFiles_FilesInSubdirectories(t *testing.T) {
 	files, err := GetCommitTreeFiles(tmpDir, commitID)
 
 	require.NoError(t, err)
-	g := testhelpers.GitGoldie(t)
+	g := testhelpers.TextGoldie(t)
 	g.Assert(t, t.Name(), []byte(normalizeFilePaths(tmpDir, files)))
 }
 
@@ -87,7 +87,7 @@ func TestGetCommitTreeFiles_HEAD(t *testing.T) {
 	files, err := GetCommitTreeFiles(tmpDir, "HEAD")
 
 	require.NoError(t, err)
-	g := testhelpers.GitGoldie(t)
+	g := testhelpers.TextGoldie(t)
 	g.Assert(t, t.Name(), []byte(normalizeFilePaths(tmpDir, files)))
 }
 
@@ -109,7 +109,7 @@ func TestGetCommitTreeFiles_OlderCommit(t *testing.T) {
 	files, err := GetCommitTreeFiles(tmpDir, firstCommit)
 
 	require.NoError(t, err)
-	g := testhelpers.GitGoldie(t)
+	g := testhelpers.TextGoldie(t)
 	g.Assert(t, t.Name(), []byte(normalizeFilePaths(tmpDir, files)))
 }
 
@@ -135,7 +135,7 @@ func TestGetCommitTreeFiles_AfterFileDeleted(t *testing.T) {
 	files, err := GetCommitTreeFiles(tmpDir, firstCommit)
 
 	require.NoError(t, err)
-	g := testhelpers.GitGoldie(t)
+	g := testhelpers.TextGoldie(t)
 	g.Assert(t, t.Name(), []byte(normalizeFilePaths(tmpDir, files)))
 }
 
@@ -156,7 +156,7 @@ func TestGetCommitTreeFiles_ReturnsAllFilesAcrossCommits(t *testing.T) {
 	files, err := GetCommitTreeFiles(tmpDir, commitID)
 
 	require.NoError(t, err)
-	g := testhelpers.GitGoldie(t)
+	g := testhelpers.TextGoldie(t)
 	g.Assert(t, t.Name(), []byte(normalizeFilePaths(tmpDir, files)))
 }
 

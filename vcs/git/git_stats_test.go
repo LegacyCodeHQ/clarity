@@ -26,7 +26,7 @@ func TestGetUncommittedFileStats_MarksNewAndUntrackedFiles(t *testing.T) {
 	stats, err := GetUncommittedFileStats(tmpDir)
 	require.NoError(t, err)
 
-	g := testhelpers.GitGoldie(t)
+	g := testhelpers.TextGoldie(t)
 	g.Assert(t, t.Name(), []byte(normalizeFileStats(tmpDir, stats)))
 }
 
@@ -47,7 +47,7 @@ func TestGetCommitFileStats_MarksNewFiles(t *testing.T) {
 	stats, err := GetCommitFileStats(tmpDir, commitID)
 	require.NoError(t, err)
 
-	g := testhelpers.GitGoldie(t)
+	g := testhelpers.TextGoldie(t)
 	g.Assert(t, t.Name(), []byte(normalizeFileStats(tmpDir, stats)))
 }
 
@@ -160,7 +160,7 @@ func TestGetCommitRangeFileStats_AdditionsAndDeletions(t *testing.T) {
 	stats, err := GetCommitRangeFileStats(tmpDir, firstCommit, secondCommit)
 
 	require.NoError(t, err)
-	g := testhelpers.GitGoldie(t)
+	g := testhelpers.TextGoldie(t)
 	g.Assert(t, t.Name(), []byte(normalizeFileStats(tmpDir, stats)))
 }
 
@@ -181,7 +181,7 @@ func TestGetCommitRangeFileStats_NewFile(t *testing.T) {
 	stats, err := GetCommitRangeFileStats(tmpDir, firstCommit, secondCommit)
 
 	require.NoError(t, err)
-	g := testhelpers.GitGoldie(t)
+	g := testhelpers.TextGoldie(t)
 	g.Assert(t, t.Name(), []byte(normalizeFileStats(tmpDir, stats)))
 }
 
@@ -204,7 +204,7 @@ func TestGetCommitRangeFileStats_MultipleFiles(t *testing.T) {
 	stats, err := GetCommitRangeFileStats(tmpDir, firstCommit, secondCommit)
 
 	require.NoError(t, err)
-	g := testhelpers.GitGoldie(t)
+	g := testhelpers.TextGoldie(t)
 	g.Assert(t, t.Name(), []byte(normalizeFileStats(tmpDir, stats)))
 }
 

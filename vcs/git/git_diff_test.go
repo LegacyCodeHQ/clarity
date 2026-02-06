@@ -23,7 +23,7 @@ func TestGetUncommittedDartFiles_UntrackedFiles(t *testing.T) {
 	files, err := GetUncommittedFiles(tmpDir)
 
 	require.NoError(t, err)
-	g := testhelpers.GitGoldie(t)
+	g := testhelpers.TextGoldie(t)
 	g.Assert(t, t.Name(), []byte(normalizeFilePaths(tmpDir, files)))
 }
 
@@ -44,7 +44,7 @@ func TestGetUncommittedDartFiles_UntrackedFilesInSubdirectory(t *testing.T) {
 	files, err := GetUncommittedFiles(tmpDir)
 
 	require.NoError(t, err)
-	g := testhelpers.GitGoldie(t)
+	g := testhelpers.TextGoldie(t)
 	g.Assert(t, t.Name(), []byte(normalizeFilePaths(tmpDir, files)))
 }
 
@@ -60,7 +60,7 @@ func TestGetUncommittedDartFiles_StagedFiles(t *testing.T) {
 	files, err := GetUncommittedFiles(tmpDir)
 
 	require.NoError(t, err)
-	g := testhelpers.GitGoldie(t)
+	g := testhelpers.TextGoldie(t)
 	g.Assert(t, t.Name(), []byte(normalizeFilePaths(tmpDir, files)))
 }
 
@@ -80,7 +80,7 @@ func TestGetUncommittedDartFiles_ModifiedFiles(t *testing.T) {
 	files, err := GetUncommittedFiles(tmpDir)
 
 	require.NoError(t, err)
-	g := testhelpers.GitGoldie(t)
+	g := testhelpers.TextGoldie(t)
 	g.Assert(t, t.Name(), []byte(normalizeFilePaths(tmpDir, files)))
 }
 
@@ -107,7 +107,7 @@ func TestGetUncommittedDartFiles_MixedStates(t *testing.T) {
 	files, err := GetUncommittedFiles(tmpDir)
 
 	require.NoError(t, err)
-	g := testhelpers.GitGoldie(t)
+	g := testhelpers.TextGoldie(t)
 	g.Assert(t, t.Name(), []byte(normalizeFilePaths(tmpDir, files)))
 }
 
@@ -125,7 +125,7 @@ func TestGetUncommittedDartFiles_IncludesAllFiles(t *testing.T) {
 	files, err := GetUncommittedFiles(tmpDir)
 
 	require.NoError(t, err)
-	g := testhelpers.GitGoldie(t)
+	g := testhelpers.TextGoldie(t)
 	g.Assert(t, t.Name(), []byte(normalizeFilePaths(tmpDir, files)))
 }
 
@@ -142,7 +142,7 @@ func TestGetUncommittedDartFiles_NoUncommittedFiles(t *testing.T) {
 	files, err := GetUncommittedFiles(tmpDir)
 
 	require.NoError(t, err)
-	g := testhelpers.GitGoldie(t)
+	g := testhelpers.TextGoldie(t)
 	g.Assert(t, t.Name(), []byte(normalizeFilePaths(tmpDir, files)))
 }
 
@@ -154,7 +154,7 @@ func TestGetUncommittedDartFiles_EmptyRepo(t *testing.T) {
 	files, err := GetUncommittedFiles(tmpDir)
 
 	require.NoError(t, err)
-	g := testhelpers.GitGoldie(t)
+	g := testhelpers.TextGoldie(t)
 	g.Assert(t, t.Name(), []byte(normalizeFilePaths(tmpDir, files)))
 }
 
@@ -191,7 +191,7 @@ func TestGetCommitDartFiles_SingleCommit(t *testing.T) {
 	files, err := GetCommitDartFiles(tmpDir, commitID)
 
 	require.NoError(t, err)
-	g := testhelpers.GitGoldie(t)
+	g := testhelpers.TextGoldie(t)
 	g.Assert(t, t.Name(), []byte(normalizeFilePaths(tmpDir, files)))
 }
 
@@ -212,7 +212,7 @@ func TestGetCommitDartFiles_MultipleFiles(t *testing.T) {
 	files, err := GetCommitDartFiles(tmpDir, commitID)
 
 	require.NoError(t, err)
-	g := testhelpers.GitGoldie(t)
+	g := testhelpers.TextGoldie(t)
 	g.Assert(t, t.Name(), []byte(normalizeFilePaths(tmpDir, files)))
 }
 
@@ -234,7 +234,7 @@ func TestGetCommitDartFiles_IncludesAllFiles(t *testing.T) {
 	files, err := GetCommitDartFiles(tmpDir, commitID)
 
 	require.NoError(t, err)
-	g := testhelpers.GitGoldie(t)
+	g := testhelpers.TextGoldie(t)
 	g.Assert(t, t.Name(), []byte(normalizeFilePaths(tmpDir, files)))
 }
 
@@ -251,7 +251,7 @@ func TestGetCommitDartFiles_NonDartFiles(t *testing.T) {
 	files, err := GetCommitDartFiles(tmpDir, commitID)
 
 	require.NoError(t, err)
-	g := testhelpers.GitGoldie(t)
+	g := testhelpers.TextGoldie(t)
 	g.Assert(t, t.Name(), []byte(normalizeFilePaths(tmpDir, files)))
 }
 
@@ -289,7 +289,7 @@ func TestGetCommitDartFiles_HeadReference(t *testing.T) {
 	files, err := GetCommitDartFiles(tmpDir, "HEAD")
 
 	require.NoError(t, err)
-	g := testhelpers.GitGoldie(t)
+	g := testhelpers.TextGoldie(t)
 	g.Assert(t, t.Name(), []byte(normalizeFilePaths(tmpDir, files)))
 }
 
@@ -311,7 +311,7 @@ func TestGetCommitDartFiles_HeadTildeReference(t *testing.T) {
 	files, err := GetCommitDartFiles(tmpDir, "HEAD~1")
 
 	require.NoError(t, err)
-	g := testhelpers.GitGoldie(t)
+	g := testhelpers.TextGoldie(t)
 	g.Assert(t, t.Name(), []byte(normalizeFilePaths(tmpDir, files)))
 }
 
@@ -442,7 +442,7 @@ func TestGetCommitRangeFiles_Success(t *testing.T) {
 	files, err := GetCommitRangeFiles(tmpDir, firstCommit, secondCommit)
 
 	require.NoError(t, err)
-	g := testhelpers.GitGoldie(t)
+	g := testhelpers.TextGoldie(t)
 	g.Assert(t, t.Name(), []byte(normalizeFilePaths(tmpDir, files)))
 }
 
@@ -469,7 +469,7 @@ func TestGetCommitRangeFiles_MultipleCommits(t *testing.T) {
 	files, err := GetCommitRangeFiles(tmpDir, firstCommit, thirdCommit)
 
 	require.NoError(t, err)
-	g := testhelpers.GitGoldie(t)
+	g := testhelpers.TextGoldie(t)
 	g.Assert(t, t.Name(), []byte(normalizeFilePaths(tmpDir, files)))
 }
 
@@ -490,7 +490,7 @@ func TestGetCommitRangeFiles_ModifiedFile(t *testing.T) {
 	files, err := GetCommitRangeFiles(tmpDir, firstCommit, secondCommit)
 
 	require.NoError(t, err)
-	g := testhelpers.GitGoldie(t)
+	g := testhelpers.TextGoldie(t)
 	g.Assert(t, t.Name(), []byte(normalizeFilePaths(tmpDir, files)))
 }
 
@@ -516,7 +516,7 @@ func TestGetCommitRangeFiles_ExcludesDeletedFiles(t *testing.T) {
 	files, err := GetCommitRangeFiles(tmpDir, firstCommit, secondCommit)
 
 	require.NoError(t, err)
-	g := testhelpers.GitGoldie(t)
+	g := testhelpers.TextGoldie(t)
 	g.Assert(t, t.Name(), []byte(normalizeFilePaths(tmpDir, files)))
 }
 
@@ -532,7 +532,7 @@ func TestGetCommitRangeFiles_NoChanges(t *testing.T) {
 	files, err := GetCommitRangeFiles(tmpDir, commit, commit)
 
 	require.NoError(t, err)
-	g := testhelpers.GitGoldie(t)
+	g := testhelpers.TextGoldie(t)
 	g.Assert(t, t.Name(), []byte(normalizeFilePaths(tmpDir, files)))
 }
 
