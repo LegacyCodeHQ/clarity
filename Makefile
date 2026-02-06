@@ -1,4 +1,4 @@
-.PHONY: test test-update-golden test-coverage coverage coverage-html clean help build-dev release-check lint security
+.PHONY: test test-update-golden test-coverage coverage coverage-html clean help build-dev release-check lint security tools
 
 # Version information (can be overridden via command line)
 # Try to get version from git tag, otherwise use "dev"
@@ -15,6 +15,7 @@ help:
 	@echo "Available targets:"
 	@echo ""
 	@echo "Testing:"
+	@echo "  tools              - Install/update local tooling (bin/)"
 	@echo "  lint               - Run golangci-lint"
 	@echo "  vulncheck          - Run govulncheck"
 	@echo "  test               - Run all tests"
@@ -33,15 +34,26 @@ help:
 	@echo "Cleanup:"
 	@echo "  clean              - Remove coverage files and binary"
 
-# Run linter
-lint:
-	golangci-lint run ./...
-	go-consistent ./...
+# Tooling (installed locally into ./.gotools)
+TOOLS_BIN := $(CURDIR)/.gotools
+GOLANGCI_LINT_VERSION ?= latest
+GO_CONSISTENT_VERSION ?= latest
+GOVULNCHECK_VERSION ?= latest
+
+tools:
+	@mkdir -p $(TOOLS_BIN)
+	@[ -x $(TOOLS_BIN)/golangci-lint ] || GOBIN=$(TOOLS_BIN) go install github.com/golangci/golangci-lint/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION)
+	@[ -x $(TOOLS_BIN)/go-consistent ] || GOBIN=$(TOOLS_BIN) go install github.com/quasilyte/go-consistent@$(GO_CONSISTENT_VERSION)
+	@[ -x $(TOOLS_BIN)/govulncheck ] || GOBIN=$(TOOLS_BIN) go install golang.org/x/vuln/cmd/govulncheck@$(GOVULNCHECK_VERSION)
+
+# Run linters
+lint: tools
+	$(TOOLS_BIN)/golangci-lint run ./...
+	$(TOOLS_BIN)/go-consistent ./...
 
 # Run govulncheck
-security:
-	go install golang.org/x/vuln/cmd/govulncheck@latest
-	govulncheck ./...
+security: tools
+	$(TOOLS_BIN)/govulncheck ./...
 
 # Run all tests
 test:
