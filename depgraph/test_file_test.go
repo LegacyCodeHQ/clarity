@@ -73,6 +73,16 @@ func TestIsTestFile(t *testing.T) {
 			filePath: "/project/src/main/java/com/example/App.java",
 			want:     false,
 		},
+		{
+			name:     "python test prefix",
+			filePath: "/project/tests/test_handlers.py",
+			want:     true,
+		},
+		{
+			name:     "python non-test file",
+			filePath: "/project/app/main.py",
+			want:     false,
+		},
 	}
 
 	for _, tc := range tests {

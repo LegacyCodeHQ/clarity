@@ -50,6 +50,7 @@ Sanity uses a file-based dependency graph to visualize the impact of AI-generate
 - JavaScript
 - Java
 - Kotlin
+- Python
 - TypeScript
 
 ## Quick Start
@@ -71,7 +72,7 @@ the [Installation Guide](docs/usage/installation.md).
 
 #### `sanity graph`
 
-Generate dependency graphs for Dart, Go, JavaScript, Java, Kotlin, and TypeScript files.
+Generate dependency graphs for Dart, Go, JavaScript, Java, Kotlin, Python, and TypeScript files.
 
 **Flags**:
 

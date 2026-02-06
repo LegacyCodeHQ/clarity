@@ -7,6 +7,7 @@ import (
 	"github.com/LegacyCodeHQ/sanity/depgraph/javascript"
 	"github.com/LegacyCodeHQ/sanity/depgraph/kotlin"
 	"github.com/LegacyCodeHQ/sanity/depgraph/langsupport"
+	"github.com/LegacyCodeHQ/sanity/depgraph/python"
 	"github.com/LegacyCodeHQ/sanity/depgraph/typescript"
 )
 
@@ -22,6 +23,7 @@ var languageRegistry = []languageRegistryEntry{
 	{Module: javascript.Module{}},
 	{Module: java.Module{}},
 	{Module: kotlin.Module{}},
+	{Module: python.Module{}},
 	{Module: typescript.Module{}},
 }
 
