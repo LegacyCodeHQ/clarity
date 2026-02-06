@@ -38,3 +38,33 @@ import SwiftUI
 	assert.Len(t, imports, 1)
 	assert.Equal(t, "SwiftUI", imports[0].Path)
 }
+
+func TestExtractSwiftTypeIdentifiers_SimpleIdentifier(t *testing.T) {
+	source := `
+import CodexBarCore
+
+struct FactoryStatusProbeFetchTests {
+    func testProbe() {
+        let probe = FactoryStatusProbe()
+        _ = probe
+    }
+}
+`
+	identifiers := ExtractSwiftTypeIdentifiers([]byte(source))
+	assert.Contains(t, identifiers, "FactoryStatusProbe")
+}
+
+func TestParseSwiftTopLevelTypeNames_SkipsExtensions(t *testing.T) {
+	source := `
+extension SettingsStore {
+    var foo: Int { 1 }
+}
+
+struct RealType {
+    let value: Int
+}
+`
+	types := ParseSwiftTopLevelTypeNames([]byte(source))
+	assert.Contains(t, types, "RealType")
+	assert.NotContains(t, types, "SettingsStore")
+}
