@@ -101,8 +101,7 @@ func ResolveJavaProjectImports(
 			javaPackageTypes,
 			suppliedFiles,
 			typeReferences,
-			declaredNames,
-		)...)
+			declaredNames)...)
 	}
 
 	samePackageDeps := resolveJavaSamePackageDependencies(
