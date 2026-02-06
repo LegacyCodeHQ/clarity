@@ -1,9 +1,9 @@
-# Sanity (experimental)
+# Sanity
 
 [![License](https://img.shields.io/github/license/LegacyCodeHQ/sanity)](LICENSE)
 [![Release](https://img.shields.io/github/v/release/LegacyCodeHQ/sanity)](https://github.com/LegacyCodeHQ/sanity/releases)
 
-Sanity helps you audit AI-generated code, stabilize vibe-coded apps, and build a solid understanding of unfamiliar codebases.
+Audit AI-generated code, understand codebases, and stabilize vibe-coded apps.
 
 ## The Problem
 
