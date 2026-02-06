@@ -1,15 +1,15 @@
-package typescript
+package javascript
 
 import (
 	"path/filepath"
 	"strings"
 )
 
-// IsTestFile reports whether the given TypeScript/JavaScript path is a test file.
+// IsTestFile reports whether the given JavaScript/JSX path is a test file.
 func IsTestFile(filePath string) bool {
 	fileName := filepath.Base(filePath)
 	ext := filepath.Ext(fileName)
-	if ext != ".ts" && ext != ".tsx" {
+	if ext != ".js" && ext != ".jsx" {
 		return false
 	}
 

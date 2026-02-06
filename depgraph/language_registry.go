@@ -4,6 +4,7 @@ import (
 	"github.com/LegacyCodeHQ/sanity/depgraph/dart"
 	"github.com/LegacyCodeHQ/sanity/depgraph/golang"
 	"github.com/LegacyCodeHQ/sanity/depgraph/java"
+	"github.com/LegacyCodeHQ/sanity/depgraph/javascript"
 	"github.com/LegacyCodeHQ/sanity/depgraph/kotlin"
 	"github.com/LegacyCodeHQ/sanity/depgraph/langsupport"
 	"github.com/LegacyCodeHQ/sanity/depgraph/typescript"
@@ -18,6 +19,7 @@ type languageRegistryEntry struct {
 var languageRegistry = []languageRegistryEntry{
 	{Module: dart.Module{}},
 	{Module: golang.Module{}},
+	{Module: javascript.Module{}},
 	{Module: java.Module{}},
 	{Module: kotlin.Module{}},
 	{Module: typescript.Module{}},
