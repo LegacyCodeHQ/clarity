@@ -15,15 +15,15 @@ import (
 )
 
 type graphOptions struct {
-	outputFormat    string
-	repoPath        string
-	commitID        string
-	generateURL     bool
-	allowOutside    bool
-	includes        []string
-	betweenFiles    []string
-	targetFile      string
-	depthLevel      int
+	outputFormat string
+	repoPath     string
+	commitID     string
+	generateURL  bool
+	allowOutside bool
+	includes     []string
+	betweenFiles []string
+	targetFile   string
+	depthLevel   int
 }
 
 // Cmd represents the graph command
@@ -38,8 +38,8 @@ func NewCommand() *cobra.Command {
 
 	cmd := &cobra.Command{
 		Use:   "graph",
-		Short: "Generate a file-based dependency graph.",
-		Long:  `Generate a file-based dependency graph.`,
+		Short: "Generate a scoped file-based dependency graph.",
+		Long:  `Generate a scoped file-based dependency graph.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runGraph(cmd, opts)
 		},
