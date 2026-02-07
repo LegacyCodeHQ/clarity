@@ -7,10 +7,10 @@
 ○ JavaScript  .js, .jsx
 ◐ Java        .java
 ○ Kotlin      .kt, .kts
-○ Python      .py
+◐ Python      .py
 ◐ Rust        .rs
 ◐ Swift       .swift
-○ TypeScript  .ts, .tsx
+◐ TypeScript  .ts, .tsx
 
 ------------------------------------------------------
 ○ Untested  ◐ Basic Tests  ● Actively Tested  ✓ Stable
