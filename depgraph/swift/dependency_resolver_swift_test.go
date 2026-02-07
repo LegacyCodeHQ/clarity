@@ -79,3 +79,81 @@ func TestResolveSwiftProjectImports_FlatLayoutResolvesTypeReference(t *testing.T
 	require.NoError(t, err)
 	assert.ElementsMatch(t, []string{featurePath}, imports)
 }
+
+func TestResolveSwiftProjectImports_FlatLayoutContentViewDependsOnModels(t *testing.T) {
+	tmpDir := t.TempDir()
+	appDir := filepath.Join(tmpDir, "sanity-desktop")
+	require.NoError(t, os.MkdirAll(appDir, 0o755))
+
+	contentViewPath := filepath.Join(appDir, "ContentView.swift")
+	require.NoError(t, os.WriteFile(contentViewPath, []byte(`
+import SwiftUI
+
+struct ContentView: View {
+    var body: some View {
+        DependencyGraphView(graph: .sample)
+    }
+}
+
+private extension DependencyGraph {
+    static let sample = DependencyGraph(
+        title: "demo",
+        commit: "abc123",
+        files: [
+            GraphFileNode(id: "n0", path: "README.md", additions: 1, deletions: 0),
+        ],
+        edges: [
+            GraphEdge(from: "n0", to: "n0"),
+        ]
+    )
+}
+`), 0o644))
+
+	modelsPath := filepath.Join(appDir, "DependencyGraphModels.swift")
+	require.NoError(t, os.WriteFile(modelsPath, []byte(`
+import Foundation
+
+struct GraphFileNode: Identifiable, Hashable {
+    let id: String
+    let path: String
+    let additions: Int
+    let deletions: Int
+}
+
+struct GraphEdge: Hashable {
+    let from: String
+    let to: String
+}
+
+struct DependencyGraph: Hashable {
+    let title: String
+    let commit: String
+    let files: [GraphFileNode]
+    let edges: [GraphEdge]
+}
+`), 0o644))
+
+	viewPath := filepath.Join(appDir, "DependencyGraphView.swift")
+	require.NoError(t, os.WriteFile(viewPath, []byte(`
+import SwiftUI
+
+struct DependencyGraphView: View {
+    let graph: DependencyGraph
+
+    var body: some View {
+        Text(graph.title)
+    }
+}
+`), 0o644))
+
+	reader := vcs.FilesystemContentReader()
+	supplied := map[string]bool{
+		contentViewPath: true,
+		modelsPath:      true,
+		viewPath:        true,
+	}
+
+	imports, err := ResolveSwiftProjectImports(contentViewPath, contentViewPath, supplied, reader)
+	require.NoError(t, err)
+	assert.ElementsMatch(t, []string{modelsPath, viewPath}, imports)
+}

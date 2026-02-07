@@ -68,3 +68,15 @@ struct RealType {
 	assert.Contains(t, types, "RealType")
 	assert.NotContains(t, types, "SettingsStore")
 }
+
+func TestParseSwiftTopLevelTypeNames_WithProtocolConformance(t *testing.T) {
+	source := `
+import Foundation
+
+struct GraphFileNode: Identifiable, Hashable {
+    let id: String
+}
+`
+	types := ParseSwiftTopLevelTypeNames([]byte(source))
+	assert.Contains(t, types, "GraphFileNode")
+}

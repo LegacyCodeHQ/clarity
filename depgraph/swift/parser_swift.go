@@ -200,28 +200,39 @@ func extractSwiftDeclarationName(node *sitter.Node, sourceCode []byte) string {
 	if name := node.ChildByFieldName("name"); name != nil {
 		return strings.TrimSpace(name.Content(sourceCode))
 	}
-	if name := findFirstChildOfType(node, "type_identifier", "identifier"); name != nil {
+	if name := findFirstDescendantOfType(node, "type_identifier", "identifier"); name != nil {
 		return strings.TrimSpace(name.Content(sourceCode))
 	}
 	return ""
 }
 
-func findFirstChildOfType(node *sitter.Node, types ...string) *sitter.Node {
+func findFirstDescendantOfType(node *sitter.Node, types ...string) *sitter.Node {
 	if node == nil {
 		return nil
 	}
-	for i := 0; i < int(node.ChildCount()); i++ {
-		child := node.Child(i)
-		if child == nil {
-			continue
+
+	typeSet := make(map[string]bool, len(types))
+	for _, t := range types {
+		typeSet[t] = true
+	}
+
+	var walk func(*sitter.Node) *sitter.Node
+	walk = func(n *sitter.Node) *sitter.Node {
+		if n == nil {
+			return nil
 		}
-		for _, t := range types {
-			if child.Type() == t {
-				return child
+		if typeSet[n.Type()] {
+			return n
+		}
+		for i := 0; i < int(n.ChildCount()); i++ {
+			if found := walk(n.Child(i)); found != nil {
+				return found
 			}
 		}
+		return nil
 	}
-	return nil
+
+	return walk(node)
 }
 
 func isSwiftIdentifierNode(node *sitter.Node) bool {
