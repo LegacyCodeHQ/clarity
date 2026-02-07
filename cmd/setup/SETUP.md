@@ -5,6 +5,7 @@ This project uses `sanity` to visualize code changes, provide design feedback, a
 ### When to Use Sanity
 
 1. **After making changes** - Run `sanity` to visualize your changes, understand impact, and prepare context for developer review.
+    - **Always run `sanity graph` when you modify 3 or more files** to ensure the developer can review the full scope of changes
 2. **Discussing design** - Use `sanity` to visualize architecture and dependencies for specific files, directories, or commits when discussing design decisions with the developer.
 3. **Refactoring verification** - After implementing design changes, run `sanity` to verify the resulting structure aligns with the discussed design.
 
