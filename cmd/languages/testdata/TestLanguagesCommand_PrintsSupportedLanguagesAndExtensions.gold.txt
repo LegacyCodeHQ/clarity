@@ -1,7 +1,7 @@
 
 ◐ C           .c, .h
 ◐ C++         .cc, .cpp, .cxx, .hpp, .hh, .hxx
-○ C#          .cs
+◐ C#          .cs
 ◐ Dart        .dart
 ● Go          .go
 ◐ JavaScript  .js, .jsx
