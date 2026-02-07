@@ -54,3 +54,41 @@ Follow the established history patterns:
   - `chore`: non-functional maintenance (e.g., syncs)
   - `style`: formatting-only changes (non-lint)
   - `human`: human-led or non-mechanical changes (use sparingly)
+
+## Sanity
+
+This project uses `sanity` to visualize code changes, provide design feedback, and guide refactoring.
+
+### When to Use Sanity
+
+1. **After making changes** - Run `sanity` to visualize your changes, understand impact, and prepare context for developer review.
+2. **Discussing design** - Use `sanity` to visualize architecture and dependencies for specific files, directories, or commits when discussing design decisions with the developer.
+3. **Refactoring verification** - After implementing design changes, run `sanity` to verify the resulting structure aligns with the discussed design.
+
+### How to Use Sanity
+
+**For developer review (visualize):**
+- Generate and render graphs for the developer to review
+- Use `sanity graph -f mermaid` if your environment supports Mermaid rendering (desktop apps, IDEs)
+- Use `sanity graph` or `sanity graph -f dot` if your environment supports Graphviz rendering or has dot tools installed (supports SVG, PNG, etc.)
+- Use `sanity graph -u` to generate a URL and open it in the developer's browser
+- Choose the visualization method that works best for your coding environment
+
+**For agent verification (feedback and analysis):**
+- Run `sanity graph` and read the dot/mermaid output directly
+- Parse the graph structure to verify dependencies and relationships
+- No visualization needed - the text output contains all structural information
+- Use this during refactoring iterations to confirm progress
+
+### Quick Reference
+
+```bash
+sanity graph                   # Visualize uncommitted changes (most common)
+sanity graph -c HEAD           # Visualize changes in last commit
+sanity graph -i <files/dirs>   # Build graph from specific files or directories (comma-separated)
+sanity graph -w <file1,file2>  # Find all paths between two or more files (comma-separated)
+sanity graph -f mermaid        # Generate output in mermaid format (default 'dot' Graphviz format)
+sanity graph -u                # Generate visualization URL
+```
+
+For full reference, use `sanity graph -h`
