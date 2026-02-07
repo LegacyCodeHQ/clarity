@@ -52,6 +52,7 @@ Follow the established history patterns:
   - `build`: build system or tooling changes
   - `ci`: CI pipeline changes
   - `chore`: non-functional maintenance (e.g., syncs)
+  - `skill`: skill/workflow instructions and skill assets
   - `style`: formatting-only changes (non-lint)
   - `human`: human-led or non-mechanical changes (use sparingly)
 
