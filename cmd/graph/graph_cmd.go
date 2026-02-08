@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 
 	"github.com/LegacyCodeHQ/sanity/cmd/graph/formatters"
 	"github.com/LegacyCodeHQ/sanity/depgraph"
@@ -20,6 +21,7 @@ type graphOptions struct {
 	commitID     string
 	generateURL  bool
 	allowOutside bool
+	excludeExt   string
 	includes     []string
 	betweenFiles []string
 	targetFile   string
@@ -62,6 +64,8 @@ func NewCommand() *cobra.Command {
 	cmd.Flags().BoolVarP(&opts.generateURL, "url", "u", false, "Generate visualization URL (supported formats: dot, mermaid)")
 	// Add input flag for explicit files/directories
 	cmd.Flags().StringSliceVarP(&opts.includes, "input", "i", nil, "Build graph from specific files and/or directories (comma-separated)")
+	// Add extension exclusion flag
+	cmd.Flags().StringVar(&opts.excludeExt, "exclude-ext", "", "Exclude files with this extension (single extension, e.g. .go)")
 	// Add between flag for finding paths between files
 	cmd.Flags().StringSliceVarP(&opts.betweenFiles, "between", "w", nil, "Find all paths between specified files (comma-separated)")
 	// Add file flag for showing dependencies of a specific file
@@ -95,6 +99,11 @@ func runGraph(cmd *cobra.Command, opts *graphOptions) error {
 	}
 	if done {
 		return nil
+	}
+
+	filePaths, err = applyExcludeExtensionFilter(opts, filePaths)
+	if err != nil {
+		return err
 	}
 
 	verbose, err := cmd.Flags().GetBool("verbose")
@@ -146,6 +155,14 @@ func runGraph(cmd *cobra.Command, opts *graphOptions) error {
 }
 
 func validateGraphOptions(opts *graphOptions) error {
+	if opts.excludeExt != "" {
+		excludeExt, err := normalizeExtension(opts.excludeExt)
+		if err != nil {
+			return err
+		}
+		opts.excludeExt = excludeExt
+	}
+
 	if len(opts.betweenFiles) > 0 && len(opts.includes) > 0 {
 		return fmt.Errorf("--between cannot be used with --input flag")
 	}
@@ -163,6 +180,26 @@ func validateGraphOptions(opts *graphOptions) error {
 	}
 
 	return nil
+}
+
+func normalizeExtension(rawExt string) (string, error) {
+	ext := strings.TrimSpace(rawExt)
+	if ext == "" {
+		return "", fmt.Errorf("--exclude-ext cannot be empty")
+	}
+	if strings.Contains(ext, ",") {
+		return "", fmt.Errorf("--exclude-ext supports only one extension")
+	}
+	if strings.Contains(ext, string(filepath.Separator)) {
+		return "", fmt.Errorf("--exclude-ext must be a file extension, got %q", rawExt)
+	}
+	if !strings.HasPrefix(ext, ".") {
+		ext = "." + ext
+	}
+	if ext == "." {
+		return "", fmt.Errorf("--exclude-ext must include extension characters")
+	}
+	return strings.ToLower(ext), nil
 }
 
 func ensureRepoPath(opts *graphOptions) {
@@ -452,6 +489,26 @@ func emitOutput(cmd *cobra.Command, opts *graphOptions, format formatters.Output
 	}
 
 	return nil
+}
+
+func applyExcludeExtensionFilter(opts *graphOptions, filePaths []string) ([]string, error) {
+	if opts.excludeExt == "" {
+		return filePaths, nil
+	}
+
+	filtered := make([]string, 0, len(filePaths))
+	for _, filePath := range filePaths {
+		if strings.EqualFold(filepath.Ext(filePath), opts.excludeExt) {
+			continue
+		}
+		filtered = append(filtered, filePath)
+	}
+
+	if len(filtered) == 0 {
+		return nil, fmt.Errorf("no files remain after applying --exclude-ext %q", opts.excludeExt)
+	}
+
+	return filtered, nil
 }
 
 // expandPaths expands file paths and directories into individual file paths.
