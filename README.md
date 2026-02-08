@@ -9,8 +9,8 @@ Sanity is a software design tool for developers and coding agents.
 ## Use Cases
 
 - Build maintainable software
-- [Audit AI-generated code](https://youtu.be/EqOwJnZSiQs)
 - Understand codebases
+- [Audit AI-generated code](https://youtu.be/EqOwJnZSiQs)
 - Stabilize and reclaim apps built with AI
 
 ## Quick Start

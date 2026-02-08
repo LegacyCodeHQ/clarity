@@ -20,14 +20,14 @@ var commit = "unknown"
 
 // rootCmd represents the base command when called without any subcommands
 var rootCmd = &cobra.Command{
-	Use:     "sanity",
-	Short:   "A software design tool for developers and coding agents.",
+	Use:   "sanity",
+	Short: "A software design tool for developers and coding agents.",
 	Long: `A software design tool for developers and coding agents.
 
 Use cases:
 - Build maintainable software
-- Audit AI-generated code
 - Understand codebases
+- Audit AI-generated code
 - Stabilize and reclaim apps built with AI`,
 	Version: version,
 }
