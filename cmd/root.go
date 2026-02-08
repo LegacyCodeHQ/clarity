@@ -6,6 +6,7 @@ import (
 	"github.com/LegacyCodeHQ/sanity/cmd/graph"
 	"github.com/LegacyCodeHQ/sanity/cmd/languages"
 	setupcmd "github.com/LegacyCodeHQ/sanity/cmd/setup"
+	whycmd "github.com/LegacyCodeHQ/sanity/cmd/why"
 	"github.com/spf13/cobra"
 )
 
@@ -46,6 +47,7 @@ func init() {
 	rootCmd.AddCommand(graph.Cmd)
 	rootCmd.AddCommand(languages.Cmd)
 	rootCmd.AddCommand(setupcmd.Cmd)
+	rootCmd.AddCommand(whycmd.Cmd)
 	rootCmd.CompletionOptions.DisableDefaultCmd = true
 
 	// Global flags inherited by all subcommands.
