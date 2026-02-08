@@ -13,9 +13,15 @@ This project uses `sanity` to visualize code changes, provide design feedback, a
 
 **For developer review (visualize):**
 - Generate and render graphs for the developer to review
+- For CLI agents, default to DOT output (`sanity graph` or `sanity graph -f dot`)
+- For CLI agents, generate a URL with `sanity graph -u`, then open that URL in the system browser with the platform command:
+  - macOS: `open "<url>"`
+  - Linux: `xdg-open "<url>"`
+  - Windows (cmd): `start "" "<url>"`
+  - Windows (PowerShell): `Start-Process "<url>"`
 - Use `sanity graph -f mermaid` if your environment supports Mermaid rendering (desktop apps, IDEs)
 - Use `sanity graph` or `sanity graph -f dot` if your environment supports Graphviz rendering or has dot tools installed (supports SVG, PNG, etc.)
-- Use `sanity graph -u` to generate a URL and open it in the developer's browser
+- Do not assume `sanity graph -u` auto-opens a browser in CLI environments; always open the generated URL explicitly
 - Choose the visualization method that works best for your coding environment
 
 **For agent verification (feedback and analysis):**
