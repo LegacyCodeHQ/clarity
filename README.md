@@ -8,13 +8,6 @@
 
 Sanity is a software design tool for developers and coding agents.
 
-## Use Cases
-
-- Build maintainable software
-- Understand codebases
-- [Audit AI-generated code](https://youtu.be/EqOwJnZSiQs)
-- Stabilize and reclaim apps built with AI
-
 ## Quick Start
 
 **Step 1:** Install with npm (cross-platform):
@@ -35,9 +28,20 @@ brew install sanity
 sanity setup  # Add usage instructions to AGENTS.md for your coding agent
 ```
 
-For other installation methods (pre-built binaries, build from source, Go install), see the [Installation Guide](docs/usage/installation.md).
+More install options: [Installation Guide](docs/usage/installation.md).
 
-## The Problem
+## Supported Languages
+
+C • C++ • C# • Dart • Go • JavaScript • Java • Kotlin • Python • Ruby • Rust • Swift • TypeScript
+
+## Use Cases
+
+- Build maintainable software
+- Understand codebases
+- [Audit AI-generated code](https://youtu.be/EqOwJnZSiQs)
+- Stabilize and reclaim apps built with AI
+
+## Problems
 
 Every time a coding agent makes changes to your codebase, you have the following questions:
 
@@ -58,12 +62,12 @@ These concerns worsen when there are:
 Sanity uses a file-based dependency graph to visualize the impact of AI-generated changes, showing you:
 
 - The files changed and the relationships between them
-- The order to review files (simple answer: review from right-to-left)
+- The order to review files (**short answer:** review from right-to-left)
 - Color-coded files by extension to help you quickly categorize and group them for review
 - Test files at a glance
 - An accurate mental model of the system as you evolve it
 
-## See Sanity in Action
+## Sanity in Action
 
 Sanity works with Desktop and IDE coding agents. If you are using a CLI coding agent, the agent can open diagrams in your browser for review.
 
@@ -72,24 +76,8 @@ Sanity works with Desktop and IDE coding agents. If you are using a CLI coding a
   <small>Sanity shows impacted files and highlights tests in green.</small>
 </p>
 
-## Supported Languages
-
-- C
-- C++
-- C#
-- Dart
-- Go
-- JavaScript
-- Java
-- Kotlin
-- Python
-- Ruby
-- Rust
-- Swift
-- TypeScript
+---
 
 ## License
 
-```
-This project is licensed under the GNU Affero General Public License v3.0.
-```
+This project is licensed under the [GNU Affero General Public License v3.0](LICENSE).
