@@ -1,4 +1,4 @@
-module github.com/LegacyCodeHQ/sanity
+module github.com/LegacyCodeHQ/clarity
 
 go 1.25
 

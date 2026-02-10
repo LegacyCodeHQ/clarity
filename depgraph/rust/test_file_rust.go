@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/LegacyCodeHQ/sanity/vcs"
+	"github.com/LegacyCodeHQ/clarity/vcs"
 )
 
 // IsTestFile reports whether the given Rust path is a test file.

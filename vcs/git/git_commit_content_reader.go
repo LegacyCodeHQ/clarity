@@ -3,7 +3,7 @@ package git
 import (
 	"path/filepath"
 
-	"github.com/LegacyCodeHQ/sanity/vcs"
+	"github.com/LegacyCodeHQ/clarity/vcs"
 )
 
 // GitCommitContentReader returns a ContentReader that reads file content from a specific git commit.

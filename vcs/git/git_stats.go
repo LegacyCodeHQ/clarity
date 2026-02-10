@@ -8,7 +8,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/LegacyCodeHQ/sanity/vcs"
+	"github.com/LegacyCodeHQ/clarity/vcs"
 )
 
 // GetUncommittedFileStats returns statistics (additions/deletions) for uncommitted files

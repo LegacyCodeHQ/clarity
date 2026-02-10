@@ -6,8 +6,8 @@ import (
 	"text/tabwriter"
 	"unicode/utf8"
 
-	"github.com/LegacyCodeHQ/sanity/depgraph"
-	"github.com/LegacyCodeHQ/sanity/depgraph/langsupport"
+	"github.com/LegacyCodeHQ/clarity/depgraph"
+	"github.com/LegacyCodeHQ/clarity/depgraph/langsupport"
 	"github.com/spf13/cobra"
 )
 
@@ -22,7 +22,7 @@ func NewCommand() *cobra.Command {
 		Long: `List all supported programming languages and their mapped file extensions.
 
 Examples:
-  sanity languages`,
+  clarity languages`,
 		RunE: runLanguages,
 	}
 

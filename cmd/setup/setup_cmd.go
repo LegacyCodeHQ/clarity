@@ -9,7 +9,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	git "github.com/LegacyCodeHQ/sanity/vcs/git"
+	git "github.com/LegacyCodeHQ/clarity/vcs/git"
 )
 
 //go:embed SETUP.md
@@ -18,8 +18,8 @@ var setupTemplate string
 // Cmd represents the setup command
 var Cmd = &cobra.Command{
 	Use:   "setup",
-	Short: "Add sanity usage instructions to AGENTS.md",
-	Long:  `Initialize AGENTS.md with instructions for AI agents to use sanity.`,
+	Short: "Add clarity usage instructions to AGENTS.md",
+	Long:  `Initialize AGENTS.md with instructions for AI agents to use clarity.`,
 	RunE:  runSetup,
 }
 
@@ -36,11 +36,11 @@ func runSetup(_ *cobra.Command, _ []string) error {
 	}
 
 	if created {
-		fmt.Println("✓ Created AGENTS.md with sanity usage instructions")
+		fmt.Println("✓ Created AGENTS.md with clarity usage instructions")
 	} else if updated {
-		fmt.Println("✓ Updated AGENTS.md with sanity usage instructions")
+		fmt.Println("✓ Updated AGENTS.md with clarity usage instructions")
 	} else {
-		fmt.Println("✓ AGENTS.md already contains sanity usage instructions")
+		fmt.Println("✓ AGENTS.md already contains clarity usage instructions")
 	}
 
 	return nil
@@ -85,7 +85,7 @@ func writeAgentsFile(filename string) (bool, bool, error) {
 
 func hasSetupBlock(contents []byte) bool {
 	lower := strings.ToLower(string(contents))
-	return strings.Contains(lower, "sanity graph")
+	return strings.Contains(lower, "clarity graph")
 }
 
 func buildSetupBlock(withTrailingNewline bool) string {

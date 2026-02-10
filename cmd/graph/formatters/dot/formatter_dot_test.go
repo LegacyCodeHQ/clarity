@@ -3,11 +3,11 @@ package dot_test
 import (
 	"testing"
 
-	"github.com/LegacyCodeHQ/sanity/cmd/graph/formatters"
-	"github.com/LegacyCodeHQ/sanity/cmd/graph/formatters/dot"
-	"github.com/LegacyCodeHQ/sanity/depgraph"
-	"github.com/LegacyCodeHQ/sanity/internal/testhelpers"
-	"github.com/LegacyCodeHQ/sanity/vcs"
+	"github.com/LegacyCodeHQ/clarity/cmd/graph/formatters"
+	"github.com/LegacyCodeHQ/clarity/cmd/graph/formatters/dot"
+	"github.com/LegacyCodeHQ/clarity/depgraph"
+	"github.com/LegacyCodeHQ/clarity/internal/testhelpers"
+	"github.com/LegacyCodeHQ/clarity/vcs"
 	"github.com/stretchr/testify/require"
 )
 

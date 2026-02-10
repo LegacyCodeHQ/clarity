@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/LegacyCodeHQ/sanity/internal/testhelpers"
+	"github.com/LegacyCodeHQ/clarity/internal/testhelpers"
 )
 
 func TestWhyCommand_TextDirectDependency(t *testing.T) {

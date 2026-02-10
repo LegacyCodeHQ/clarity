@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"testing"
 
-	"github.com/LegacyCodeHQ/sanity/internal/testhelpers"
+	"github.com/LegacyCodeHQ/clarity/internal/testhelpers"
 )
 
 func TestLanguagesCommand_PrintsSupportedLanguagesAndExtensions(t *testing.T) {

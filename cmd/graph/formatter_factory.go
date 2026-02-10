@@ -3,9 +3,9 @@ package graph
 import (
 	"fmt"
 
-	"github.com/LegacyCodeHQ/sanity/cmd/graph/formatters"
-	"github.com/LegacyCodeHQ/sanity/cmd/graph/formatters/dot"
-	"github.com/LegacyCodeHQ/sanity/cmd/graph/formatters/mermaid"
+	"github.com/LegacyCodeHQ/clarity/cmd/graph/formatters"
+	"github.com/LegacyCodeHQ/clarity/cmd/graph/formatters/dot"
+	"github.com/LegacyCodeHQ/clarity/cmd/graph/formatters/mermaid"
 )
 
 // NewFormatter creates a Formatter for the specified format type.

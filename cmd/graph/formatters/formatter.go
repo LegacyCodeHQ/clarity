@@ -1,6 +1,6 @@
 package formatters
 
-import "github.com/LegacyCodeHQ/sanity/depgraph"
+import "github.com/LegacyCodeHQ/clarity/depgraph"
 
 // Formatter is the interface that all graph formatters must implement.
 type Formatter interface {

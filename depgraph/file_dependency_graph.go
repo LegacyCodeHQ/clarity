@@ -4,7 +4,7 @@ import (
 	"path/filepath"
 	"sort"
 
-	"github.com/LegacyCodeHQ/sanity/vcs"
+	"github.com/LegacyCodeHQ/clarity/vcs"
 )
 
 // FileDependencyGraph wraps a dependency graph with file-level metadata.

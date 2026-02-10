@@ -7,7 +7,7 @@ import (
 
 	graphlib "github.com/dominikbraun/graph"
 
-	"github.com/LegacyCodeHQ/sanity/vcs"
+	"github.com/LegacyCodeHQ/clarity/vcs"
 )
 
 // BuildDependencyGraph analyzes a list of files and builds a dependency graph

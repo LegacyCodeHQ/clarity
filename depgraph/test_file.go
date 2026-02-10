@@ -3,7 +3,7 @@ package depgraph
 import (
 	"path/filepath"
 
-	"github.com/LegacyCodeHQ/sanity/vcs"
+	"github.com/LegacyCodeHQ/clarity/vcs"
 )
 
 // IsTestFile reports whether a file path should be treated as a test file.

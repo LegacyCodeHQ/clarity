@@ -1,8 +1,8 @@
 package ruby
 
 import (
-	"github.com/LegacyCodeHQ/sanity/depgraph/langsupport"
-	"github.com/LegacyCodeHQ/sanity/vcs"
+	"github.com/LegacyCodeHQ/clarity/depgraph/langsupport"
+	"github.com/LegacyCodeHQ/clarity/vcs"
 )
 
 type Module struct{}

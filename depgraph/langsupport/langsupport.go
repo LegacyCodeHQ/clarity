@@ -1,6 +1,6 @@
 package langsupport
 
-import "github.com/LegacyCodeHQ/sanity/vcs"
+import "github.com/LegacyCodeHQ/clarity/vcs"
 import graphlib "github.com/dominikbraun/graph"
 
 // Graph is the minimal graph contract language resolvers need during finalization.

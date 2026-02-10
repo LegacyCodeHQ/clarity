@@ -3,8 +3,8 @@ package golang
 import (
 	"errors"
 
-	"github.com/LegacyCodeHQ/sanity/depgraph/langsupport"
-	"github.com/LegacyCodeHQ/sanity/vcs"
+	"github.com/LegacyCodeHQ/clarity/depgraph/langsupport"
+	"github.com/LegacyCodeHQ/clarity/vcs"
 	graphlib "github.com/dominikbraun/graph"
 )
 

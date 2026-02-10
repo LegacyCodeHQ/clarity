@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/LegacyCodeHQ/sanity/vcs"
+	"github.com/LegacyCodeHQ/clarity/vcs"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -60,7 +60,7 @@ func TestResolveSwiftProjectImports_TestsModuleImportsMain(t *testing.T) {
 
 func TestResolveSwiftProjectImports_FlatLayoutResolvesTypeReference(t *testing.T) {
 	tmpDir := t.TempDir()
-	appDir := filepath.Join(tmpDir, "sanity-desktop")
+	appDir := filepath.Join(tmpDir, "clarity-desktop")
 	require.NoError(t, os.MkdirAll(appDir, 0o755))
 
 	viewPath := filepath.Join(appDir, "DependencyGraphView.swift")
@@ -82,7 +82,7 @@ func TestResolveSwiftProjectImports_FlatLayoutResolvesTypeReference(t *testing.T
 
 func TestResolveSwiftProjectImports_FlatLayoutContentViewDependsOnModels(t *testing.T) {
 	tmpDir := t.TempDir()
-	appDir := filepath.Join(tmpDir, "sanity-desktop")
+	appDir := filepath.Join(tmpDir, "clarity-desktop")
 	require.NoError(t, os.MkdirAll(appDir, 0o755))
 
 	contentViewPath := filepath.Join(appDir, "ContentView.swift")

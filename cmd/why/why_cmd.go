@@ -10,9 +10,9 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/LegacyCodeHQ/sanity/cmd/graph"
-	"github.com/LegacyCodeHQ/sanity/depgraph"
-	"github.com/LegacyCodeHQ/sanity/vcs"
+	"github.com/LegacyCodeHQ/clarity/cmd/graph"
+	"github.com/LegacyCodeHQ/clarity/depgraph"
+	"github.com/LegacyCodeHQ/clarity/vcs"
 	"github.com/spf13/cobra"
 )
 

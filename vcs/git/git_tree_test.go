@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/LegacyCodeHQ/sanity/internal/testhelpers"
+	"github.com/LegacyCodeHQ/clarity/internal/testhelpers"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

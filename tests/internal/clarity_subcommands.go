@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	graphcmd "github.com/LegacyCodeHQ/sanity/cmd/graph"
+	graphcmd "github.com/LegacyCodeHQ/clarity/cmd/graph"
 	"github.com/stretchr/testify/require"
 )
 

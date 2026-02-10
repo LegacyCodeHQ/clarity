@@ -6,7 +6,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/LegacyCodeHQ/sanity/tree_sitter_external/dart"
+	"github.com/LegacyCodeHQ/clarity/tree_sitter_external/dart"
 
 	sitter "github.com/smacker/go-tree-sitter"
 )

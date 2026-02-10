@@ -1,8 +1,8 @@
 package depgraph
 
 import (
-	"github.com/LegacyCodeHQ/sanity/depgraph/langsupport"
-	"github.com/LegacyCodeHQ/sanity/vcs"
+	"github.com/LegacyCodeHQ/clarity/depgraph/langsupport"
+	"github.com/LegacyCodeHQ/clarity/vcs"
 )
 
 // DependencyResolver resolves project imports per file and can finalize graph-wide dependencies.

@@ -7,8 +7,8 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/LegacyCodeHQ/sanity/cmd/graph/formatters"
-	"github.com/LegacyCodeHQ/sanity/depgraph"
+	"github.com/LegacyCodeHQ/clarity/cmd/graph/formatters"
+	"github.com/LegacyCodeHQ/clarity/depgraph"
 )
 
 // Formatter formats dependency graphs as Graphviz DOT.

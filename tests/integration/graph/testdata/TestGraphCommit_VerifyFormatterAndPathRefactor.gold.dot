@@ -1,7 +1,7 @@
 digraph dependencies {
   rankdir=LR;
   node [shape=box];
-  label="sanity • b7bb3fc • 15 files";
+  label="clarity • b7bb3fc • 15 files";
   labelloc=t;
   labeljust=l;
   fontsize=10;

@@ -1,20 +1,20 @@
 package depgraph
 
 import (
-	"github.com/LegacyCodeHQ/sanity/depgraph/c"
-	"github.com/LegacyCodeHQ/sanity/depgraph/cpp"
-	"github.com/LegacyCodeHQ/sanity/depgraph/csharp"
-	"github.com/LegacyCodeHQ/sanity/depgraph/dart"
-	"github.com/LegacyCodeHQ/sanity/depgraph/golang"
-	"github.com/LegacyCodeHQ/sanity/depgraph/java"
-	"github.com/LegacyCodeHQ/sanity/depgraph/javascript"
-	"github.com/LegacyCodeHQ/sanity/depgraph/kotlin"
-	"github.com/LegacyCodeHQ/sanity/depgraph/langsupport"
-	"github.com/LegacyCodeHQ/sanity/depgraph/python"
-	"github.com/LegacyCodeHQ/sanity/depgraph/ruby"
-	"github.com/LegacyCodeHQ/sanity/depgraph/rust"
-	"github.com/LegacyCodeHQ/sanity/depgraph/swift"
-	"github.com/LegacyCodeHQ/sanity/depgraph/typescript"
+	"github.com/LegacyCodeHQ/clarity/depgraph/c"
+	"github.com/LegacyCodeHQ/clarity/depgraph/cpp"
+	"github.com/LegacyCodeHQ/clarity/depgraph/csharp"
+	"github.com/LegacyCodeHQ/clarity/depgraph/dart"
+	"github.com/LegacyCodeHQ/clarity/depgraph/golang"
+	"github.com/LegacyCodeHQ/clarity/depgraph/java"
+	"github.com/LegacyCodeHQ/clarity/depgraph/javascript"
+	"github.com/LegacyCodeHQ/clarity/depgraph/kotlin"
+	"github.com/LegacyCodeHQ/clarity/depgraph/langsupport"
+	"github.com/LegacyCodeHQ/clarity/depgraph/python"
+	"github.com/LegacyCodeHQ/clarity/depgraph/ruby"
+	"github.com/LegacyCodeHQ/clarity/depgraph/rust"
+	"github.com/LegacyCodeHQ/clarity/depgraph/swift"
+	"github.com/LegacyCodeHQ/clarity/depgraph/typescript"
 )
 
 type languageRegistryEntry struct {

@@ -7,10 +7,10 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/LegacyCodeHQ/sanity/cmd/graph/formatters"
-	"github.com/LegacyCodeHQ/sanity/depgraph"
-	"github.com/LegacyCodeHQ/sanity/vcs"
-	"github.com/LegacyCodeHQ/sanity/vcs/git"
+	"github.com/LegacyCodeHQ/clarity/cmd/graph/formatters"
+	"github.com/LegacyCodeHQ/clarity/depgraph"
+	"github.com/LegacyCodeHQ/clarity/vcs"
+	"github.com/LegacyCodeHQ/clarity/vcs/git"
 
 	"github.com/spf13/cobra"
 )
@@ -319,10 +319,10 @@ func determineFilePaths(cmd *cobra.Command, opts *graphOptions, pathResolver Pat
 		fmt.Fprintln(cmd.OutOrStdout(), "Working directory is clean (no uncommitted changes).")
 		fmt.Fprintln(cmd.OutOrStdout())
 		fmt.Fprintln(cmd.OutOrStdout(), "To visualize the most recent commit:")
-		fmt.Fprintln(cmd.OutOrStdout(), "  sanity graph -c HEAD")
+		fmt.Fprintln(cmd.OutOrStdout(), "  clarity graph -c HEAD")
 		fmt.Fprintln(cmd.OutOrStdout())
 		fmt.Fprintln(cmd.OutOrStdout(), "To visualize a specific commit:")
-		fmt.Fprintln(cmd.OutOrStdout(), "  sanity graph -c <commit-hash>")
+		fmt.Fprintln(cmd.OutOrStdout(), "  clarity graph -c <commit-hash>")
 		return nil, true, nil
 	}
 
@@ -469,12 +469,8 @@ func buildGraphLabel(opts *graphOptions, format formatters.OutputFormat, fromCom
 		labelRepoPath = "."
 	}
 
-	var label string
-	repoRoot, err := git.GetRepositoryRoot(labelRepoPath)
-	if err == nil {
-		projectName := filepath.Base(repoRoot)
-		label = fmt.Sprintf("%s • ", projectName)
-	}
+	label := "clarity • "
+	var err error
 
 	var commitLabel string
 	if opts.commitID != "" {
@@ -488,7 +484,7 @@ func buildGraphLabel(opts *graphOptions, format formatters.OutputFormat, fromCom
 	}
 
 	if err != nil {
-		return label
+		return ""
 	}
 
 	label += commitLabel

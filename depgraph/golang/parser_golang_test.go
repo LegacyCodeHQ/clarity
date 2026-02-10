@@ -83,8 +83,8 @@ package main
 
 import (
 	"fmt"
-	"sanity/parsers"
-	"sanity/cmd"
+	"clarity/parsers"
+	"clarity/cmd"
 )
 
 func main() {}
@@ -95,8 +95,8 @@ func main() {}
 	assert.Len(t, imports, 3)
 
 	assert.Contains(t, imports, StandardLibraryImport{"fmt"})
-	assert.Contains(t, imports, InternalImport{"sanity/parsers"})
-	assert.Contains(t, imports, InternalImport{"sanity/cmd"})
+	assert.Contains(t, imports, InternalImport{"clarity/parsers"})
+	assert.Contains(t, imports, InternalImport{"clarity/cmd"})
 }
 
 func TestParseGoImports_AliasedImports(t *testing.T) {
@@ -229,8 +229,8 @@ import (
 	"github.com/smacker/go-tree-sitter"
 	"github.com/spf13/cobra"
 
-	"sanity/parsers"
-	"sanity/cmd"
+	"clarity/parsers"
+	"clarity/cmd"
 )
 
 func main() {
@@ -253,8 +253,8 @@ func main() {
 	assert.Contains(t, imports, ExternalImport{"github.com/spf13/cobra"})
 
 	// Internal imports
-	assert.Contains(t, imports, InternalImport{"sanity/parsers"})
-	assert.Contains(t, imports, InternalImport{"sanity/cmd"})
+	assert.Contains(t, imports, InternalImport{"clarity/parsers"})
+	assert.Contains(t, imports, InternalImport{"clarity/cmd"})
 }
 
 func TestParseGoImports_MixedStandardAndExternal(t *testing.T) {

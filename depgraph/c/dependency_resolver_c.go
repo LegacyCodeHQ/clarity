@@ -3,7 +3,7 @@ package c
 import (
 	"fmt"
 
-	"github.com/LegacyCodeHQ/sanity/vcs"
+	"github.com/LegacyCodeHQ/clarity/vcs"
 )
 
 func ResolveCProjectIncludes(

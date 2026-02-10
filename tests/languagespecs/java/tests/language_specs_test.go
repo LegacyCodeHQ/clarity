@@ -4,8 +4,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/LegacyCodeHQ/sanity/internal/testhelpers"
-	"github.com/LegacyCodeHQ/sanity/tests/internal"
+	"github.com/LegacyCodeHQ/clarity/internal/testhelpers"
+	"github.com/LegacyCodeHQ/clarity/tests/internal"
 )
 
 func TestGraphLanguageSpec_JavaBasic(t *testing.T) {

@@ -3,7 +3,7 @@ package depgraph
 import (
 	"sort"
 
-	"github.com/LegacyCodeHQ/sanity/depgraph/langsupport"
+	"github.com/LegacyCodeHQ/clarity/depgraph/langsupport"
 )
 
 // LanguageSupport describes one supported programming language and
@@ -39,7 +39,7 @@ func SupportedLanguages() []LanguageSupport {
 	return languages
 }
 
-// IsSupportedLanguageExtension reports whether Sanity can analyze files with the extension.
+// IsSupportedLanguageExtension reports whether Clarity can analyze files with the extension.
 func IsSupportedLanguageExtension(ext string) bool {
 	return supportedLanguageExtensions[ext]
 }

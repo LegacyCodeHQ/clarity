@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/LegacyCodeHQ/sanity/vcs"
+	"github.com/LegacyCodeHQ/clarity/vcs"
 	"github.com/stretchr/testify/require"
 )
 

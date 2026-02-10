@@ -3,10 +3,10 @@ package cmd
 import (
 	"os"
 
-	"github.com/LegacyCodeHQ/sanity/cmd/graph"
-	"github.com/LegacyCodeHQ/sanity/cmd/languages"
-	setupcmd "github.com/LegacyCodeHQ/sanity/cmd/setup"
-	whycmd "github.com/LegacyCodeHQ/sanity/cmd/why"
+	"github.com/LegacyCodeHQ/clarity/cmd/graph"
+	"github.com/LegacyCodeHQ/clarity/cmd/languages"
+	setupcmd "github.com/LegacyCodeHQ/clarity/cmd/setup"
+	whycmd "github.com/LegacyCodeHQ/clarity/cmd/why"
 	"github.com/spf13/cobra"
 )
 
@@ -21,7 +21,7 @@ var commit = "unknown"
 
 // rootCmd represents the base command when called without any subcommands
 var rootCmd = &cobra.Command{
-	Use:   "sanity",
+	Use:   "clarity",
 	Short: "A software design tool for developers and coding agents.",
 	Long: `A software design tool for developers and coding agents.
 
