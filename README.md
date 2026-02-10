@@ -34,7 +34,19 @@ More install options: [Installation Guide](docs/usage/installation.md).
 
 ## Supported Languages
 
-C • C++ • C# • Dart • Go • JavaScript • Java • Kotlin • Python • Ruby • Rust • Swift • TypeScript
+- C
+- C++
+- C#
+- Dart
+- Go
+- JavaScript
+- Java
+- Kotlin
+- Python
+- Ruby
+- Rust
+- Swift
+- TypeScript
 
 ## Use Cases
 
