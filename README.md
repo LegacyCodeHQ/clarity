@@ -21,7 +21,7 @@ npm install -g @legacycodehq/clarity
 Or install on macOS/Linux using Homebrew:
 
 ```bash
-brew install clarity
+brew install LegacyCodeHQ/tap/clarity
 ```
 
 **Step 2:** Inside your project:
