@@ -42,10 +42,14 @@ func NewCommand() *cobra.Command {
 	}
 
 	cmd := &cobra.Command{
-		Use:   "graph",
-		Short: "Generate a scoped file-based dependency graph.",
-		Long:  `Generate a scoped file-based dependency graph.`,
+		Use:     "show",
+		Aliases: []string{"graph"},
+		Short:   "Show a scoped file-based dependency graph.",
+		Long:    `Show a scoped file-based dependency graph.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if cmd.CalledAs() == "graph" {
+				fmt.Fprintln(cmd.ErrOrStderr(), "Warning: `clarity graph` is deprecated and will be removed in a future release. Use `clarity show`.\n")
+			}
 			return runGraph(cmd, opts)
 		},
 	}
@@ -319,10 +323,10 @@ func determineFilePaths(cmd *cobra.Command, opts *graphOptions, pathResolver Pat
 		fmt.Fprintln(cmd.OutOrStdout(), "Working directory is clean (no uncommitted changes).")
 		fmt.Fprintln(cmd.OutOrStdout())
 		fmt.Fprintln(cmd.OutOrStdout(), "To visualize the most recent commit:")
-		fmt.Fprintln(cmd.OutOrStdout(), "  clarity graph -c HEAD")
+		fmt.Fprintln(cmd.OutOrStdout(), "  clarity show -c HEAD")
 		fmt.Fprintln(cmd.OutOrStdout())
 		fmt.Fprintln(cmd.OutOrStdout(), "To visualize a specific commit:")
-		fmt.Fprintln(cmd.OutOrStdout(), "  clarity graph -c <commit-hash>")
+		fmt.Fprintln(cmd.OutOrStdout(), "  clarity show -c <commit-hash>")
 		return nil, true, nil
 	}
 

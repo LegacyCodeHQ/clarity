@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/spf13/cobra"
 )
 
 func TestGraphInputDirectory_WithJavaFiles_RendersDependencyEdges(t *testing.T) {
@@ -48,6 +50,31 @@ public class App {}
 	}
 	if !strings.Contains(output, `"App.java" -> "Helper.java"`) {
 		t.Fatalf("expected Java import edge App.java -> Helper.java, got:\n%s", output)
+	}
+}
+
+func TestGraphAlias_PrintsDeprecationWarning(t *testing.T) {
+	repoDir := t.TempDir()
+	supportedFile := filepath.Join(repoDir, "main.go")
+	if err := os.WriteFile(supportedFile, []byte("package main\n"), 0o644); err != nil {
+		t.Fatalf("os.WriteFile() error = %v", err)
+	}
+
+	root := &cobra.Command{Use: "clarity"}
+	root.AddCommand(NewCommand())
+	root.SetArgs([]string{"graph", "-i", supportedFile, "-f", "dot", "--allow-outside-repo"})
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	root.SetOut(&stdout)
+	root.SetErr(&stderr)
+
+	if err := root.Execute(); err != nil {
+		t.Fatalf("root.Execute() error = %v", err)
+	}
+
+	if !strings.Contains(stderr.String(), "deprecated") {
+		t.Fatalf("expected deprecation warning for graph alias, got:\n%s", stderr.String())
 	}
 }
 

@@ -5,7 +5,7 @@ This project uses `clarity` to visualize code changes, provide design feedback, 
 ### When to Use Clarity
 
 1. **After making changes** - Run `clarity` to visualize your changes, understand impact, and prepare context for developer review.
-    - **Always run `clarity graph` when you modify 3 or more files** to ensure the developer can review the full scope of changes
+    - **Always run `clarity show` when you modify 3 or more files** to ensure the developer can review the full scope of changes
 2. **Discussing design** - Use `clarity` to visualize architecture and dependencies for specific files, directories, or commits when discussing design decisions with the developer.
 3. **Refactoring verification** - After implementing design changes, run `clarity` to verify the resulting structure aligns with the discussed design.
 
@@ -13,19 +13,19 @@ This project uses `clarity` to visualize code changes, provide design feedback, 
 
 **For developer review (visualize):**
 - Generate and render graphs for the developer to review
-- For CLI agents, default to DOT output (`clarity graph` or `clarity graph -f dot`)
-- For CLI agents, generate a URL with `clarity graph -u`, then open that URL in the system browser with the platform command:
+- For CLI agents, default to DOT output (`clarity show` or `clarity show -f dot`)
+- For CLI agents, generate a URL with `clarity show -u`, then open that URL in the system browser with the platform command:
   - macOS: `open "<url>"`
   - Linux: `xdg-open "<url>"`
   - Windows (cmd): `start "" "<url>"`
   - Windows (PowerShell): `Start-Process "<url>"`
-- Use `clarity graph -f mermaid` if your environment supports Mermaid rendering (desktop apps, IDEs)
-- Use `clarity graph` or `clarity graph -f dot` if your environment supports Graphviz rendering or has dot tools installed (supports SVG, PNG, etc.)
-- Do not assume `clarity graph -u` auto-opens a browser in CLI environments; always open the generated URL explicitly
+- Use `clarity show -f mermaid` if your environment supports Mermaid rendering (desktop apps, IDEs)
+- Use `clarity show` or `clarity show -f dot` if your environment supports Graphviz rendering or has dot tools installed (supports SVG, PNG, etc.)
+- Do not assume `clarity show -u` auto-opens a browser in CLI environments; always open the generated URL explicitly
 - Choose the visualization method that works best for your coding environment
 
 **For agent verification (feedback and analysis):**
-- Run `clarity graph` and read the dot/mermaid output directly
+- Run `clarity show` and read the dot/mermaid output directly
 - Parse the graph structure to verify dependencies and relationships
 - No visualization needed - the text output contains all structural information
 - Use this during refactoring iterations to confirm progress
@@ -33,12 +33,12 @@ This project uses `clarity` to visualize code changes, provide design feedback, 
 ### Quick Reference
 
 ```bash
-clarity graph                   # Visualize uncommitted changes (most common)
-clarity graph -c HEAD           # Visualize changes in last commit
-clarity graph -i <files/dirs>   # Build graph from specific files or directories (comma-separated)
-clarity graph -w <file1,file2>  # Find all paths between two or more files (comma-separated)
-clarity graph -f mermaid        # Generate output in mermaid format (default 'dot' Graphviz format)
-clarity graph -u                # Generate visualization URL
+clarity show                    # Visualize uncommitted changes (most common)
+clarity show -c HEAD            # Visualize changes in last commit
+clarity show -i <files/dirs>    # Build graph from specific files or directories (comma-separated)
+clarity show -w <file1,file2>   # Find all paths between two or more files (comma-separated)
+clarity show -f mermaid         # Generate output in mermaid format (default 'dot' Graphviz format)
+clarity show -u                 # Generate visualization URL
 ```
 
-For full reference, use `clarity graph -h`
+For full reference, use `clarity show -h`

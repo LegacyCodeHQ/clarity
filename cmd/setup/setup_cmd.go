@@ -85,7 +85,7 @@ func writeAgentsFile(filename string) (bool, bool, error) {
 
 func hasSetupBlock(contents []byte) bool {
 	lower := strings.ToLower(string(contents))
-	return strings.Contains(lower, "clarity graph")
+	return strings.Contains(lower, "clarity show")
 }
 
 func buildSetupBlock(withTrailingNewline bool) string {

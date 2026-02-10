@@ -25,12 +25,12 @@ func TestWriteAgentsFileCreatesWithTemplate(t *testing.T) {
 	require.Contains(t, string(contents), strings.TrimSpace(setupTemplate))
 }
 
-func TestWriteAgentsFileSkipsWhenClarityGraphMentioned(t *testing.T) {
+func TestWriteAgentsFileSkipsWhenClarityShowMentioned(t *testing.T) {
 	t.Parallel()
 
 	tmpDir := t.TempDir()
 	filename := filepath.Join(tmpDir, "AGENTS.md")
-	initial := "# Existing\n\nUse clarity graph to visualize changes.\n"
+	initial := "# Existing\n\nUse clarity show to visualize changes.\n"
 
 	err := os.WriteFile(filename, []byte(initial), 0644)
 	require.NoError(t, err)
