@@ -1,9 +1,9 @@
 ---
 name: verify-language-support
-description: End-to-end workflow for validating language support changes in the sanity dependency graph analyzer
+description: End-to-end workflow for validating language support changes in the clarity dependency graph analyzer
 ---
 
-Use this workflow to validate language support end-to-end in `sanity`.
+Use this workflow to validate language support end-to-end in `clarity`.
 
 ## Prepare
 
@@ -37,7 +37,7 @@ Use this workflow to validate language support end-to-end in `sanity`.
    - In chat, print the commit message line before the Mermaid block so the user knows what change they are reviewing.
    - `go run . graph --repo /tmp/<repo> -c <sha> -f mermaid`
    - Always include the rendered diagram directly in chat (Mermaid fenced block). If Mermaid is not visible, provide DOT/text fallback in chat.
-   - If diagrams still are not visible to the user, generate and open the graph URL in the browser (for example `sanity graph -u` or equivalent URL output).
+   - If diagrams still are not visible to the user, generate and open the graph URL in the browser (for example `clarity graph -u` or equivalent URL output).
 6. Pause after each commit and wait for explicit user confirmation (for example, `next`) before continuing.
 7. Continue this request/response loop until the queue is complete or the user stops.
 8. After completing the default 10-commit queue, ask:
@@ -73,7 +73,7 @@ Use this workflow to validate language support end-to-end in `sanity`.
 ## Review Graph of Local Changes
 
 1. If 3 or more files changed, run:
-   - `./sanity graph -f mermaid`
+   - `./clarity graph -f mermaid`
 2. Ensure test-to-code directionality and dependency density look plausible.
 
 ## Handoff Checklist

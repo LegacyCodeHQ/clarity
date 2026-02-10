@@ -9,11 +9,11 @@ This is a Go CLI tool (no HTTP server in the repo). The primary security-relevan
 - Rule ID: GO-INJECT-002
 - Severity: Medium
 - Location:
-  - `/Users/ragunath/GolandProjects/sanity/vcs/git/git.go` `validateCommit` lines 60-72
-  - `/Users/ragunath/GolandProjects/sanity/vcs/git/git_diff.go` `getCommitFiles` lines 132-148
-  - `/Users/ragunath/GolandProjects/sanity/vcs/git/git_diff.go` `GetFileContentFromCommit` lines 164-175
-  - `/Users/ragunath/GolandProjects/sanity/vcs/git/git_diff.go` `GetCommitRangeFiles` lines 188-229
-  - `/Users/ragunath/GolandProjects/sanity/vcs/git/git_tree.go` `GetCommitTreeFiles` lines 37-45
+  - `/Users/ragunath/GolandProjects/clarity/vcs/git/git.go` `validateCommit` lines 60-72
+  - `/Users/ragunath/GolandProjects/clarity/vcs/git/git_diff.go` `getCommitFiles` lines 132-148
+  - `/Users/ragunath/GolandProjects/clarity/vcs/git/git_diff.go` `GetFileContentFromCommit` lines 164-175
+  - `/Users/ragunath/GolandProjects/clarity/vcs/git/git_diff.go` `GetCommitRangeFiles` lines 188-229
+  - `/Users/ragunath/GolandProjects/clarity/vcs/git/git_tree.go` `GetCommitTreeFiles` lines 37-45
 - Evidence:
   - `cmd := exec.Command("git", "rev-parse", "--verify", commitID+"^{commit}")`
   - `cmd := exec.Command("git", "diff-tree", "--no-commit-id", "--name-only", "-r", "--root", "--diff-filter=d", commitID)`
@@ -26,7 +26,7 @@ This is a Go CLI tool (no HTTP server in the repo). The primary security-relevan
 ### SBP-002 — `govulncheck` not run in CI
 - Rule ID: GO-DEPLOY-001
 - Severity: Medium
-- Location: `/Users/ragunath/GolandProjects/sanity/.github/workflows/test.yml` (entire workflow; no `govulncheck` step present)
+- Location: `/Users/ragunath/GolandProjects/clarity/.github/workflows/test.yml` (entire workflow; no `govulncheck` step present)
 - Evidence:
   - CI runs `go mod verify` and tests, but no `govulncheck` invocation appears in the workflow.
 - Impact: Known vulnerabilities in dependencies (and in stdlib if you ever pin an older patch) can slip into releases unnoticed.
@@ -40,12 +40,12 @@ This is a Go CLI tool (no HTTP server in the repo). The primary security-relevan
 - Rule ID: GO-PATH-001 (contextual)
 - Severity: Low
 - Location:
-  - `/Users/ragunath/GolandProjects/sanity/cmd/graph/path_resolver.go` `Resolve` lines 36-46
-  - `/Users/ragunath/GolandProjects/sanity/vcs/content_reader.go` `FilesystemContentReader` lines 9-12
+  - `/Users/ragunath/GolandProjects/clarity/cmd/graph/path_resolver.go` `Resolve` lines 36-46
+  - `/Users/ragunath/GolandProjects/clarity/vcs/content_reader.go` `FilesystemContentReader` lines 9-12
 - Evidence:
   - `if filepath.IsAbs(pathStr) { return AbsolutePath(filepath.Clean(pathStr)), nil }`
   - `return os.ReadFile(absPath)`
-- Impact: If `sanity graph -i` is ever exposed to untrusted input (for example, via a web service wrapper), an attacker could request arbitrary file reads outside the repo. As a local CLI for trusted users, this may be acceptable.
+- Impact: If `clarity graph -i` is ever exposed to untrusted input (for example, via a web service wrapper), an attacker could request arbitrary file reads outside the repo. As a local CLI for trusted users, this may be acceptable.
 - Fix: When `--repo` is provided, enforce that resolved paths stay under the repo root by default. If you want to preserve current behavior, add an explicit `--allow-outside-repo` flag and gate the behavior behind it.
 - Mitigation: Document that `-i` paths are trusted local inputs and should not be wired to untrusted sources without validation.
 - False positive notes: If this is strictly a local CLI used by trusted developers, you may accept this risk.

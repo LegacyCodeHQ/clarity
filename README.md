@@ -1,31 +1,31 @@
-# Sanity
+# Clarity
 
-[![Built with Sanity](https://raw.githubusercontent.com/LegacyCodeHQ/sanity/main/badges/built-with-sanity-sunrise.svg)](https://raw.githubusercontent.com/LegacyCodeHQ/sanity/main/badges/built-with-sanity-sunrise.svg)
-[![License](https://img.shields.io/github/license/LegacyCodeHQ/sanity)](LICENSE)
-[![Release](https://img.shields.io/github/v/release/LegacyCodeHQ/sanity)](https://github.com/LegacyCodeHQ/sanity/releases)
-[![npm version](https://img.shields.io/npm/v/@legacycodehq/sanity)](https://www.npmjs.com/package/@legacycodehq/sanity)
-[![Go Report Card](https://goreportcard.com/badge/github.com/LegacyCodeHQ/sanity)](https://goreportcard.com/report/github.com/LegacyCodeHQ/sanity)
+[![Built with Clarity](https://raw.githubusercontent.com/LegacyCodeHQ/clarity/main/badges/built-with-clarity-sunrise.svg)](https://raw.githubusercontent.com/LegacyCodeHQ/clarity/main/badges/built-with-clarity-sunrise.svg)
+[![License](https://img.shields.io/github/license/LegacyCodeHQ/clarity)](LICENSE)
+[![Release](https://img.shields.io/github/v/release/LegacyCodeHQ/clarity)](https://github.com/LegacyCodeHQ/clarity/releases)
+[![npm version](https://img.shields.io/npm/v/@legacycodehq/clarity)](https://www.npmjs.com/package/@legacycodehq/clarity)
+[![Go Report Card](https://goreportcard.com/badge/github.com/LegacyCodeHQ/clarity)](https://goreportcard.com/report/github.com/LegacyCodeHQ/clarity)
 
-Sanity is a software design tool for developers and coding agents.
+Clarity is a software design tool for developers and coding agents.
 
 ## Quick Start
 
 **Step 1:** Install with npm (cross-platform):
 
 ```bash
-npm install -g @legacycodehq/sanity
+npm install -g @legacycodehq/clarity
 ```
 
 Or install on macOS/Linux using Homebrew:
 
 ```bash
-brew install sanity
+brew install clarity
 ```
 
 **Step 2:** Inside your project:
 
 ```bash
-sanity setup  # Add usage instructions to AGENTS.md for your coding agent
+clarity setup  # Add usage instructions to AGENTS.md for your coding agent
 ```
 
 More install options: [Installation Guide](docs/usage/installation.md).
@@ -57,9 +57,9 @@ These concerns worsen when there are:
 - Too many files to review
 - You have an outdated mental model of your codebase
 
-## How Sanity Helps
+## How Clarity Helps
 
-Sanity uses a file-based dependency graph to visualize the impact of AI-generated changes, showing you:
+Clarity uses a file-based dependency graph to visualize the impact of AI-generated changes, showing you:
 
 - The files changed and the relationships between them
 - The order to review files (**short answer:** review from right-to-left)
@@ -67,13 +67,13 @@ Sanity uses a file-based dependency graph to visualize the impact of AI-generate
 - Test files at a glance
 - An accurate mental model of the system as you evolve it
 
-## Sanity in Action
+## Clarity in Action
 
-Sanity works with Desktop and IDE coding agents. If you are using a CLI coding agent, the agent can open diagrams in your browser for review.
+Clarity works with Desktop and IDE coding agents. If you are using a CLI coding agent, the agent can open diagrams in your browser for review.
 
 <p align="center">
-  <img src="docs/images/sanity+codex-app.png" alt="Sanity graph in Codex app">
-  <small>Sanity shows impacted files and highlights tests in green.</small>
+  <img src="docs/images/clarity+codex-app.png" alt="Clarity graph in Codex app">
+  <small>Clarity shows impacted files and highlights tests in green.</small>
 </p>
 
 ---
