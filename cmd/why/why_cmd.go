@@ -10,7 +10,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/LegacyCodeHQ/clarity/cmd/graph"
+	"github.com/LegacyCodeHQ/clarity/cmd/show"
 	"github.com/LegacyCodeHQ/clarity/depgraph"
 	"github.com/LegacyCodeHQ/clarity/depgraph/registry"
 	"github.com/LegacyCodeHQ/clarity/vcs"
@@ -105,17 +105,17 @@ func runWhy(cmd *cobra.Command, opts *whyOptions, fromArg, toArg string) error {
 		repoPath = "."
 	}
 
-	pathResolver, err := graph.NewPathResolver(repoPath, opts.allowOutside)
+	pathResolver, err := show.NewPathResolver(repoPath, opts.allowOutside)
 	if err != nil {
 		return fmt.Errorf("failed to create path resolver: %w", err)
 	}
 	repoPath = pathResolver.BaseDir()
 
-	fromPath, err := pathResolver.Resolve(graph.RawPath(fromArg))
+	fromPath, err := pathResolver.Resolve(show.RawPath(fromArg))
 	if err != nil {
 		return fmt.Errorf("failed to resolve from file %q: %w", fromArg, err)
 	}
-	toPath, err := pathResolver.Resolve(graph.RawPath(toArg))
+	toPath, err := pathResolver.Resolve(show.RawPath(toArg))
 	if err != nil {
 		return fmt.Errorf("failed to resolve to file %q: %w", toArg, err)
 	}

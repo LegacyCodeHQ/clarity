@@ -3,7 +3,7 @@ package diff
 import (
 	"fmt"
 
-	"github.com/LegacyCodeHQ/clarity/cmd/graph/formatters"
+	"github.com/LegacyCodeHQ/clarity/cmd/show/formatters"
 )
 
 // Formatter renders a dependency graph delta into a concrete output format.

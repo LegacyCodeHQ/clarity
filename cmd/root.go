@@ -4,9 +4,9 @@ import (
 	"os"
 
 	diffcmd "github.com/LegacyCodeHQ/clarity/cmd/diff"
-	"github.com/LegacyCodeHQ/clarity/cmd/graph"
 	"github.com/LegacyCodeHQ/clarity/cmd/languages"
 	setupcmd "github.com/LegacyCodeHQ/clarity/cmd/setup"
+	"github.com/LegacyCodeHQ/clarity/cmd/show"
 	whycmd "github.com/LegacyCodeHQ/clarity/cmd/why"
 	"github.com/spf13/cobra"
 )
@@ -46,7 +46,7 @@ func Execute() {
 func init() {
 	// Register subcommands
 	rootCmd.AddCommand(diffcmd.Cmd)
-	rootCmd.AddCommand(graph.Cmd)
+	rootCmd.AddCommand(show.Cmd)
 	rootCmd.AddCommand(languages.Cmd)
 	rootCmd.AddCommand(setupcmd.Cmd)
 	rootCmd.AddCommand(whycmd.Cmd)

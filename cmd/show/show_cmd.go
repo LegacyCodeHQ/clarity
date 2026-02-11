@@ -1,4 +1,4 @@
-package graph
+package show
 
 import (
 	"fmt"
@@ -7,7 +7,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/LegacyCodeHQ/clarity/cmd/graph/formatters"
+	"github.com/LegacyCodeHQ/clarity/cmd/show/formatters"
 	"github.com/LegacyCodeHQ/clarity/depgraph"
 	"github.com/LegacyCodeHQ/clarity/depgraph/registry"
 	"github.com/LegacyCodeHQ/clarity/vcs"
