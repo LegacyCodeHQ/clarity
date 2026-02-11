@@ -4,29 +4,19 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/LegacyCodeHQ/clarity/cmd/graph/formatters"
+	"github.com/LegacyCodeHQ/clarity/depgraph"
 	"github.com/LegacyCodeHQ/clarity/vcs/git"
 	"github.com/spf13/cobra"
-)
-
-type diffMode string
-
-const (
-	diffModeWorkingTree diffMode = "working-tree"
-	diffModeCommit      diffMode = "commit"
 )
 
 var snapshotSelectorFlags = []string{"staged", "unstaged", "untracked"}
 
 type diffOptions struct {
 	repoPath   string
+	outputFmt  string
 	summary    bool
 	commitSpec string
-}
-
-type commitComparison struct {
-	baseRef   string
-	targetRef string
-	mode      diffMode
 }
 
 // Cmd represents the diff command.
@@ -34,7 +24,9 @@ var Cmd = NewCommand()
 
 // NewCommand returns a new diff command instance.
 func NewCommand() *cobra.Command {
-	opts := &diffOptions{}
+	opts := &diffOptions{
+		outputFmt: formatters.OutputFormatDOT.String(),
+	}
 
 	cmd := &cobra.Command{
 		Use:   "diff",
@@ -46,6 +38,7 @@ func NewCommand() *cobra.Command {
 	}
 
 	cmd.Flags().StringVarP(&opts.repoPath, "repo", "r", "", "Git repository path (default: current directory)")
+	cmd.Flags().StringVarP(&opts.outputFmt, "format", "f", opts.outputFmt, fmt.Sprintf("Output format (%s)", formatters.SupportedFormats()))
 	cmd.Flags().BoolVar(&opts.summary, "summary", false, "Print text summary only")
 	cmd.Flags().StringVarP(&opts.commitSpec, "commit", "c", "", "Compare committed snapshots (<commit> or <A>,<B>)")
 
@@ -71,10 +64,84 @@ func runDiff(cmd *cobra.Command, opts *diffOptions) error {
 		return err
 	}
 
-	_ = comparison
-	_ = opts.summary
+	snapshots, err := resolveSnapshots(repoPath, comparison)
+	if err != nil {
+		return err
+	}
+
+	baseGraph, err := buildGraphFromSnapshot(snapshots.base)
+	if err != nil {
+		return fmt.Errorf("failed to build base dependency graph: %w", err)
+	}
+	targetGraph, err := buildGraphFromSnapshot(snapshots.target)
+	if err != nil {
+		return fmt.Errorf("failed to build target dependency graph: %w", err)
+	}
+
+	delta, err := buildGraphDelta(baseGraph, targetGraph)
+	if err != nil {
+		return err
+	}
+	delta.changedNodes, err = resolveChangedNodes(repoPath, comparison)
+	if err != nil {
+		return err
+	}
+	delta, err = applySemanticAnalyzers(baseGraph, targetGraph, delta, nil)
+	if err != nil {
+		return fmt.Errorf("failed to compute semantic findings: %w", err)
+	}
+
+	if opts.summary {
+		fmt.Fprintln(cmd.OutOrStdout(), renderSummary(delta))
+		return nil
+	}
+
+	out, err := renderDelta(opts.outputFmt, delta)
+	if err != nil {
+		return err
+	}
+	fmt.Fprintln(cmd.OutOrStdout(), out)
 
 	return nil
+}
+
+func buildGraphFromSnapshot(s snapshot) (depgraph.DependencyGraph, error) {
+	if len(s.filePaths) == 0 {
+		return depgraph.NewDependencyGraph(), nil
+	}
+	if s.contentRead == nil {
+		return nil, fmt.Errorf("content reader is required for non-empty snapshot %q", s.ref)
+	}
+	return depgraph.BuildDependencyGraph(s.filePaths, s.contentRead)
+}
+
+func resolveChangedNodes(repoPath string, comparison commitComparison) (map[string]struct{}, error) {
+	var (
+		changed []string
+		err     error
+	)
+
+	switch comparison.mode {
+	case diffModeWorkingTree:
+		changed, err = git.GetUncommittedFiles(repoPath)
+	case diffModeCommit:
+		if comparison.baseRef != "" {
+			changed, err = git.GetCommitRangeFiles(repoPath, comparison.baseRef, comparison.targetRef)
+		} else {
+			changed, err = git.GetCommitDartFiles(repoPath, comparison.targetRef)
+		}
+	default:
+		return nil, fmt.Errorf("unknown diff mode: %s", comparison.mode)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("failed to resolve changed files: %w", err)
+	}
+
+	changedSet := make(map[string]struct{}, len(changed))
+	for _, path := range changed {
+		changedSet[path] = struct{}{}
+	}
+	return changedSet, nil
 }
 
 func resolveModeAndCommitComparison(cmd *cobra.Command, repoPath, commitSpec string) (commitComparison, error) {

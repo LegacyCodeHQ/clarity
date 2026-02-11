@@ -118,8 +118,10 @@ func TestDiffCommitConflictsWithSnapshotSelector(t *testing.T) {
 }
 
 func TestDiffCommandAcceptsSummaryFlag(t *testing.T) {
+	repoDir, _ := initGitRepoWithSingleCommit(t)
+
 	cmd := NewCommand()
-	cmd.SetArgs([]string{"--summary"})
+	cmd.SetArgs([]string{"--summary", "--repo", repoDir})
 
 	var out bytes.Buffer
 	cmd.SetOut(&out)
