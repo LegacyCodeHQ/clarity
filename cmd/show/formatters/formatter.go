@@ -33,13 +33,16 @@ func NewFormatter(format string) (Formatter, error) {
 		return dotFormatter{}, nil
 	case OutputFormatMermaid:
 		return mermaidFormatter{}, nil
-	case OutputFormatJSON:
-		return jsonFormatter{}, nil
 	case endOfSupportedFormatsMarker:
 		return nil, fmt.Errorf("unknown format: %s (valid options: %s)", format, SupportedFormats())
 	default:
 		return nil, fmt.Errorf("unknown format: %s (valid options: %s)", format, SupportedFormats())
 	}
+}
+
+// NewInternalJSONFormatter returns the JSON formatter for non-CLI internal use.
+func NewInternalJSONFormatter() Formatter {
+	return jsonFormatter{}
 }
 
 // RenderOptions contains output-specific rendering options.

@@ -24,20 +24,16 @@ func TestNewFormatter_Mermaid(t *testing.T) {
 	}
 }
 
-func TestNewFormatter_JSON(t *testing.T) {
-	f, err := NewFormatter("json")
-	if err != nil {
-		t.Fatalf("NewFormatter(json) error = %v", err)
-	}
-
-	if _, ok := f.(jsonFormatter); !ok {
-		t.Fatalf("NewFormatter(json) returned %T, want formatters.jsonFormatter", f)
-	}
-}
-
 func TestNewFormatter_UnknownFormat(t *testing.T) {
 	_, err := NewFormatter("unknown")
 	if err == nil {
 		t.Fatalf("NewFormatter(unknown) expected error, got nil")
+	}
+}
+
+func TestNewInternalJSONFormatter(t *testing.T) {
+	f := NewInternalJSONFormatter()
+	if _, ok := f.(jsonFormatter); !ok {
+		t.Fatalf("NewInternalJSONFormatter() returned %T, want formatters.jsonFormatter", f)
 	}
 }

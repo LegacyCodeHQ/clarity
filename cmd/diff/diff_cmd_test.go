@@ -136,7 +136,7 @@ func TestRenderDelta_UnsupportedFormat(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected unsupported format error")
 	}
-	if !strings.Contains(err.Error(), "not supported for diff") {
+	if !strings.Contains(err.Error(), "unknown format") {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }

@@ -2,7 +2,6 @@ package show
 
 import (
 	"bytes"
-	"encoding/json"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -11,17 +10,6 @@ import (
 
 	"github.com/spf13/cobra"
 )
-
-type jsonShowOutput struct {
-	Nodes []struct {
-		Path string `json:"path"`
-		Name string `json:"name"`
-	} `json:"nodes"`
-	Edges []struct {
-		From string `json:"from"`
-		To   string `json:"to"`
-	} `json:"edges"`
-}
 
 func TestGraphInputDirectory_WithJavaFiles_RendersDependencyEdges(t *testing.T) {
 	repoDir := t.TempDir()
@@ -206,7 +194,7 @@ func TestGraphInput_WithSupportedFiles_RendersNode(t *testing.T) {
 	}
 }
 
-func TestGraphInput_WithSupportedFiles_RendersJSON(t *testing.T) {
+func TestGraphInput_WithJSONFormat_ReturnsError(t *testing.T) {
 	repoDir := t.TempDir()
 	supportedFile := filepath.Join(repoDir, "main.go")
 	if err := os.WriteFile(supportedFile, []byte("package main\n"), 0o644); err != nil {
@@ -216,28 +204,15 @@ func TestGraphInput_WithSupportedFiles_RendersJSON(t *testing.T) {
 	cmd := NewCommand()
 	cmd.SetArgs([]string{"-i", supportedFile, "-f", "json", "--allow-outside-repo"})
 
-	var stdout bytes.Buffer
-	cmd.SetOut(&stdout)
-
-	if err := cmd.Execute(); err != nil {
-		t.Fatalf("cmd.Execute() error = %v", err)
+	err := cmd.Execute()
+	if err == nil {
+		t.Fatalf("cmd.Execute() expected error for json format, got nil")
 	}
-
-	var parsed jsonShowOutput
-	if err := json.Unmarshal(stdout.Bytes(), &parsed); err != nil {
-		t.Fatalf("expected valid JSON output, got error: %v\noutput:\n%s", err, stdout.String())
-	}
-
-	if len(parsed.Nodes) != 1 {
-		t.Fatalf("expected exactly one node, got %d", len(parsed.Nodes))
-	}
-	if parsed.Nodes[0].Name != "main.go" {
-		t.Fatalf("expected node name main.go, got %q", parsed.Nodes[0].Name)
-	}
-	if len(parsed.Edges) > 0 {
-		t.Fatalf("expected no edges, got %d", len(parsed.Edges))
+	if !strings.Contains(err.Error(), "unknown format: json (valid options: dot, mermaid)") {
+		t.Fatalf("expected unknown format error including input value, got: %v", err)
 	}
 }
+
 
 func TestGraphInput_Exclude_RemovesSpecificFile(t *testing.T) {
 	repoDir := t.TempDir()
