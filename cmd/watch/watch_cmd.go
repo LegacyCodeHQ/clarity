@@ -23,6 +23,8 @@ type watchOptions struct {
 	excludes   []string
 }
 
+const maxPortBindAttempts = 20
+
 // Cmd represents the watch command.
 var Cmd = NewCommand()
 
@@ -63,16 +65,17 @@ func runWatch(cmd *cobra.Command, opts *watchOptions) error {
 	}
 	repoPath = absRepoPath
 
-	b := newBroker()
-	srv := newServer(b, opts.port)
-
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
 
-	ln, err := net.Listen("tcp", fmt.Sprintf(":%d", opts.port))
+	ln, actualPort, err := listenWithPortFallback(opts.port)
 	if err != nil {
-		return fmt.Errorf("failed to listen on port %d: %w", opts.port, err)
+		return err
 	}
+	defer ln.Close()
+
+	b := newBroker()
+	srv := newServer(b, actualPort)
 
 	go func() {
 		if serveErr := srv.Serve(ln); serveErr != nil && !errors.Is(serveErr, http.ErrServerClosed) {
@@ -91,11 +94,43 @@ func runWatch(cmd *cobra.Command, opts *watchOptions) error {
 	}
 
 	fmt.Fprintf(cmd.OutOrStdout(), "Watching %s\n", repoPath)
-	fmt.Fprintf(cmd.OutOrStdout(), "Serving at http://localhost:%d\n", opts.port)
+	if actualPort != opts.port {
+		fmt.Fprintf(cmd.OutOrStdout(), "Port %d in use, using %d\n", opts.port, actualPort)
+	}
+	fmt.Fprintf(cmd.OutOrStdout(), "Serving at http://localhost:%d\n", actualPort)
 	fmt.Fprintf(cmd.OutOrStdout(), "Press Ctrl+C to stop\n")
 
 	err = watchAndRebuild(ctx, repoPath, opts, b)
 
 	srv.Close()
 	return err
+}
+
+func listenWithPortFallback(preferredPort int) (net.Listener, int, error) {
+	if preferredPort == 0 {
+		ln, err := net.Listen("tcp", ":0")
+		if err != nil {
+			return nil, 0, fmt.Errorf("failed to listen on random port: %w", err)
+		}
+		addr, ok := ln.Addr().(*net.TCPAddr)
+		if !ok {
+			return ln, 0, nil
+		}
+		return ln, addr.Port, nil
+	}
+
+	var lastErr error
+	for attempt := 0; attempt < maxPortBindAttempts; attempt++ {
+		port := preferredPort + attempt
+		ln, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
+		if err == nil {
+			return ln, port, nil
+		}
+		if !errors.Is(err, syscall.EADDRINUSE) {
+			return nil, 0, fmt.Errorf("failed to listen on port %d: %w", port, err)
+		}
+		lastErr = err
+	}
+
+	return nil, 0, fmt.Errorf("failed to listen on ports %d-%d: %w", preferredPort, preferredPort+maxPortBindAttempts-1, lastErr)
 }

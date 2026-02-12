@@ -2,6 +2,8 @@ package watch
 
 import (
 	"errors"
+	"fmt"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -284,4 +286,21 @@ func TestPublishCurrentGraph_NoUncommittedChangesPublishesEmptyGraph(t *testing.
 	case <-time.After(time.Second):
 		t.Fatal("timed out waiting for empty graph publish")
 	}
+}
+
+func TestListenWithPortFallback_PicksNextAvailablePort(t *testing.T) {
+	occupied, err := net.Listen("tcp", ":0")
+	require.NoError(t, err)
+	defer occupied.Close()
+
+	occupiedPort := occupied.Addr().(*net.TCPAddr).Port
+	reservedNext, err := net.Listen("tcp", fmt.Sprintf(":%d", occupiedPort+1))
+	require.NoError(t, err)
+	defer reservedNext.Close()
+
+	ln, actualPort, err := listenWithPortFallback(occupiedPort)
+	require.NoError(t, err)
+	defer ln.Close()
+
+	assert.Equal(t, occupiedPort+2, actualPort)
 }
