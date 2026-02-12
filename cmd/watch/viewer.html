@@ -24,6 +24,15 @@
       font-size: 13px;
     }
     #header .title { font-weight: 600; }
+    #header .spacer { flex: 1; }
+    #snapshot-source {
+      background: #1f3f73;
+      color: #e0e0e0;
+      border: 1px solid #2f5ea4;
+      border-radius: 4px;
+      padding: 4px 8px;
+      font-size: 12px;
+    }
     #status {
       display: inline-flex;
       align-items: center;
@@ -94,6 +103,12 @@
       <span class="dot"></span>
       <span id="status-text">Connecting...</span>
     </span>
+    <span class="spacer"></span>
+    <label for="snapshot-source">View:</label>
+    <select id="snapshot-source">
+      <option value="working">Working directory (live)</option>
+      <option value="past">Past commits</option>
+    </select>
   </div>
   <div id="graph-container">
     <p id="placeholder">Waiting for graph data...</p>

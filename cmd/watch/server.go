@@ -18,8 +18,10 @@ type graphSnapshot struct {
 }
 
 type graphStreamPayload struct {
-	Snapshots []graphSnapshot `json:"snapshots"`
-	LatestID  int64           `json:"latestId"`
+	WorkingSnapshots []graphSnapshot `json:"workingSnapshots"`
+	PastSnapshots    []graphSnapshot `json:"pastSnapshots"`
+	LatestWorkingID  int64           `json:"latestWorkingId"`
+	LatestPastID     int64           `json:"latestPastId"`
 }
 
 // broker manages SSE client connections and broadcasts graph snapshots.
@@ -101,8 +103,10 @@ func (b *broker) reset() {
 	b.history = nil
 	b.hasState = true
 	payload := graphStreamPayload{
-		Snapshots: []graphSnapshot{},
-		LatestID:  0,
+		WorkingSnapshots: []graphSnapshot{},
+		PastSnapshots:    b.flattenPastSnapshotsLocked(),
+		LatestWorkingID:  0,
+		LatestPastID:     b.latestPastIDLocked(),
 	}
 	for ch := range b.clients {
 		select {
@@ -114,11 +118,15 @@ func (b *broker) reset() {
 }
 
 func (b *broker) currentPayloadLocked() (graphStreamPayload, bool) {
+	pastSnapshots := b.flattenPastSnapshotsLocked()
+	latestPastID := b.latestPastIDLocked()
 	if len(b.history) == 0 {
 		if b.hasState {
 			return graphStreamPayload{
-				Snapshots: []graphSnapshot{},
-				LatestID:  0,
+				WorkingSnapshots: []graphSnapshot{},
+				PastSnapshots:    pastSnapshots,
+				LatestWorkingID:  0,
+				LatestPastID:     latestPastID,
 			}, true
 		}
 		return graphStreamPayload{}, false
@@ -128,9 +136,39 @@ func (b *broker) currentPayloadLocked() (graphStreamPayload, bool) {
 	copy(snapshots, b.history)
 
 	return graphStreamPayload{
-		Snapshots: snapshots,
-		LatestID:  b.history[len(b.history)-1].ID,
+		WorkingSnapshots: snapshots,
+		PastSnapshots:    pastSnapshots,
+		LatestWorkingID:  b.history[len(b.history)-1].ID,
+		LatestPastID:     latestPastID,
 	}, true
+}
+
+func (b *broker) flattenPastSnapshotsLocked() []graphSnapshot {
+	if len(b.archivedCycles) == 0 {
+		return []graphSnapshot{}
+	}
+
+	total := 0
+	for _, cycle := range b.archivedCycles {
+		total += len(cycle)
+	}
+
+	flattened := make([]graphSnapshot, 0, total)
+	for _, cycle := range b.archivedCycles {
+		flattened = append(flattened, cycle...)
+	}
+	return flattened
+}
+
+func (b *broker) latestPastIDLocked() int64 {
+	if len(b.archivedCycles) == 0 {
+		return 0
+	}
+	lastCycle := b.archivedCycles[len(b.archivedCycles)-1]
+	if len(lastCycle) == 0 {
+		return 0
+	}
+	return lastCycle[len(lastCycle)-1].ID
 }
 
 func newServer(b *broker, port int) *http.Server {

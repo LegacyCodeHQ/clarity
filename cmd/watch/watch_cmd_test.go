@@ -28,9 +28,11 @@ func TestBroker_PublishAndSubscribe(t *testing.T) {
 
 	select {
 	case got := <-ch:
-		require.Len(t, got.Snapshots, 1)
-		assert.Equal(t, "digraph { A -> B; }", got.Snapshots[0].DOT)
-		assert.Equal(t, got.Snapshots[0].ID, got.LatestID)
+		require.Len(t, got.WorkingSnapshots, 1)
+		assert.Equal(t, "digraph { A -> B; }", got.WorkingSnapshots[0].DOT)
+		assert.Equal(t, got.WorkingSnapshots[0].ID, got.LatestWorkingID)
+		assert.Empty(t, got.PastSnapshots)
+		assert.Zero(t, got.LatestPastID)
 	case <-time.After(time.Second):
 		t.Fatal("timed out waiting for message")
 	}
@@ -45,9 +47,10 @@ func TestBroker_NewSubscriberReceivesLatest(t *testing.T) {
 
 	select {
 	case got := <-ch:
-		require.Len(t, got.Snapshots, 1)
-		assert.Equal(t, "digraph { X -> Y; }", got.Snapshots[0].DOT)
-		assert.Equal(t, got.Snapshots[0].ID, got.LatestID)
+		require.Len(t, got.WorkingSnapshots, 1)
+		assert.Equal(t, "digraph { X -> Y; }", got.WorkingSnapshots[0].DOT)
+		assert.Equal(t, got.WorkingSnapshots[0].ID, got.LatestWorkingID)
+		assert.Empty(t, got.PastSnapshots)
 	case <-time.After(time.Second):
 		t.Fatal("timed out waiting for latest graph")
 	}
@@ -64,16 +67,16 @@ func TestBroker_MultipleSubscribers(t *testing.T) {
 
 	select {
 	case got := <-ch1:
-		require.Len(t, got.Snapshots, 1)
-		assert.Equal(t, "digraph { A; }", got.Snapshots[0].DOT)
+		require.Len(t, got.WorkingSnapshots, 1)
+		assert.Equal(t, "digraph { A; }", got.WorkingSnapshots[0].DOT)
 	case <-time.After(time.Second):
 		t.Fatal("ch1: timed out")
 	}
 
 	select {
 	case got := <-ch2:
-		require.Len(t, got.Snapshots, 1)
-		assert.Equal(t, "digraph { A; }", got.Snapshots[0].DOT)
+		require.Len(t, got.WorkingSnapshots, 1)
+		assert.Equal(t, "digraph { A; }", got.WorkingSnapshots[0].DOT)
 	case <-time.After(time.Second):
 		t.Fatal("ch2: timed out")
 	}
@@ -148,8 +151,8 @@ func TestHandleSSE_MultiLineData(t *testing.T) {
 
 	var payload graphStreamPayload
 	require.NoError(t, decodeSSEPayload(body, &payload))
-	require.Len(t, payload.Snapshots, 1)
-	assert.Equal(t, multiLine, payload.Snapshots[0].DOT)
+	require.Len(t, payload.WorkingSnapshots, 1)
+	assert.Equal(t, multiLine, payload.WorkingSnapshots[0].DOT)
 }
 
 func TestBroker_PublishSkipsDuplicateSnapshots(t *testing.T) {
@@ -181,8 +184,11 @@ func TestBroker_ResetClearsActiveSnapshots(t *testing.T) {
 
 	select {
 	case got := <-ch:
-		assert.Empty(t, got.Snapshots)
-		assert.Zero(t, got.LatestID)
+		assert.Empty(t, got.WorkingSnapshots)
+		require.Len(t, got.PastSnapshots, 1)
+		assert.Equal(t, "digraph { A; }", got.PastSnapshots[0].DOT)
+		assert.Zero(t, got.LatestWorkingID)
+		assert.Equal(t, got.PastSnapshots[0].ID, got.LatestPastID)
 	case <-time.After(time.Second):
 		t.Fatal("timed out waiting for reset payload")
 	}
@@ -198,10 +204,39 @@ func TestBroker_NewSubscriberReceivesResetState(t *testing.T) {
 
 	select {
 	case got := <-ch:
-		assert.Empty(t, got.Snapshots)
-		assert.Zero(t, got.LatestID)
+		assert.Empty(t, got.WorkingSnapshots)
+		require.Len(t, got.PastSnapshots, 1)
+		assert.Equal(t, "digraph { A; }", got.PastSnapshots[0].DOT)
+		assert.Zero(t, got.LatestWorkingID)
+		assert.Equal(t, got.PastSnapshots[0].ID, got.LatestPastID)
 	case <-time.After(time.Second):
 		t.Fatal("timed out waiting for reset payload")
+	}
+}
+
+func TestBroker_ResetArchivesAcrossCycles(t *testing.T) {
+	b := newBroker()
+	ch := b.subscribe()
+	defer b.unsubscribe(ch)
+
+	b.publish("digraph { A; }")
+	<-ch
+	b.reset()
+	<-ch
+
+	b.publish("digraph { B; }")
+	<-ch
+	b.reset()
+
+	select {
+	case got := <-ch:
+		assert.Empty(t, got.WorkingSnapshots)
+		require.Len(t, got.PastSnapshots, 2)
+		assert.Equal(t, "digraph { A; }", got.PastSnapshots[0].DOT)
+		assert.Equal(t, "digraph { B; }", got.PastSnapshots[1].DOT)
+		assert.Equal(t, got.PastSnapshots[1].ID, got.LatestPastID)
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for second reset payload")
 	}
 }
 
@@ -224,10 +259,12 @@ func TestHandleSSE_StreamsJSONPayload(t *testing.T) {
 
 	var payload graphStreamPayload
 	require.NoError(t, decodeSSEPayload(body, &payload))
-	require.Len(t, payload.Snapshots, 2)
-	assert.Equal(t, "digraph { A; }", payload.Snapshots[0].DOT)
-	assert.Equal(t, "digraph { B; }", payload.Snapshots[1].DOT)
-	assert.Equal(t, payload.Snapshots[1].ID, payload.LatestID)
+	require.Len(t, payload.WorkingSnapshots, 2)
+	assert.Equal(t, "digraph { A; }", payload.WorkingSnapshots[0].DOT)
+	assert.Equal(t, "digraph { B; }", payload.WorkingSnapshots[1].DOT)
+	assert.Equal(t, payload.WorkingSnapshots[1].ID, payload.LatestWorkingID)
+	assert.Empty(t, payload.PastSnapshots)
+	assert.Zero(t, payload.LatestPastID)
 }
 
 func decodeSSEPayload(body string, target any) error {
@@ -396,8 +433,10 @@ func TestPublishCurrentGraph_NoUncommittedChangesResetsSnapshots(t *testing.T) {
 
 	select {
 	case got := <-ch:
-		assert.Empty(t, got.Snapshots)
-		assert.Zero(t, got.LatestID)
+		assert.Empty(t, got.WorkingSnapshots)
+		assert.Empty(t, got.PastSnapshots)
+		assert.Zero(t, got.LatestWorkingID)
+		assert.Zero(t, got.LatestPastID)
 	case <-time.After(time.Second):
 		t.Fatal("timed out waiting for reset publish")
 	}
