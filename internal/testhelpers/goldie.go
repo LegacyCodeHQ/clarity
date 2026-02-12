@@ -18,6 +18,10 @@ func TextGoldie(t *testing.T) *goldie.Goldie {
 	return goldieWithExtension(t, "txt")
 }
 
+func JSONGoldie(t *testing.T) *goldie.Goldie {
+	return goldieWithExtension(t, "json")
+}
+
 // goldieWithExtension creates a Goldie instance with a golden file suffix.
 func goldieWithExtension(t *testing.T, suffix string) *goldie.Goldie {
 	t.Helper()

@@ -131,12 +131,12 @@ func TestDiffCommandAcceptsSummaryFlag(t *testing.T) {
 	}
 }
 
-func TestRenderDelta_UnknownFormat(t *testing.T) {
+func TestRenderDelta_UnsupportedFormat(t *testing.T) {
 	_, err := renderDelta("json", graphDelta{})
 	if err == nil {
-		t.Fatal("expected unknown format error")
+		t.Fatal("expected unsupported format error")
 	}
-	if !strings.Contains(err.Error(), "unknown format") {
+	if !strings.Contains(err.Error(), "not supported for diff") {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }

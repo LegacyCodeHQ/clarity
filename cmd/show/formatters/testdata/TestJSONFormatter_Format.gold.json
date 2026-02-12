@@ -1,0 +1,30 @@
+{
+  "label": "test-label",
+  "nodes": [
+    {
+      "path": "/project/main.go",
+      "name": "main.go",
+      "isTest": false,
+      "extension": ".go",
+      "stats": {
+        "additions": 3,
+        "deletions": 1,
+        "isNew": false
+      }
+    },
+    {
+      "path": "/project/utils.go",
+      "name": "utils.go",
+      "isTest": false,
+      "extension": ".go"
+    }
+  ],
+  "edges": [
+    {
+      "from": "/project/main.go",
+      "to": "/project/utils.go",
+      "inCycle": false
+    }
+  ],
+  "cycles": []
+}

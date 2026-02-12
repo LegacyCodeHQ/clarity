@@ -9,6 +9,7 @@ func TestOutputFormat_String(t *testing.T) {
 	}{
 		{OutputFormatDOT, "dot"},
 		{OutputFormatMermaid, "mermaid"},
+		{OutputFormatJSON, "json"},
 		{endOfSupportedFormatsMarker, "unknown"},
 		{OutputFormat(99), "unknown"},
 	}
@@ -30,10 +31,12 @@ func TestParseOutputFormat(t *testing.T) {
 	}{
 		{"dot", OutputFormatDOT, true},
 		{"mermaid", OutputFormatMermaid, true},
+		{"json", OutputFormatJSON, true},
 		{"invalid", OutputFormatDOT, false},
 		{"", OutputFormatDOT, false},
 		{"DOT", OutputFormatDOT, true},         // case-insensitive
 		{"MERmaid", OutputFormatMermaid, true}, // case-insensitive
+		{"JSON", OutputFormatJSON, true},       // case-insensitive
 	}
 
 	for _, tt := range tests {
@@ -48,7 +51,7 @@ func TestParseOutputFormat(t *testing.T) {
 
 func TestSupportedFormats(t *testing.T) {
 	got := SupportedFormats()
-	expected := "dot, mermaid"
+	expected := "dot, mermaid, json"
 
 	if got != expected {
 		t.Errorf("SupportedFormats() = %q, want %q", got, expected)
@@ -57,7 +60,7 @@ func TestSupportedFormats(t *testing.T) {
 
 func TestSupportedFormatsCount(t *testing.T) {
 	// Verify the count matches the number of formats
-	expectedCount := 2
+	expectedCount := 3
 	if int(endOfSupportedFormatsMarker) != expectedCount {
 		t.Errorf("endOfSupportedFormatsMarker = %d, want %d", endOfSupportedFormatsMarker, expectedCount)
 	}

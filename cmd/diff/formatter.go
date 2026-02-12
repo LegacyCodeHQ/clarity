@@ -27,6 +27,8 @@ func NewDiffFormatter(format string) (Formatter, error) {
 		return dotDiffFormatter{}, nil
 	case formatters.OutputFormatMermaid:
 		return mermaidDiffFormatter{}, nil
+	case formatters.OutputFormatJSON:
+		return nil, fmt.Errorf("json format is not supported for diff (valid options: dot, mermaid)")
 	default:
 		return nil, fmt.Errorf("unknown format: %s (valid options: %s)", format, formatters.SupportedFormats())
 	}
