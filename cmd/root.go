@@ -53,9 +53,9 @@ func init() {
 	rootCmd.AddCommand(show.Cmd)
 	rootCmd.AddCommand(languages.Cmd)
 	rootCmd.AddCommand(setupcmd.Cmd)
+	rootCmd.AddCommand(watchcmd.Cmd)
 	if isDevelopmentBuild(enableDevCommands) {
 		rootCmd.AddCommand(diffcmd.Cmd)
-		rootCmd.AddCommand(watchcmd.Cmd)
 		rootCmd.AddCommand(whycmd.Cmd)
 	}
 	rootCmd.CompletionOptions.DisableDefaultCmd = true
