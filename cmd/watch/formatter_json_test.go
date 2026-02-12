@@ -49,3 +49,20 @@ func TestJSONGraphFormatter_Format_TestFileAttribute(t *testing.T) {
 	g := testhelpers.JSONGoldie(t)
 	g.Assert(t, t.Name(), []byte(output))
 }
+
+func TestJSONGraphFormatter_Format_Cycles(t *testing.T) {
+	graph := testJSONFileGraph(t, map[string][]string{
+		"/project/a.go": {"/project/b.go"},
+		"/project/b.go": {"/project/c.go"},
+		"/project/c.go": {"/project/a.go"},
+		"/project/d.go": {"/project/e.go"},
+		"/project/e.go": {},
+	}, nil)
+
+	formatter := jsonGraphFormatter{}
+	output, err := formatter.Format(graph, "cycle-label")
+	require.NoError(t, err)
+
+	g := testhelpers.JSONGoldie(t)
+	g.Assert(t, t.Name(), []byte(output))
+}

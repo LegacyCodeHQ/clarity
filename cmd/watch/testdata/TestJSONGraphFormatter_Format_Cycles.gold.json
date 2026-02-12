@@ -1,0 +1,56 @@
+{
+  "label": "cycle-label",
+  "nodes": [
+    {
+      "path": "/project/a.go",
+      "name": "a.go"
+    },
+    {
+      "path": "/project/b.go",
+      "name": "b.go"
+    },
+    {
+      "path": "/project/c.go",
+      "name": "c.go"
+    },
+    {
+      "path": "/project/d.go",
+      "name": "d.go"
+    },
+    {
+      "path": "/project/e.go",
+      "name": "e.go"
+    }
+  ],
+  "edges": [
+    {
+      "from": "/project/a.go",
+      "to": "/project/b.go",
+      "inCycle": true
+    },
+    {
+      "from": "/project/b.go",
+      "to": "/project/c.go",
+      "inCycle": true
+    },
+    {
+      "from": "/project/c.go",
+      "to": "/project/a.go",
+      "inCycle": true
+    },
+    {
+      "from": "/project/d.go",
+      "to": "/project/e.go",
+      "inCycle": false
+    }
+  ],
+  "cycles": [
+    {
+      "path": [
+        "/project/a.go",
+        "/project/b.go",
+        "/project/c.go"
+      ]
+    }
+  ]
+}
