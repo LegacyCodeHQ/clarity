@@ -128,6 +128,64 @@ func TestWhyCommand_MermaidFormat(t *testing.T) {
 	}
 }
 
+func TestWhyCommand_TextDirectDependency_CJS(t *testing.T) {
+	repoDir := t.TempDir()
+	fromPath := filepath.Join(repoDir, "from.cjs")
+	toPath := filepath.Join(repoDir, "to.cjs")
+
+	from := "const { x } = require('./to.cjs')\nfunction run() { return x() }\nmodule.exports = { run }\n"
+	to := "function x() { return 1 }\nmodule.exports = { x }\n"
+
+	if err := os.WriteFile(fromPath, []byte(from), 0o644); err != nil {
+		t.Fatalf("os.WriteFile() error = %v", err)
+	}
+	if err := os.WriteFile(toPath, []byte(to), 0o644); err != nil {
+		t.Fatalf("os.WriteFile() error = %v", err)
+	}
+
+	cmd := NewCommand()
+	cmd.SetArgs([]string{"-r", repoDir, "from.cjs", "to.cjs"})
+
+	var stdout bytes.Buffer
+	cmd.SetOut(&stdout)
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("cmd.Execute() error = %v", err)
+	}
+
+	output := stdout.String()
+	if !strings.Contains(output, "from.cjs depends on to.cjs") {
+		t.Fatalf("expected direct dependency in output, got:\n%s", output)
+	}
+	if strings.Contains(output, "members:") || strings.Contains(output, "calls:") {
+		t.Fatalf("did not expect member-level details for .cjs files, got:\n%s", output)
+	}
+}
+
+func TestFindReferencedMembers_CJSFiles_ReturnsNoUsageDetails(t *testing.T) {
+	dir := t.TempDir()
+	fromPath := filepath.Join(dir, "source.cjs")
+	toPath := filepath.Join(dir, "target.cjs")
+
+	from := "const { parse } = require('./target.cjs')\nfunction run() { return parse() }\nmodule.exports = { run }\n"
+	to := "function parse() { return true }\nmodule.exports = { parse }\n"
+
+	if err := os.WriteFile(fromPath, []byte(from), 0o644); err != nil {
+		t.Fatalf("os.WriteFile() error = %v", err)
+	}
+	if err := os.WriteFile(toPath, []byte(to), 0o644); err != nil {
+		t.Fatalf("os.WriteFile() error = %v", err)
+	}
+
+	members, err := findReferencedMembers(fromPath, toPath)
+	if err != nil {
+		t.Fatalf("findReferencedMembers() error = %v", err)
+	}
+	if len(members) > 0 {
+		t.Fatalf("expected no member usage details for .cjs files, got %#v", members)
+	}
+}
+
 func TestFindReferencedMembers_GoFiles_ReturnsUsageDetails(t *testing.T) {
 	dir := t.TempDir()
 	fromPath := filepath.Join(dir, "source_test.go")
