@@ -2,24 +2,35 @@ package watch
 
 import (
 	"fmt"
-	"os"
 	"path/filepath"
 	"strings"
 
 	"github.com/LegacyCodeHQ/clarity/cmd/show/formatters"
 	"github.com/LegacyCodeHQ/clarity/depgraph"
-	"github.com/LegacyCodeHQ/clarity/depgraph/registry"
 	"github.com/LegacyCodeHQ/clarity/vcs"
+	"github.com/LegacyCodeHQ/clarity/vcs/git"
 )
 
 func buildDOTGraph(repoPath string, opts *watchOptions) (string, error) {
-	filePaths, err := collectWatchFiles(repoPath, opts)
+	filePaths, err := git.GetUncommittedFiles(repoPath)
+	if err != nil {
+		return "", fmt.Errorf("failed to get uncommitted files: %w", err)
+	}
+
+	if len(filePaths) == 0 {
+		return "", errNoUncommittedChanges
+	}
+
+	filePaths, err = applyWatchExtensionFilters(opts, filePaths)
 	if err != nil {
 		return "", err
 	}
 
-	if len(filePaths) == 0 {
-		return "", fmt.Errorf("no supported files found in %s", repoPath)
+	if len(opts.excludes) > 0 {
+		filePaths, err = applyWatchExcludeFilter(opts, filePaths)
+		if err != nil {
+			return "", err
+		}
 	}
 
 	contentReader := vcs.FilesystemContentReader()
@@ -29,7 +40,9 @@ func buildDOTGraph(repoPath string, opts *watchOptions) (string, error) {
 		return "", fmt.Errorf("failed to build dependency graph: %w", err)
 	}
 
-	fileGraph, err := depgraph.NewFileDependencyGraph(graph, nil, contentReader)
+	fileStats, _ := git.GetUncommittedFileStats(repoPath)
+
+	fileGraph, err := depgraph.NewFileDependencyGraph(graph, fileStats, contentReader)
 	if err != nil {
 		return "", fmt.Errorf("failed to build file graph metadata: %w", err)
 	}
@@ -46,66 +59,7 @@ func buildDOTGraph(repoPath string, opts *watchOptions) (string, error) {
 	return formatter.Format(fileGraph, renderOpts)
 }
 
-func collectWatchFiles(repoPath string, opts *watchOptions) ([]string, error) {
-	var roots []string
-	if len(opts.includes) > 0 {
-		for _, include := range opts.includes {
-			absInclude, err := filepath.Abs(include)
-			if err != nil {
-				return nil, fmt.Errorf("failed to resolve input path %q: %w", include, err)
-			}
-			roots = append(roots, absInclude)
-		}
-	} else {
-		roots = []string{repoPath}
-	}
-
-	var filePaths []string
-	for _, root := range roots {
-		info, err := os.Stat(root)
-		if err != nil {
-			return nil, fmt.Errorf("failed to access %s: %w", root, err)
-		}
-
-		if info.IsDir() {
-			err := filepath.Walk(root, func(path string, fi os.FileInfo, walkErr error) error {
-				if walkErr != nil {
-					return walkErr
-				}
-				if fi.IsDir() {
-					if skippedDirs[fi.Name()] {
-						return filepath.SkipDir
-					}
-					return nil
-				}
-				ext := filepath.Ext(path)
-				if registry.IsSupportedLanguageExtension(ext) {
-					filePaths = append(filePaths, path)
-				}
-				return nil
-			})
-			if err != nil {
-				return nil, fmt.Errorf("failed to walk directory %s: %w", root, err)
-			}
-		} else {
-			filePaths = append(filePaths, root)
-		}
-	}
-
-	filePaths, err := applyWatchExtensionFilters(opts, filePaths)
-	if err != nil {
-		return nil, err
-	}
-
-	if len(opts.excludes) > 0 {
-		filePaths, err = applyWatchExcludeFilter(opts, filePaths)
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	return filePaths, nil
-}
+var errNoUncommittedChanges = fmt.Errorf("no uncommitted changes")
 
 func applyWatchExtensionFilters(opts *watchOptions, filePaths []string) ([]string, error) {
 	if opts.includeExt != "" {

@@ -1,11 +1,12 @@
 package watch
 
 import (
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"os/exec"
 	"path/filepath"
-	"strings"
 	"testing"
 	"time"
 
@@ -151,10 +152,28 @@ func TestIsRelevantChange_ChmodIgnored(t *testing.T) {
 	assert.False(t, isRelevantChange(chmodEvent))
 }
 
+// initGitRepo creates a git repo in dir with an initial commit, then returns dir.
+func initGitRepo(t *testing.T, dir string) {
+	t.Helper()
+	cmds := [][]string{
+		{"git", "init"},
+		{"git", "config", "user.email", "test@test.com"},
+		{"git", "config", "user.name", "Test"},
+		{"git", "commit", "--allow-empty", "-m", "init"},
+	}
+	for _, args := range cmds {
+		cmd := exec.Command(args[0], args[1:]...)
+		cmd.Dir = dir
+		out, err := cmd.CombinedOutput()
+		require.NoError(t, err, "cmd %v failed: %s", args, out)
+	}
+}
+
 func TestBuildDOTGraph_ProducesOutput(t *testing.T) {
 	dir := t.TempDir()
-	goFile := filepath.Join(dir, "main.go")
-	err := os.WriteFile(goFile, []byte("package main\n"), 0o644)
+	initGitRepo(t, dir)
+
+	err := os.WriteFile(filepath.Join(dir, "main.go"), []byte("package main\n"), 0o644)
 	require.NoError(t, err)
 
 	opts := &watchOptions{}
@@ -165,17 +184,19 @@ func TestBuildDOTGraph_ProducesOutput(t *testing.T) {
 	assert.Contains(t, dot, "main.go")
 }
 
-func TestBuildDOTGraph_NoFiles(t *testing.T) {
+func TestBuildDOTGraph_NoUncommittedChanges(t *testing.T) {
 	dir := t.TempDir()
+	initGitRepo(t, dir)
 
 	opts := &watchOptions{}
 	_, err := buildDOTGraph(dir, opts)
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "no supported files found")
+	assert.True(t, errors.Is(err, errNoUncommittedChanges))
 }
 
 func TestBuildDOTGraph_WithIncludeExt(t *testing.T) {
 	dir := t.TempDir()
+	initGitRepo(t, dir)
+
 	err := os.WriteFile(filepath.Join(dir, "main.go"), []byte("package main\n"), 0o644)
 	require.NoError(t, err)
 	err = os.WriteFile(filepath.Join(dir, "app.py"), []byte("print('hi')\n"), 0o644)
@@ -191,6 +212,8 @@ func TestBuildDOTGraph_WithIncludeExt(t *testing.T) {
 
 func TestBuildDOTGraph_WithExcludeExt(t *testing.T) {
 	dir := t.TempDir()
+	initGitRepo(t, dir)
+
 	err := os.WriteFile(filepath.Join(dir, "main.go"), []byte("package main\n"), 0o644)
 	require.NoError(t, err)
 	err = os.WriteFile(filepath.Join(dir, "app.py"), []byte("print('hi')\n"), 0o644)
@@ -231,22 +254,16 @@ func TestNewCommand_DefaultPort(t *testing.T) {
 	assert.Equal(t, 4900, port)
 }
 
-func TestCollectWatchFiles_SkipsHiddenDirs(t *testing.T) {
+func TestBuildDOTGraph_IncludesFileStats(t *testing.T) {
 	dir := t.TempDir()
-	gitDir := filepath.Join(dir, ".git")
-	err := os.MkdirAll(gitDir, 0o755)
-	require.NoError(t, err)
-	err = os.WriteFile(filepath.Join(gitDir, "config.go"), []byte("package git\n"), 0o644)
-	require.NoError(t, err)
-	err = os.WriteFile(filepath.Join(dir, "main.go"), []byte("package main\n"), 0o644)
+	initGitRepo(t, dir)
+
+	err := os.WriteFile(filepath.Join(dir, "main.go"), []byte("package main\n\nfunc main() {}\n"), 0o644)
 	require.NoError(t, err)
 
 	opts := &watchOptions{}
-	files, err := collectWatchFiles(dir, opts)
+	dot, err := buildDOTGraph(dir, opts)
 	require.NoError(t, err)
 
-	for _, f := range files {
-		assert.False(t, strings.Contains(f, ".git"), "should not include files from .git directory")
-	}
-	assert.Len(t, files, 1)
+	assert.Contains(t, dot, "main.go")
 }

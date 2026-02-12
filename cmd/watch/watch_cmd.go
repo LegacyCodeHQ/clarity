@@ -2,6 +2,7 @@ package watch
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net"
 	"os"
@@ -61,11 +62,6 @@ func runWatch(cmd *cobra.Command, opts *watchOptions) error {
 	}
 	repoPath = absRepoPath
 
-	dot, err := buildDOTGraph(repoPath, opts)
-	if err != nil {
-		return fmt.Errorf("initial graph build failed: %w", err)
-	}
-
 	b := newBroker()
 	srv := newServer(b, opts.port)
 
@@ -79,7 +75,14 @@ func runWatch(cmd *cobra.Command, opts *watchOptions) error {
 
 	go srv.Serve(ln)
 
-	b.publish(dot)
+	dot, err := buildDOTGraph(repoPath, opts)
+	if errors.Is(err, errNoUncommittedChanges) {
+		fmt.Fprintf(cmd.OutOrStdout(), "No uncommitted changes yet, waiting for file changes...\n")
+	} else if err != nil {
+		return fmt.Errorf("initial graph build failed: %w", err)
+	} else {
+		b.publish(dot)
+	}
 
 	fmt.Fprintf(cmd.OutOrStdout(), "Watching %s\n", repoPath)
 	fmt.Fprintf(cmd.OutOrStdout(), "Serving at http://localhost:%d\n", opts.port)

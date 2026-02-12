@@ -2,6 +2,7 @@ package watch
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -59,6 +60,9 @@ func watchAndRebuild(ctx context.Context, repoPath string, opts *watchOptions, b
 			}
 			debounceTimer = time.AfterFunc(debounceInterval, func() {
 				dot, err := buildDOTGraph(repoPath, opts)
+				if errors.Is(err, errNoUncommittedChanges) {
+					return
+				}
 				if err != nil {
 					fmt.Fprintf(os.Stderr, "graph rebuild error: %v\n", err)
 					return
