@@ -54,6 +54,37 @@
       color: #666;
       font-size: 14px;
     }
+    #timeline {
+      padding: 10px 16px;
+      background: #16213e;
+      border-top: 1px solid #0f3460;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 12px;
+    }
+    #timeline input[type="range"] {
+      flex: 1;
+      min-width: 120px;
+    }
+    #timeline button {
+      background: #1f3f73;
+      color: #e0e0e0;
+      border: 1px solid #2f5ea4;
+      border-radius: 4px;
+      padding: 4px 8px;
+      cursor: pointer;
+      font-size: 12px;
+    }
+    #timeline button:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+    #timeline-meta {
+      min-width: 120px;
+      text-align: right;
+      color: #9eb2d3;
+    }
   </style>
 </head>
 <body>
@@ -67,6 +98,12 @@
   <div id="graph-container">
     <p id="placeholder">Waiting for graph data...</p>
   </div>
+  <div id="timeline">
+    <span id="timeline-mode">Latest</span>
+    <input id="timeline-slider" type="range" min="0" max="0" value="0" disabled />
+    <button id="timeline-live" disabled>Jump to latest</button>
+    <span id="timeline-meta">0 snapshots</span>
+  </div>
 
   <script type="module">
     import { Graphviz } from "https://cdn.jsdelivr.net/npm/@hpcc-js/wasm-graphviz@1.6.1/dist/index.js";
@@ -75,6 +112,13 @@
     const container = document.getElementById("graph-container");
     const statusEl = document.getElementById("status");
     const statusText = document.getElementById("status-text");
+    const sliderEl = document.getElementById("timeline-slider");
+    const liveBtnEl = document.getElementById("timeline-live");
+    const modeEl = document.getElementById("timeline-mode");
+    const metaEl = document.getElementById("timeline-meta");
+
+    let snapshots = [];
+    let manualMode = false;
 
     function renderGraph(dot) {
       try {
@@ -88,11 +132,83 @@
       }
     }
 
+    function formatSnapshotMeta(snapshot, index) {
+      const time = new Date(snapshot.timestamp);
+      return `#${index + 1} ${time.toLocaleTimeString()}`;
+    }
+
+    function syncTimelineUI() {
+      const total = snapshots.length;
+      sliderEl.disabled = total <= 1;
+      sliderEl.max = total > 0 ? String(total - 1) : "0";
+
+      if (!manualMode && total > 0) {
+        sliderEl.value = String(total - 1);
+      }
+
+      const selected = Number(sliderEl.value || "0");
+      const snapshot = snapshots[selected];
+      const modeText = manualMode ? "Snapshot" : "Latest";
+      modeEl.textContent = modeText;
+      liveBtnEl.disabled = !manualMode || total === 0;
+
+      if (snapshot) {
+        metaEl.textContent = `${total} snapshots | ${formatSnapshotMeta(snapshot, selected)}`;
+      } else {
+        metaEl.textContent = "0 snapshots";
+      }
+    }
+
+    function renderSelectedSnapshot() {
+      if (snapshots.length === 0) {
+        return;
+      }
+      const idx = manualMode ? Number(sliderEl.value || "0") : snapshots.length - 1;
+      const snapshot = snapshots[idx];
+      if (!snapshot) {
+        return;
+      }
+      renderGraph(snapshot.dot);
+      syncTimelineUI();
+    }
+
+    function mergePayload(payload) {
+      snapshots = payload.snapshots || [];
+
+      if (!manualMode) {
+        renderSelectedSnapshot();
+        return;
+      }
+
+      const maxIdx = Math.max(snapshots.length - 1, 0);
+      sliderEl.value = String(Math.min(Number(sliderEl.value || "0"), maxIdx));
+      renderSelectedSnapshot();
+    }
+
+    sliderEl.addEventListener("input", function() {
+      if (snapshots.length === 0) {
+        return;
+      }
+      manualMode = true;
+      renderSelectedSnapshot();
+    });
+
+    liveBtnEl.addEventListener("click", function() {
+      manualMode = false;
+      renderSelectedSnapshot();
+    });
+
     function connectSSE() {
       const source = new EventSource("/events");
 
       source.addEventListener("graph", function(event) {
-        renderGraph(event.data);
+        try {
+          const payload = JSON.parse(event.data);
+          mergePayload(payload);
+        } catch (err) {
+          console.error("Invalid graph payload:", err);
+          statusText.textContent = "Payload error";
+        }
       });
 
       source.addEventListener("open", function() {

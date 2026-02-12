@@ -1,37 +1,54 @@
 package watch
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"strings"
 	"sync"
+	"time"
 )
 
-// broker manages SSE client connections and broadcasts DOT strings.
+const maxSnapshots = 250
+
+type graphSnapshot struct {
+	ID        int64     `json:"id"`
+	Timestamp time.Time `json:"timestamp"`
+	DOT       string    `json:"dot"`
+}
+
+type graphStreamPayload struct {
+	Snapshots []graphSnapshot `json:"snapshots"`
+	LatestID  int64           `json:"latestId"`
+}
+
+// broker manages SSE client connections and broadcasts graph snapshots.
 type broker struct {
 	mu      sync.Mutex
-	clients map[chan string]struct{}
-	latest  string
+	clients map[chan graphStreamPayload]struct{}
+	history []graphSnapshot
+	nextID  int64
 }
 
 func newBroker() *broker {
 	return &broker{
-		clients: make(map[chan string]struct{}),
+		clients: make(map[chan graphStreamPayload]struct{}),
 	}
 }
 
-func (b *broker) subscribe() chan string {
-	ch := make(chan string, 1)
+func (b *broker) subscribe() chan graphStreamPayload {
+	ch := make(chan graphStreamPayload, 1)
 	b.mu.Lock()
 	b.clients[ch] = struct{}{}
-	if b.latest != "" {
-		ch <- b.latest
+	payload, ok := b.currentPayloadLocked()
+	if ok {
+		ch <- payload
 	}
 	b.mu.Unlock()
 	return ch
 }
 
-func (b *broker) unsubscribe(ch chan string) {
+func (b *broker) unsubscribe(ch chan graphStreamPayload) {
 	b.mu.Lock()
 	delete(b.clients, ch)
 	close(ch)
@@ -40,14 +57,43 @@ func (b *broker) unsubscribe(ch chan string) {
 
 func (b *broker) publish(dot string) {
 	b.mu.Lock()
-	b.latest = dot
+	if len(b.history) > 0 && b.history[len(b.history)-1].DOT == dot {
+		b.mu.Unlock()
+		return
+	}
+
+	b.nextID++
+	b.history = append(b.history, graphSnapshot{
+		ID:        b.nextID,
+		Timestamp: time.Now().UTC(),
+		DOT:       dot,
+	})
+	if len(b.history) > maxSnapshots {
+		b.history = b.history[len(b.history)-maxSnapshots:]
+	}
+
+	payload, _ := b.currentPayloadLocked()
 	for ch := range b.clients {
 		select {
-		case ch <- dot:
+		case ch <- payload:
 		default:
 		}
 	}
 	b.mu.Unlock()
+}
+
+func (b *broker) currentPayloadLocked() (graphStreamPayload, bool) {
+	if len(b.history) == 0 {
+		return graphStreamPayload{}, false
+	}
+
+	snapshots := make([]graphSnapshot, len(b.history))
+	copy(snapshots, b.history)
+
+	return graphStreamPayload{
+		Snapshots: snapshots,
+		LatestID:  b.history[len(b.history)-1].ID,
+	}, true
 }
 
 func newServer(b *broker, port int) *http.Server {
@@ -88,12 +134,16 @@ func handleSSE(b *broker) http.HandlerFunc {
 			select {
 			case <-ctx.Done():
 				return
-			case dot, ok := <-ch:
+			case payload, ok := <-ch:
 				if !ok {
 					return
 				}
+				body, err := json.Marshal(payload)
+				if err != nil {
+					continue
+				}
 				fmt.Fprintf(w, "event: graph\n")
-				for _, line := range strings.Split(dot, "\n") {
+				for _, line := range strings.Split(string(body), "\n") {
 					fmt.Fprintf(w, "data: %s\n", line)
 				}
 				fmt.Fprintf(w, "\n")

@@ -1,6 +1,7 @@
 package watch
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net"
@@ -9,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -26,7 +28,9 @@ func TestBroker_PublishAndSubscribe(t *testing.T) {
 
 	select {
 	case got := <-ch:
-		assert.Equal(t, "digraph { A -> B; }", got)
+		require.Len(t, got.Snapshots, 1)
+		assert.Equal(t, "digraph { A -> B; }", got.Snapshots[0].DOT)
+		assert.Equal(t, got.Snapshots[0].ID, got.LatestID)
 	case <-time.After(time.Second):
 		t.Fatal("timed out waiting for message")
 	}
@@ -41,7 +45,9 @@ func TestBroker_NewSubscriberReceivesLatest(t *testing.T) {
 
 	select {
 	case got := <-ch:
-		assert.Equal(t, "digraph { X -> Y; }", got)
+		require.Len(t, got.Snapshots, 1)
+		assert.Equal(t, "digraph { X -> Y; }", got.Snapshots[0].DOT)
+		assert.Equal(t, got.Snapshots[0].ID, got.LatestID)
 	case <-time.After(time.Second):
 		t.Fatal("timed out waiting for latest graph")
 	}
@@ -58,14 +64,16 @@ func TestBroker_MultipleSubscribers(t *testing.T) {
 
 	select {
 	case got := <-ch1:
-		assert.Equal(t, "digraph { A; }", got)
+		require.Len(t, got.Snapshots, 1)
+		assert.Equal(t, "digraph { A; }", got.Snapshots[0].DOT)
 	case <-time.After(time.Second):
 		t.Fatal("ch1: timed out")
 	}
 
 	select {
 	case got := <-ch2:
-		assert.Equal(t, "digraph { A; }", got)
+		require.Len(t, got.Snapshots, 1)
+		assert.Equal(t, "digraph { A; }", got.Snapshots[0].DOT)
 	case <-time.After(time.Second):
 		t.Fatal("ch2: timed out")
 	}
@@ -104,7 +112,7 @@ func TestHandleSSE_StreamsGraphEvent(t *testing.T) {
 	body := string(buf[:n])
 
 	assert.Contains(t, body, "event: graph")
-	assert.Contains(t, body, "data: digraph { test; }")
+	assert.Contains(t, body, "\"dot\":\"digraph { test; }\"")
 }
 
 func TestHandleSSE_MultiLineData(t *testing.T) {
@@ -125,9 +133,68 @@ func TestHandleSSE_MultiLineData(t *testing.T) {
 	n, _ := resp.Body.Read(buf)
 	body := string(buf[:n])
 
-	assert.Contains(t, body, "data: digraph {")
-	assert.Contains(t, body, "data:   A -> B;")
-	assert.Contains(t, body, "data: }")
+	assert.Contains(t, body, "event: graph")
+
+	var payload graphStreamPayload
+	require.NoError(t, decodeSSEPayload(body, &payload))
+	require.Len(t, payload.Snapshots, 1)
+	assert.Equal(t, multiLine, payload.Snapshots[0].DOT)
+}
+
+func TestBroker_PublishSkipsDuplicateSnapshots(t *testing.T) {
+	b := newBroker()
+	ch := b.subscribe()
+	defer b.unsubscribe(ch)
+
+	b.publish("digraph { A -> B; }")
+	<-ch
+
+	b.publish("digraph { A -> B; }")
+
+	select {
+	case <-ch:
+		t.Fatal("unexpected duplicate snapshot publish")
+	case <-time.After(100 * time.Millisecond):
+	}
+}
+
+func TestHandleSSE_StreamsJSONPayload(t *testing.T) {
+	b := newBroker()
+	b.publish("digraph { A; }")
+	b.publish("digraph { B; }")
+
+	handler := handleSSE(b)
+	server := httptest.NewServer(handler)
+	defer server.Close()
+
+	resp, err := http.Get(server.URL)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	buf := make([]byte, 4096)
+	n, _ := resp.Body.Read(buf)
+	body := string(buf[:n])
+
+	var payload graphStreamPayload
+	require.NoError(t, decodeSSEPayload(body, &payload))
+	require.Len(t, payload.Snapshots, 2)
+	assert.Equal(t, "digraph { A; }", payload.Snapshots[0].DOT)
+	assert.Equal(t, "digraph { B; }", payload.Snapshots[1].DOT)
+	assert.Equal(t, payload.Snapshots[1].ID, payload.LatestID)
+}
+
+func decodeSSEPayload(body string, target any) error {
+	dataLine := ""
+	for _, line := range strings.Split(body, "\n") {
+		if strings.HasPrefix(line, "data: ") {
+			dataLine = strings.TrimPrefix(line, "data: ")
+			break
+		}
+	}
+	if dataLine == "" {
+		return fmt.Errorf("missing data line in SSE body")
+	}
+	return json.Unmarshal([]byte(dataLine), target)
 }
 
 func TestIsRelevantChange_SupportedExtension(t *testing.T) {
@@ -282,7 +349,9 @@ func TestPublishCurrentGraph_NoUncommittedChangesPublishesEmptyGraph(t *testing.
 
 	select {
 	case got := <-ch:
-		assert.Equal(t, emptyDOTGraph, got)
+		require.Len(t, got.Snapshots, 1)
+		assert.Equal(t, emptyDOTGraph, got.Snapshots[0].DOT)
+		assert.Equal(t, got.Snapshots[0].ID, got.LatestID)
 	case <-time.After(time.Second):
 		t.Fatal("timed out waiting for empty graph publish")
 	}
