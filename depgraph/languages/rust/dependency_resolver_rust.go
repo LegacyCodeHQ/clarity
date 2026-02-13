@@ -1,6 +1,7 @@
 package rust
 
 import (
+	"bufio"
 	"fmt"
 	"path/filepath"
 	"strings"
@@ -61,6 +62,8 @@ func resolveRustUsePath(sourceFile, importPath string, suppliedFiles map[string]
 
 	parts := strings.Split(path, "::")
 	baseDir := ""
+	crateRoot := ""
+	rootedInLocalCrate := false
 
 	switch parts[0] {
 	case "crate":
@@ -68,7 +71,9 @@ func resolveRustUsePath(sourceFile, importPath string, suppliedFiles map[string]
 		if !ok {
 			return nil
 		}
+		crateRoot = root
 		baseDir = filepath.Join(root, "src")
+		rootedInLocalCrate = true
 		parts = parts[1:]
 	case "self", "super":
 		baseDir = filepath.Dir(sourceFile)
@@ -84,11 +89,21 @@ func resolveRustUsePath(sourceFile, importPath string, suppliedFiles map[string]
 			}
 		}
 	default:
-		// Likely external crate or standard library.
-		return nil
+		root, ok := findRustCrateRoot(sourceFile, suppliedFiles, contentReader)
+		if !ok || !isLocalRustCrateImport(parts[0], root, contentReader) {
+			// Likely external crate or standard library.
+			return nil
+		}
+		crateRoot = root
+		baseDir = filepath.Join(root, "src")
+		rootedInLocalCrate = true
+		parts = parts[1:]
 	}
 
 resolved:
+	if len(parts) == 0 && rootedInLocalCrate {
+		return resolveRustCrateRootCandidates(crateRoot, suppliedFiles)
+	}
 	if len(parts) == 0 {
 		return nil
 	}
@@ -97,8 +112,18 @@ resolved:
 	if len(parts) > 1 {
 		candidates = append(candidates, resolveRustModuleCandidates(baseDir, parts[:len(parts)-1], suppliedFiles)...)
 	}
+	if rootedInLocalCrate && len(parts) == 1 {
+		candidates = append(candidates, resolveRustCrateRootCandidates(crateRoot, suppliedFiles)...)
+	}
 
 	return deduplicateSuppliedFiles(candidates, suppliedFiles)
+}
+
+func resolveRustCrateRootCandidates(crateRoot string, suppliedFiles map[string]bool) []string {
+	if crateRoot == "" {
+		return nil
+	}
+	return filterSuppliedFiles([]string{filepath.Join(crateRoot, "src", "lib.rs")}, suppliedFiles)
 }
 
 func resolveRustModuleCandidates(baseDir string, parts []string, suppliedFiles map[string]bool) []string {
@@ -134,6 +159,69 @@ func findRustCrateRoot(sourceFile string, suppliedFiles map[string]bool, content
 		dir = parent
 	}
 	return "", false
+}
+
+func isLocalRustCrateImport(firstSegment, crateRoot string, contentReader vcs.ContentReader) bool {
+	if firstSegment == "" || crateRoot == "" || contentReader == nil {
+		return false
+	}
+	cargoToml := filepath.Join(crateRoot, "Cargo.toml")
+	content, err := contentReader(cargoToml)
+	if err != nil {
+		return false
+	}
+	names := parseRustCrateNamesFromCargoToml(string(content))
+	return names[firstSegment]
+}
+
+func parseRustCrateNamesFromCargoToml(content string) map[string]bool {
+	names := make(map[string]bool)
+	section := ""
+	packageName := ""
+	libName := ""
+
+	scanner := bufio.NewScanner(strings.NewReader(content))
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		if strings.HasPrefix(line, "[") && strings.HasSuffix(line, "]") {
+			section = strings.TrimSpace(strings.Trim(line, "[]"))
+			continue
+		}
+
+		if !strings.HasPrefix(line, "name") {
+			continue
+		}
+		parts := strings.SplitN(line, "=", 2)
+		if len(parts) != 2 {
+			continue
+		}
+		value := strings.TrimSpace(parts[1])
+		value = strings.Trim(value, "\"")
+		if value == "" {
+			continue
+		}
+		switch section {
+		case "package":
+			packageName = value
+		case "lib":
+			libName = value
+		}
+	}
+
+	if libName != "" {
+		names[libName] = true
+	}
+	if packageName != "" {
+		names[normalizeCargoCrateName(packageName)] = true
+	}
+	return names
+}
+
+func normalizeCargoCrateName(name string) string {
+	return strings.ReplaceAll(name, "-", "_")
 }
 
 func filterSuppliedFiles(paths []string, suppliedFiles map[string]bool) []string {
