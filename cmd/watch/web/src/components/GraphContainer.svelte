@@ -39,38 +39,12 @@
   });
 </script>
 
-<div class="graph-container" bind:this={container}>
+<div class="flex-1 overflow-auto flex items-center justify-center p-4 bg-white [&_svg]:max-w-full [&_svg]:max-h-full" bind:this={container}>
   {#if !graphvizReady}
-    <p class="placeholder">Loading Graphviz...</p>
+    <p class="text-gray-600 text-sm">Loading Graphviz...</p>
   {:else if renderError}
-    <p class="placeholder error">{renderError}</p>
+    <p class="text-red-400 text-sm">{renderError}</p>
   {:else if !$viewModel.renderDot}
-    <p class="placeholder">Waiting for graph data...</p>
+    <p class="text-gray-600 text-sm">Waiting for graph data...</p>
   {/if}
 </div>
-
-<style>
-  .graph-container {
-    flex: 1;
-    overflow: auto;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 16px;
-    background: #ffffff;
-  }
-
-  .graph-container :global(svg) {
-    max-width: 100%;
-    max-height: 100%;
-  }
-
-  .placeholder {
-    color: #666;
-    font-size: 14px;
-  }
-
-  .placeholder.error {
-    color: #f87171;
-  }
-</style>

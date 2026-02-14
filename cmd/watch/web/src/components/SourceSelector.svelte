@@ -9,6 +9,7 @@
 
 <select
   id="snapshot-source"
+  class="bg-[#1f3f73] text-[#e0e0e0] border border-[#2f5ea4] rounded px-2 py-1 text-xs"
   value={$viewModel.sourceValue}
   onchange={handleChange}
 >
@@ -16,14 +17,3 @@
     <option value={option.value}>{option.text}</option>
   {/each}
 </select>
-
-<style>
-  select {
-    background: #1f3f73;
-    color: #e0e0e0;
-    border: 1px solid #2f5ea4;
-    border-radius: 4px;
-    padding: 4px 8px;
-    font-size: 12px;
-  }
-</style>

@@ -14,55 +14,13 @@
   );
 </script>
 
-<div class="header">
-  <span class="title">{pageTitle}</span>
-  <span class="status" class:disconnected={!connected}>
-    <span class="dot"></span>
-    <span class="status-text">{statusText}</span>
+<div class="px-4 py-2 bg-[#16213e] border-b border-[#0f3460] flex items-center gap-3 text-[13px]">
+  <span class="font-semibold">{pageTitle}</span>
+  <span class="inline-flex items-center gap-1.5">
+    <span class="w-2 h-2 rounded-full transition-colors duration-300" class:bg-green-400={connected} class:bg-red-400={!connected}></span>
+    <span>{statusText}</span>
   </span>
-  <span class="spacer"></span>
-  <label for="snapshot-source">View:</label>
+  <span class="flex-1"></span>
+  <label for="snapshot-source" class="text-xs">View:</label>
   <SourceSelector />
 </div>
-
-<style>
-  .header {
-    padding: 8px 16px;
-    background: #16213e;
-    border-bottom: 1px solid #0f3460;
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    font-size: 13px;
-  }
-
-  .title {
-    font-weight: 600;
-  }
-
-  .spacer {
-    flex: 1;
-  }
-
-  .status {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-  }
-
-  .dot {
-    width: 8px;
-    height: 8px;
-    border-radius: 50%;
-    background: #4ade80;
-    transition: background 0.3s;
-  }
-
-  .status.disconnected .dot {
-    background: #f87171;
-  }
-
-  label {
-    font-size: 12px;
-  }
-</style>

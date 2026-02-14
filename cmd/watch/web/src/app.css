@@ -1,2 +1,13 @@
-/* Global styles are defined in App.svelte */
-/* This file is kept for Vite convention */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  * {
+    @apply m-0 p-0 box-border;
+  }
+
+  body {
+    @apply font-sans bg-[#1a1a2e] text-[#e0e0e0] h-screen;
+  }
+}

@@ -47,29 +47,8 @@
   });
 </script>
 
-<div class="app">
+<div class="h-screen flex flex-col">
   <Header {pageTitle} {connected} />
   <GraphContainer />
   <Timeline />
 </div>
-
-<style>
-  :global(*) {
-    margin: 0;
-    padding: 0;
-    box-sizing: border-box;
-  }
-
-  :global(body) {
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-    background: #1a1a2e;
-    color: #e0e0e0;
-    height: 100vh;
-  }
-
-  .app {
-    height: 100vh;
-    display: flex;
-    flex-direction: column;
-  }
-</style>
