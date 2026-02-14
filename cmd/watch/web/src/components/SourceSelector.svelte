@@ -9,7 +9,7 @@
 
 <select
   id="snapshot-source"
-  class="bg-[#1f3f73] text-[#e0e0e0] border border-[#2f5ea4] rounded px-2 py-1 text-xs"
+  class="bg-secondary text-secondary-foreground border border-input rounded-md px-3 py-1.5 text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 transition-colors"
   value={$viewModel.sourceValue}
   onchange={handleChange}
 >

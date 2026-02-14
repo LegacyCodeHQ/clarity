@@ -47,7 +47,7 @@
   });
 </script>
 
-<div class="h-screen flex flex-col">
+<div class="h-screen flex flex-col bg-background">
   <Header {pageTitle} {connected} />
   <GraphContainer />
   <Timeline />
