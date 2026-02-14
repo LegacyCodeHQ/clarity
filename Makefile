@@ -87,7 +87,10 @@ test-update-golden:
 	go test ./tests/litmus/... ./tests/integration/graph/... ./tests/languagespecs/java/tests/... ./cmd/languages/... ./cmd/show/formatters/... ./cmd/watch/... ./cmd/why/... -args -update
 
 # Full product quality gate (used locally and in CI)
-check: lint test build-dev
+check:
+	$(MAKE) lint
+	$(MAKE) test
+	$(MAKE) build-dev
 
 # Run tests with coverage percentage (excludes cmd packages which have no tests)
 test-coverage:
