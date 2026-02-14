@@ -11,9 +11,6 @@ import (
 
 func TestProtocolConstants_AreStable(t *testing.T) {
 	assert.Equal(t, "/", routeIndex)
-	assert.Equal(t, "/viewer.js", routeViewerJS)
-	assert.Equal(t, "/viewer_state.mjs", routeViewerStateJS)
-	assert.Equal(t, "/viewer_protocol.mjs", routeViewerProtoJS)
 	assert.Equal(t, "/events", routeEvents)
 	assert.Equal(t, "graph", sseEventGraph)
 }

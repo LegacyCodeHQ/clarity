@@ -3,11 +3,8 @@ package watch
 import "time"
 
 const (
-	routeIndex         = "/"
-	routeViewerJS      = "/viewer.js"
-	routeViewerStateJS = "/viewer_state.mjs"
-	routeViewerProtoJS = "/viewer_protocol.mjs"
-	routeEvents        = "/events"
+	routeIndex  = "/"
+	routeEvents = "/events"
 )
 
 const sseEventGraph = "graph"

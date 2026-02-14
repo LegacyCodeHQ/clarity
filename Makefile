@@ -1,4 +1,4 @@
-.PHONY: test test-js test-update-golden test-coverage coverage coverage-html clean help build-dev release-check lint security housekeeping tools format
+.PHONY: test test-js test-update-golden test-coverage coverage coverage-html clean help build-dev release-check lint security housekeeping tools format install-web build-web test-web clean-web
 
 # Version information (can be overridden via command line)
 # Try to get version from git tag, otherwise use "dev"
@@ -20,15 +20,18 @@ help:
 	@echo "  lint               - Run golangci-lint"
 	@echo "  vulncheck          - Run govulncheck"
 	@echo "  housekeeping       - Run go mod tidy"
-	@echo "  test               - Run all tests"
-	@echo "  test-js            - Run JavaScript unit tests"
+	@echo "  test               - Run all tests (Go + frontend)"
+	@echo "  test-js            - Run JavaScript unit tests (legacy)"
+	@echo "  test-web           - Run frontend tests (Vitest)"
 	@echo "  test-update-golden - Update golden test fixtures"
 	@echo "  test-coverage      - Run tests with coverage percentage"
 	@echo "  coverage           - Generate coverage profile (coverage.out)"
 	@echo "  coverage-html      - Generate HTML coverage report (coverage.html)"
 	@echo ""
 	@echo "Building:"
-	@echo "  build-dev          - Build for current platform with CGO"
+	@echo "  install-web        - Install frontend dependencies"
+	@echo "  build-web          - Build frontend assets"
+	@echo "  build-dev          - Build for current platform with CGO (includes frontend)"
 	@echo ""
 	@echo "Releasing:"
 	@echo "  release-check      - Validate GoReleaser configuration"
@@ -69,10 +72,15 @@ housekeeping:
 # Run all tests
 test:
 	go test ./...
-	$(MAKE) test-js
+	$(MAKE) test-web
 
+# Legacy JS tests (will be removed after migration)
 test-js:
 	node --test cmd/watch/viewer_state.test.mjs cmd/watch/viewer_protocol.test.mjs
+
+# Frontend tests using Vitest
+test-web:
+	cd cmd/watch/web && npm test
 
 # Update golden test fixtures (only packages using goldie)
 test-update-golden:
@@ -98,9 +106,17 @@ coverage-html: coverage
 	go tool cover -html=coverage.out -o coverage.html
 	@echo "Coverage report generated: coverage.html"
 
+# Install frontend dependencies
+install-web:
+	cd cmd/watch/web && npm install
+
+# Build frontend assets
+build-web:
+	cd cmd/watch/web && npm run build
+
 # Build for current platform only (RECOMMENDED for local testing)
 # No cross-compilation, no GoReleaser, no Zig required
-build-dev:
+build-dev: build-web
 	@echo "Building for current platform with version: $(VERSION), commit: $(COMMIT)"
 	CGO_ENABLED=1 go build -ldflags "-s -w -X github.com/LegacyCodeHQ/clarity/cmd.version=$(VERSION) -X github.com/LegacyCodeHQ/clarity/cmd.buildDate=$(BUILD_DATE) -X github.com/LegacyCodeHQ/clarity/cmd.commit=$(COMMIT) -X github.com/LegacyCodeHQ/clarity/cmd.enableDevCommands=true" -o clarity ./main.go
 	@echo ""
@@ -110,7 +126,11 @@ build-dev:
 release-check:
 	goreleaser check
 
+# Clean frontend build artifacts
+clean-web:
+	rm -rf cmd/watch/web/node_modules cmd/watch/dist
+
 # Clean coverage files and binary
-clean:
+clean: clean-web
 	rm -f coverage.out coverage.html coverage.tmp *.coverprofile *.cover clarity
 	rm -rf dist/

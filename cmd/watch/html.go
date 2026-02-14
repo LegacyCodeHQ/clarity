@@ -1,15 +1,14 @@
 package watch
 
-import _ "embed"
+import (
+	"embed"
+	"io/fs"
+)
 
-//go:embed viewer.html
-var indexHTML string
+//go:embed dist
+var distFS embed.FS
 
-//go:embed viewer.js
-var viewerJS string
-
-//go:embed viewer_state.mjs
-var viewerStateJS string
-
-//go:embed viewer_protocol.mjs
-var viewerProtocolJS string
+// getDistFS returns the embedded dist directory as a filesystem.
+func getDistFS() (fs.FS, error) {
+	return fs.Sub(distFS, "dist")
+}

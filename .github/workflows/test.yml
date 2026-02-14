@@ -27,11 +27,27 @@ jobs:
           go-version: ${{ matrix.go-version }}
           cache-dependency-path: go.sum
 
-      - name: Download dependencies
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: cmd/watch/web/package-lock.json
+
+      - name: Download Go dependencies
         run: go mod download
 
-      - name: Verify dependencies
+      - name: Verify Go dependencies
         run: go mod verify
+
+      - name: Install frontend dependencies
+        run: make install-web
+
+      - name: Build frontend
+        run: make build-web
+
+      - name: Run frontend tests
+        run: make test-web
 
       - name: Run tests with coverage
         run: make test-coverage

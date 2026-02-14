@@ -18,6 +18,10 @@ coverage.tmp
 # goreleaser
 dist/
 
+# Frontend build artifacts
+cmd/watch/web/node_modules/
+cmd/watch/dist/
+
 # Beads
 .beads/bd.*
 

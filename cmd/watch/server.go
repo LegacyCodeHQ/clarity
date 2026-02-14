@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"html/template"
+	"io"
 	"net/http"
 	"path/filepath"
 	"strings"
@@ -15,8 +16,6 @@ import (
 const maxSnapshots = 250
 
 const watchPageTitleSuffix = "clarity watch"
-
-var indexTemplate = template.Must(template.New("watch-viewer").Parse(indexHTML))
 
 // broker manages SSE client connections and broadcasts graph snapshots.
 type broker struct {
@@ -188,10 +187,18 @@ func pushLatestPayload(ch chan graphStreamPayload, payload graphStreamPayload) {
 
 func newServer(b *broker, port int, repoPath string) *http.Server {
 	mux := http.NewServeMux()
+
+	// Serve index.html with page title injection
 	mux.HandleFunc(routeIndex, handleIndex(buildWatchPageTitle(repoPath)))
-	mux.HandleFunc(routeViewerJS, handleViewerJS)
-	mux.HandleFunc(routeViewerStateJS, handleViewerStateJS)
-	mux.HandleFunc(routeViewerProtoJS, handleViewerProtocolJS)
+
+	// Serve all static assets from embedded dist directory
+	distFS, err := getDistFS()
+	if err != nil {
+		panic(fmt.Sprintf("failed to get dist FS: %v", err))
+	}
+	mux.Handle("/assets/", http.FileServer(http.FS(distFS)))
+
+	// Serve SSE endpoint (unchanged)
 	mux.HandleFunc(routeEvents, handleSSE(b))
 
 	return &http.Server{
@@ -217,39 +224,46 @@ func handleIndex(pageTitle string) http.HandlerFunc {
 	}
 
 	return func(w http.ResponseWriter, _ *http.Request) {
+		// Read index.html from embedded dist directory
+		distFS, err := getDistFS()
+		if err != nil {
+			http.Error(w, "failed to load assets", http.StatusInternalServerError)
+			return
+		}
+
+		indexFile, err := distFS.Open("index.html")
+		if err != nil {
+			http.Error(w, "failed to load index.html", http.StatusInternalServerError)
+			return
+		}
+		defer indexFile.Close()
+
+		indexContent, err := io.ReadAll(indexFile)
+		if err != nil {
+			http.Error(w, "failed to read index.html", http.StatusInternalServerError)
+			return
+		}
+
+		// Execute template to inject page title
+		tmpl, err := template.New("index").Parse(string(indexContent))
+		if err != nil {
+			http.Error(w, "failed to parse template", http.StatusInternalServerError)
+			return
+		}
+
 		var rendered bytes.Buffer
-		if err := indexTemplate.Execute(&rendered, view); err != nil {
+		if err := tmpl.Execute(&rendered, view); err != nil {
 			http.Error(w, "failed to render page", http.StatusInternalServerError)
 			return
 		}
 
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		if _, err := w.Write(rendered.Bytes()); err != nil {
-			http.Error(w, "failed to render page", http.StatusInternalServerError)
+			http.Error(w, "failed to write response", http.StatusInternalServerError)
 		}
 	}
 }
 
-func handleViewerJS(w http.ResponseWriter, _ *http.Request) {
-	w.Header().Set("Content-Type", "text/javascript; charset=utf-8")
-	if _, err := w.Write([]byte(viewerJS)); err != nil {
-		http.Error(w, "failed to render script", http.StatusInternalServerError)
-	}
-}
-
-func handleViewerStateJS(w http.ResponseWriter, _ *http.Request) {
-	w.Header().Set("Content-Type", "text/javascript; charset=utf-8")
-	if _, err := w.Write([]byte(viewerStateJS)); err != nil {
-		http.Error(w, "failed to render script", http.StatusInternalServerError)
-	}
-}
-
-func handleViewerProtocolJS(w http.ResponseWriter, _ *http.Request) {
-	w.Header().Set("Content-Type", "text/javascript; charset=utf-8")
-	if _, err := w.Write([]byte(viewerProtocolJS)); err != nil {
-		http.Error(w, "failed to render script", http.StatusInternalServerError)
-	}
-}
 
 func handleSSE(b *broker) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {

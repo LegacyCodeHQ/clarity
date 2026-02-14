@@ -91,7 +91,8 @@ func TestHandleIndex_ServesHTML(t *testing.T) {
 	assert.Equal(t, http.StatusOK, w.Code)
 	assert.Contains(t, w.Header().Get("Content-Type"), "text/html")
 	assert.Contains(t, w.Body.String(), "clarity • clarity watch")
-	assert.Contains(t, w.Body.String(), `src="/viewer.js"`)
+	assert.Contains(t, w.Body.String(), `<div id="app"></div>`)
+	assert.Contains(t, w.Body.String(), `/assets/index-`)
 }
 
 func TestBuildWatchPageTitle(t *testing.T) {
@@ -100,38 +101,6 @@ func TestBuildWatchPageTitle(t *testing.T) {
 	assert.Equal(t, "clarity watch", buildWatchPageTitle(""))
 }
 
-func TestHandleViewerJS_ServesJavaScript(t *testing.T) {
-	req := httptest.NewRequest("GET", "/viewer.js", nil)
-	w := httptest.NewRecorder()
-
-	handleViewerJS(w, req)
-
-	assert.Equal(t, http.StatusOK, w.Code)
-	assert.Contains(t, w.Header().Get("Content-Type"), "text/javascript")
-	assert.Contains(t, w.Body.String(), "EventSource")
-}
-
-func TestHandleViewerStateJS_ServesJavaScriptModule(t *testing.T) {
-	req := httptest.NewRequest("GET", "/viewer_state.mjs", nil)
-	w := httptest.NewRecorder()
-
-	handleViewerStateJS(w, req)
-
-	assert.Equal(t, http.StatusOK, w.Code)
-	assert.Contains(t, w.Header().Get("Content-Type"), "text/javascript")
-	assert.Contains(t, w.Body.String(), "export function getViewModel")
-}
-
-func TestHandleViewerProtocolJS_ServesJavaScriptModule(t *testing.T) {
-	req := httptest.NewRequest("GET", "/viewer_protocol.mjs", nil)
-	w := httptest.NewRecorder()
-
-	handleViewerProtocolJS(w, req)
-
-	assert.Equal(t, http.StatusOK, w.Code)
-	assert.Contains(t, w.Header().Get("Content-Type"), "text/javascript")
-	assert.Contains(t, w.Body.String(), "export function normalizeGraphStreamPayload")
-}
 
 func TestHandleSSE_StreamsGraphEvent(t *testing.T) {
 	b := newBroker()
