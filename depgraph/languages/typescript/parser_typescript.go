@@ -46,7 +46,7 @@ func (e ExternalImport) IsTypeOnly() bool {
 	return e.isTypeOnly
 }
 
-// InternalImport represents an internal project file import (./, ../)
+// InternalImport represents an internal project file import (./, ../, @/)
 type InternalImport struct {
 	path       string
 	isTypeOnly bool
@@ -108,8 +108,8 @@ func classifyTypeScriptImport(importPath string, isTypeOnly bool) TypeScriptImpo
 		return NodeBuiltinImport{path: importPath, isTypeOnly: isTypeOnly}
 	}
 
-	// Check for relative imports (./ or ../)
-	if strings.HasPrefix(importPath, "./") || strings.HasPrefix(importPath, "../") {
+	// Check for relative imports (./ or ../) and common TS alias imports (@/)
+	if strings.HasPrefix(importPath, "./") || strings.HasPrefix(importPath, "../") || strings.HasPrefix(importPath, "@/") {
 		return InternalImport{path: importPath, isTypeOnly: isTypeOnly}
 	}
 
@@ -304,11 +304,10 @@ func cleanImportPath(raw string) string {
 
 // ResolveTypeScriptImportPath resolves a TypeScript import path to possible file paths
 func ResolveTypeScriptImportPath(sourceFile, importPath string, suppliedFiles map[string]bool) []string {
-	sourceDir := filepath.Dir(sourceFile)
-
-	// Resolve the import path relative to the source file
-	basePath := filepath.Join(sourceDir, importPath)
-	basePath = filepath.Clean(basePath)
+	basePath, ok := resolveTypeScriptBasePath(sourceFile, importPath)
+	if !ok {
+		return nil
+	}
 
 	var resolvedPaths []string
 
@@ -375,4 +374,33 @@ func sourceCandidatesForJSImport(basePath string) []string {
 	default:
 		return nil
 	}
+}
+
+func resolveTypeScriptBasePath(sourceFile, importPath string) (string, bool) {
+	// Resolve common alias format "@/..." to "<repo>/src/..."
+	if strings.HasPrefix(importPath, "@/") {
+		srcRoot, ok := projectSrcRootFromSourceFile(sourceFile)
+		if !ok {
+			return "", false
+		}
+		return filepath.Clean(filepath.Join(srcRoot, strings.TrimPrefix(importPath, "@/"))), true
+	}
+
+	sourceDir := filepath.Dir(sourceFile)
+	return filepath.Clean(filepath.Join(sourceDir, importPath)), true
+}
+
+func projectSrcRootFromSourceFile(sourceFile string) (string, bool) {
+	sourceDir := filepath.Clean(filepath.Dir(sourceFile))
+	marker := string(filepath.Separator) + "src" + string(filepath.Separator)
+
+	if idx := strings.LastIndex(sourceDir, marker); idx >= 0 {
+		return sourceDir[:idx+len(marker)-1], true
+	}
+
+	if strings.HasSuffix(sourceDir, string(filepath.Separator)+"src") {
+		return sourceDir, true
+	}
+
+	return "", false
 }

@@ -378,6 +378,17 @@ func TestResolveTypeScriptImportPath_JSXImportResolvesToTSXSource(t *testing.T) 
 	assert.Contains(t, resolved, "/project/src/components/Button.tsx")
 }
 
+func TestResolveTypeScriptImportPath_AliasAtPrefixResolvesToSrc(t *testing.T) {
+	suppliedFiles := map[string]bool{
+		"/project/src/components/file-tree-panel.tsx": true,
+	}
+
+	sourceFile := "/project/src/App.tsx"
+
+	resolved := ResolveTypeScriptImportPath(sourceFile, "@/components/file-tree-panel", suppliedFiles)
+	assert.Contains(t, resolved, "/project/src/components/file-tree-panel.tsx")
+}
+
 func TestClassifyTypeScriptImport_NodeBuiltins(t *testing.T) {
 	testCases := []struct {
 		path     string
@@ -422,6 +433,7 @@ func TestClassifyTypeScriptImport_Internal(t *testing.T) {
 		"../config",
 		"./components/Button",
 		"../../../lib/helper",
+		"@/components/file-tree-panel",
 	}
 
 	for _, path := range testCases {
