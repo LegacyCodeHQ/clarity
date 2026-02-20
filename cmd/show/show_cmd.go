@@ -45,15 +45,10 @@ func NewCommand() *cobra.Command {
 	}
 
 	cmd := &cobra.Command{
-		Use:     "show",
-		Aliases: []string{"graph"},
-		Short:   "Show a scoped file-based dependency graph",
-		Long:    `Show a scoped file-based dependency graph.`,
+		Use:   "show",
+		Short: "Show a scoped file-based dependency graph",
+		Long:  `Show a scoped file-based dependency graph.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if cmd.CalledAs() == "graph" {
-				fmt.Fprintln(cmd.ErrOrStderr(), "Warning: `clarity graph` is deprecated and will be removed in a future release. Use `clarity show`.")
-				fmt.Fprintln(cmd.ErrOrStderr())
-			}
 			return runGraph(cmd, opts)
 		},
 	}

@@ -45,7 +45,7 @@ This is a Go CLI tool (no HTTP server in the repo). The primary security-relevan
 - Evidence:
   - `if filepath.IsAbs(pathStr) { return AbsolutePath(filepath.Clean(pathStr)), nil }`
   - `return os.ReadFile(absPath)`
-- Impact: If `clarity graph -i` is ever exposed to untrusted input (for example, via a web service wrapper), an attacker could request arbitrary file reads outside the repo. As a local CLI for trusted users, this may be acceptable.
+- Impact: If `clarity show -i` is ever exposed to untrusted input (for example, via a web service wrapper), an attacker could request arbitrary file reads outside the repo. As a local CLI for trusted users, this may be acceptable.
 - Fix: When `--repo` is provided, enforce that resolved paths stay under the repo root by default. If you want to preserve current behavior, add an explicit `--allow-outside-repo` flag and gate the behavior behind it.
 - Mitigation: Document that `-i` paths are trusted local inputs and should not be wired to untrusted sources without validation.
 - False positive notes: If this is strictly a local CLI used by trusted developers, you may accept this risk.

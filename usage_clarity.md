@@ -1,7 +1,5 @@
 # Clarity Usage
 
-> Generated using [lens](../tiny-tools/rust/lens) — extracted from cobra command definitions in `cmd/`.
-
 A software design tool for AI-native developers and coding agents.
 
 ```
@@ -23,14 +21,14 @@ Inherited by all subcommands. Extracted from `cmd/root.go`.
 | `--version` | `-V` | `false` | Print version information and exit |
 ## Commands
 
-| Command | Description | Source |
-|---|---|---|
-| `diff` | Show dependency-graph changes between snapshots | `/Users/ragunath/legacy-code-hq-ecosystem/products/clarity/cmd/diff/diff_cmd.go` |
-| `languages` | List all supported languages and file extensions | `/Users/ragunath/legacy-code-hq-ecosystem/products/clarity/cmd/languages/languages_cmd.go` |
-| `setup` | Add clarity usage instructions to AGENTS.md | `/Users/ragunath/legacy-code-hq-ecosystem/products/clarity/cmd/setup/setup_cmd.go` |
-| `show` | Show a scoped file-based dependency graph | `/Users/ragunath/legacy-code-hq-ecosystem/products/clarity/cmd/show/show_cmd.go` |
-| `watch` | Watch for file changes and serve a live dependency graph | `/Users/ragunath/legacy-code-hq-ecosystem/products/clarity/cmd/watch/watch_cmd.go` |
-| `why <from> <to>` | Show direct dependency direction(s) between two files | `/Users/ragunath/legacy-code-hq-ecosystem/products/clarity/cmd/why/why_cmd.go` |
+| Command | Description |
+|---|---|
+| `diff` | Show dependency-graph changes between snapshots |
+| `languages` | List all supported languages and file extensions |
+| `setup` | Add clarity usage instructions to AGENTS.md |
+| `show` | Show a scoped file-based dependency graph |
+| `watch` | Watch for file changes and serve a live dependency graph |
+| `why <from> <to>` | Show direct dependency direction(s) between two files |
 
 ---
 
@@ -97,7 +95,6 @@ clarity setup [OPTIONS]
 
 Show a scoped file-based dependency graph.
 
-Aliases: `"graph"`
 
 
 
