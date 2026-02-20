@@ -100,3 +100,16 @@ clarity show -u                # Generate visualization URL
 ```
 
 For full reference, use `clarity show -h`
+
+## Codebase Notes
+
+- Language: Go, plus a web UI build with npm in `cmd/watch/web`
+- The web UI is served by the Go web server (not a separate Node server)
+- Entry points:
+  - Go: `main.go`
+  - Frontend: `cmd/watch/web`
+- Common commands (from `clarity/Makefile`):
+  - `make lint`
+  - `make test`
+  - `make test-web`
+  - `make build-dev`
