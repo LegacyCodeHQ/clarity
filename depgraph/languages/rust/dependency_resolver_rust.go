@@ -37,6 +37,7 @@ func ResolveRustProjectImports(
 		}
 	}
 
+	projectImports = filterOutRustSelfDependency(projectImports, absPath)
 	return projectImports, nil
 }
 
@@ -109,13 +110,15 @@ resolved:
 	}
 
 	candidates := resolveRustModuleCandidates(baseDir, parts, suppliedFiles)
-	if len(parts) > 1 {
+	if len(parts) > 1 && len(candidates) == 0 {
 		candidates = append(candidates, resolveRustModuleCandidates(baseDir, parts[:len(parts)-1], suppliedFiles)...)
 	}
-	if rootedInLocalCrate && len(parts) == 1 {
+	if rootedInLocalCrate && len(parts) == 1 && len(candidates) == 0 {
 		candidates = append(candidates, resolveRustCrateRootCandidates(crateRoot, suppliedFiles)...)
 	}
 
+	candidates = deduplicateSuppliedFiles(candidates, suppliedFiles)
+	candidates = expandRustModRsCandidates(candidates, suppliedFiles, contentReader)
 	return deduplicateSuppliedFiles(candidates, suppliedFiles)
 }
 
@@ -138,6 +141,73 @@ func resolveRustModuleCandidates(baseDir string, parts []string, suppliedFiles m
 	}
 
 	return filterSuppliedFiles(candidates, suppliedFiles)
+}
+
+func expandRustModRsCandidates(
+	candidates []string,
+	suppliedFiles map[string]bool,
+	contentReader vcs.ContentReader,
+) []string {
+	if len(candidates) == 0 || contentReader == nil {
+		return candidates
+	}
+
+	expanded := make([]string, 0, len(candidates))
+	for _, candidate := range candidates {
+		if filepath.Base(candidate) != "mod.rs" {
+			expanded = append(expanded, candidate)
+			continue
+		}
+
+		modChildren := expandRustModRsDependencies(candidate, suppliedFiles, contentReader)
+		if len(modChildren) == 0 {
+			expanded = append(expanded, candidate)
+			continue
+		}
+		expanded = append(expanded, modChildren...)
+	}
+
+	return expanded
+}
+
+func expandRustModRsDependencies(
+	modRsPath string,
+	suppliedFiles map[string]bool,
+	contentReader vcs.ContentReader,
+) []string {
+	content, err := contentReader(modRsPath)
+	if err != nil {
+		return nil
+	}
+
+	imports, parseErr := ParseRustImports(content)
+	if parseErr != nil {
+		return nil
+	}
+
+	var resolved []string
+	for _, imp := range imports {
+		if imp.Kind != RustImportModDecl {
+			continue
+		}
+		resolved = append(resolved, resolveRustModDecl(modRsPath, imp.Path, suppliedFiles)...)
+	}
+
+	return deduplicateSuppliedFiles(resolved, suppliedFiles)
+}
+
+func filterOutRustSelfDependency(imports []string, sourceFile string) []string {
+	if len(imports) == 0 {
+		return imports
+	}
+	filtered := imports[:0]
+	for _, imp := range imports {
+		if imp == sourceFile {
+			continue
+		}
+		filtered = append(filtered, imp)
+	}
+	return filtered
 }
 
 func findRustCrateRoot(sourceFile string, suppliedFiles map[string]bool, contentReader vcs.ContentReader) (string, bool) {
