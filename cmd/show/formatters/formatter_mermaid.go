@@ -19,6 +19,7 @@ func (f mermaidFormatter) Format(g depgraph.FileDependencyGraph, opts RenderOpti
 		return "", err
 	}
 
+	explicitDirection := opts.Direction != ""
 	var sb strings.Builder
 
 	// Add title if label provided
@@ -245,7 +246,11 @@ func (f mermaidFormatter) Format(g depgraph.FileDependencyGraph, opts RenderOpti
 		sb.WriteString(stylesSB.String())
 	}
 
-	return strings.TrimSuffix(sb.String(), "\n"), nil
+	output := strings.TrimSuffix(sb.String(), "\n")
+	if explicitDirection {
+		return output + "\n", nil
+	}
+	return output, nil
 }
 
 // GenerateURL creates a mermaid.live URL with the diagram embedded.

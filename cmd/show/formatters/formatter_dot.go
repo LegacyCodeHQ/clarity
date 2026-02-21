@@ -17,6 +17,7 @@ func (f dotFormatter) Format(g depgraph.FileDependencyGraph, opts RenderOptions)
 		return "", err
 	}
 
+	explicitDirection := opts.Direction != ""
 	var sb strings.Builder
 	sb.WriteString("digraph dependencies {\n")
 	dir := opts.Direction
@@ -218,6 +219,9 @@ func (f dotFormatter) Format(g depgraph.FileDependencyGraph, opts RenderOptions)
 	}
 
 	sb.WriteString("}")
+	if explicitDirection {
+		sb.WriteString("\n")
+	}
 	return sb.String(), nil
 }
 
