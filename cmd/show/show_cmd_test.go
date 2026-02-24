@@ -607,6 +607,114 @@ func TestGraphFileRelativePath_WithRepo_ResolvesFromRepoRoot(t *testing.T) {
 	}
 }
 
+func TestGraphFileScopeDownstream_LevelZero_IncludesTransitiveOutgoingOnly(t *testing.T) {
+	repoDir := t.TempDir()
+	aFile := filepath.Join(repoDir, "a.ts")
+	bFile := filepath.Join(repoDir, "b.ts")
+	cFile := filepath.Join(repoDir, "c.ts")
+	upstreamFile := filepath.Join(repoDir, "x.ts")
+
+	if err := os.WriteFile(aFile, []byte("import { b } from './b';\nexport const a = b;\n"), 0o644); err != nil {
+		t.Fatalf("os.WriteFile() error = %v", err)
+	}
+	if err := os.WriteFile(bFile, []byte("import { c } from './c';\nexport const b = c;\n"), 0o644); err != nil {
+		t.Fatalf("os.WriteFile() error = %v", err)
+	}
+	if err := os.WriteFile(cFile, []byte("export const c = 1;\n"), 0o644); err != nil {
+		t.Fatalf("os.WriteFile() error = %v", err)
+	}
+	if err := os.WriteFile(upstreamFile, []byte("import { a } from './a';\nexport const x = a;\n"), 0o644); err != nil {
+		t.Fatalf("os.WriteFile() error = %v", err)
+	}
+
+	cmd := NewCommand()
+	cmd.SetArgs([]string{
+		"-r", repoDir,
+		"-p", "a.ts",
+		"--scope", "downstream",
+		"-l", "0",
+		"-f", "dot",
+	})
+
+	var stdout bytes.Buffer
+	cmd.SetOut(&stdout)
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("cmd.Execute() error = %v", err)
+	}
+
+	output := stdout.String()
+	if !strings.Contains(output, `"a.ts"`) || !strings.Contains(output, `"b.ts"`) || !strings.Contains(output, `"c.ts"`) {
+		t.Fatalf("expected downstream transitive graph to include a.ts, b.ts, c.ts, got:\n%s", output)
+	}
+	if !strings.Contains(output, `"a.ts" -> "b.ts"`) || !strings.Contains(output, `"b.ts" -> "c.ts"`) {
+		t.Fatalf("expected downstream transitive edges a.ts->b.ts and b.ts->c.ts, got:\n%s", output)
+	}
+	if strings.Contains(output, `"x.ts"`) {
+		t.Fatalf("expected downstream scope to exclude upstream dependent x.ts, got:\n%s", output)
+	}
+}
+
+func TestGraphFile_DefaultScope_IsDownstreamAtLevelOne(t *testing.T) {
+	repoDir := t.TempDir()
+	aFile := filepath.Join(repoDir, "a.ts")
+	bFile := filepath.Join(repoDir, "b.ts")
+	cFile := filepath.Join(repoDir, "c.ts")
+	upstreamFile := filepath.Join(repoDir, "x.ts")
+
+	if err := os.WriteFile(aFile, []byte("import { b } from './b';\nexport const a = b;\n"), 0o644); err != nil {
+		t.Fatalf("os.WriteFile() error = %v", err)
+	}
+	if err := os.WriteFile(bFile, []byte("import { c } from './c';\nexport const b = c;\n"), 0o644); err != nil {
+		t.Fatalf("os.WriteFile() error = %v", err)
+	}
+	if err := os.WriteFile(cFile, []byte("export const c = 1;\n"), 0o644); err != nil {
+		t.Fatalf("os.WriteFile() error = %v", err)
+	}
+	if err := os.WriteFile(upstreamFile, []byte("import { a } from './a';\nexport const x = a;\n"), 0o644); err != nil {
+		t.Fatalf("os.WriteFile() error = %v", err)
+	}
+
+	cmd := NewCommand()
+	cmd.SetArgs([]string{
+		"-r", repoDir,
+		"-p", "a.ts",
+		"-l", "1",
+		"-f", "dot",
+	})
+
+	var stdout bytes.Buffer
+	cmd.SetOut(&stdout)
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("cmd.Execute() error = %v", err)
+	}
+
+	output := stdout.String()
+	if !strings.Contains(output, `"a.ts"`) || !strings.Contains(output, `"b.ts"`) {
+		t.Fatalf("expected default scope to include a.ts with immediate downstream nodes, got:\n%s", output)
+	}
+	if strings.Contains(output, `"x.ts"`) {
+		t.Fatalf("expected default downstream scope to exclude upstream dependent x.ts, got:\n%s", output)
+	}
+	if strings.Contains(output, `"c.ts"`) {
+		t.Fatalf("expected level 1 to exclude transitive downstream node c.ts, got:\n%s", output)
+	}
+}
+
+func TestGraphFile_InvalidScope_ReturnsError(t *testing.T) {
+	cmd := NewCommand()
+	cmd.SetArgs([]string{"-p", "a.ts", "--scope", "sideways"})
+
+	err := cmd.Execute()
+	if err == nil {
+		t.Fatalf("expected error for invalid --scope")
+	}
+	if !strings.Contains(err.Error(), "unknown scope: sideways") {
+		t.Fatalf("expected unknown scope error, got: %v", err)
+	}
+}
+
 func TestRepoLabelName_UsesRootDirectoryName(t *testing.T) {
 	repoDir := filepath.Join(t.TempDir(), "my-service")
 	if err := os.MkdirAll(repoDir, 0o755); err != nil {

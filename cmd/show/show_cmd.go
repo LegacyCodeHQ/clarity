@@ -34,7 +34,12 @@ type graphOptions struct {
 	betweenFiles []string
 	targetFile   string
 	depthLevel   int
+	scope        string
 }
+
+const (
+	scopeDownstream = "downstream"
+)
 
 // Cmd represents the graph command
 var Cmd = NewCommand()
@@ -45,6 +50,7 @@ func NewCommand() *cobra.Command {
 		outputFormat: formatters.OutputFormatDOT.String(),
 		direction:    formatters.DefaultDirection.StringLower(),
 		depthLevel:   1,
+		scope:        scopeDownstream,
 	}
 
 	cmd := &cobra.Command{
@@ -91,7 +97,8 @@ func NewCommand() *cobra.Command {
 	// Add file flag for showing dependencies of a specific file
 	cmd.Flags().StringVarP(&opts.targetFile, "file", "p", "", "Show dependencies for a specific file")
 	// Add level flag for limiting dependency depth
-	cmd.Flags().IntVarP(&opts.depthLevel, "level", "l", opts.depthLevel, "Depth level for dependencies (used with --file)")
+	cmd.Flags().IntVarP(&opts.depthLevel, "level", "l", opts.depthLevel, "Depth level for dependencies (used with --file, 0 = unlimited)")
+	cmd.Flags().StringVar(&opts.scope, "scope", opts.scope, "Dependency scope for --file (downstream only)")
 
 	return cmd
 }
@@ -217,6 +224,14 @@ func validateGraphOptions(opts *graphOptions) error {
 		opts.excludeExts = excludeExts
 	}
 
+	scope := strings.ToLower(strings.TrimSpace(opts.scope))
+	switch scope {
+	case scopeDownstream:
+		opts.scope = scope
+	default:
+		return fmt.Errorf("unknown scope: %s (valid options: %s)", opts.scope, scopeDownstream)
+	}
+
 	if len(opts.betweenFiles) > 0 && len(opts.includes) > 0 {
 		return fmt.Errorf("--between cannot be used with --input flag")
 	}
@@ -228,8 +243,8 @@ func validateGraphOptions(opts *graphOptions) error {
 		if len(opts.includes) > 0 {
 			return fmt.Errorf("--file cannot be used with --input flag")
 		}
-		if opts.depthLevel < 1 {
-			return fmt.Errorf("--level must be at least 1")
+		if opts.depthLevel < 0 {
+			return fmt.Errorf("--level must be at least 0")
 		}
 	}
 
@@ -476,7 +491,7 @@ func applyTargetFileFilter(opts *graphOptions, pathResolver PathResolver, graph 
 		return nil, nil, fmt.Errorf("file not found in graph: %s", opts.targetFile)
 	}
 
-	graph = filterGraphByLevel(graph, absTargetFile.String(), opts.depthLevel)
+	graph = filterGraphByLevel(graph, absTargetFile.String(), opts.depthLevel, opts.scope)
 	filePaths = graphFiles(graph)
 
 	return graph, filePaths, nil
@@ -803,43 +818,29 @@ func resolveAndValidatePaths(paths []string, pathResolver PathResolver, graph de
 }
 
 // filterGraphByLevel filters the dependency graph to include only nodes within
-// the specified number of levels from the target file. It includes both direct
-// dependencies (files the target imports) and reverse dependencies (files that
-// import the target).
-func filterGraphByLevel(graph depgraph.DependencyGraph, targetFile string, level int) depgraph.DependencyGraph {
+// the specified number of levels from the target file, according to scope.
+// A level of 0 means unlimited traversal depth.
+func filterGraphByLevel(graph depgraph.DependencyGraph, targetFile string, level int, scope string) depgraph.DependencyGraph {
 	adjacency, err := depgraph.AdjacencyList(graph)
 	if err != nil {
 		return depgraph.NewDependencyGraph()
 	}
 
-	// Build reverse adjacency map (who depends on this file)
-	reverseDeps := make(map[string][]string)
-	for file, deps := range adjacency {
-		for _, dep := range deps {
-			reverseDeps[dep] = append(reverseDeps[dep], file)
-		}
-	}
-
-	// BFS to find all nodes within the specified level
+	// BFS to find all nodes within the specified level (or all reachable nodes when level=0)
 	visited := make(map[string]bool)
 	visited[targetFile] = true
 
 	currentLevel := []string{targetFile}
-	for l := 0; l < level && len(currentLevel) > 0; l++ {
+	for l := 0; (level == 0 || l < level) && len(currentLevel) > 0; l++ {
 		nextLevel := []string{}
 		for _, file := range currentLevel {
-			// Add direct dependencies (files this file imports)
-			for _, dep := range adjacency[file] {
-				if !visited[dep] {
-					visited[dep] = true
-					nextLevel = append(nextLevel, dep)
-				}
-			}
-			// Add reverse dependencies (files that import this file)
-			for _, revDep := range reverseDeps[file] {
-				if !visited[revDep] {
-					visited[revDep] = true
-					nextLevel = append(nextLevel, revDep)
+			if scope == scopeDownstream {
+				// Add direct dependencies (files this file imports).
+				for _, dep := range adjacency[file] {
+					if !visited[dep] {
+						visited[dep] = true
+						nextLevel = append(nextLevel, dep)
+					}
 				}
 			}
 		}
