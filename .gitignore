@@ -28,4 +28,4 @@ cmd/watch/dist/
 # Windows
 Thumbs.db
 
-.lens/
+.compass/
