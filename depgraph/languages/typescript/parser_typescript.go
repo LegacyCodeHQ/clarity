@@ -436,53 +436,40 @@ func cleanImportPath(raw string) string {
 
 // ResolveTypeScriptImportPath resolves a TypeScript import path to possible file paths
 func ResolveTypeScriptImportPath(sourceFile, importPath string, suppliedFiles map[string]bool) []string {
-	basePath, ok := resolveTypeScriptBasePath(sourceFile, importPath)
-	if !ok {
+	basePaths := resolveTypeScriptBasePaths(sourceFile, importPath)
+	if len(basePaths) == 0 {
 		return nil
 	}
 
 	var resolvedPaths []string
+	seen := make(map[string]bool)
+	add := func(p string) {
+		if suppliedFiles[p] && !seen[p] {
+			seen[p] = true
+			resolvedPaths = append(resolvedPaths, p)
+		}
+	}
 
-	// TypeScript extension resolution order
 	extensions := []string{".ts", ".tsx", ".js", ".jsx"}
 
-	// In TS/TSX source, explicit runtime .js/.jsx specifiers often point to .ts/.tsx files.
-	// Try source-file variants first to avoid missing project edges in mixed module setups.
-	if sourceCandidates := sourceCandidatesForJSImport(basePath); len(sourceCandidates) > 0 {
-		for _, candidate := range sourceCandidates {
-			if suppliedFiles[candidate] {
-				resolvedPaths = append(resolvedPaths, candidate)
-			}
+	for _, basePath := range basePaths {
+		// In TS/TSX source, explicit runtime .js/.jsx specifiers often point to .ts/.tsx files.
+		for _, candidate := range sourceCandidatesForJSImport(basePath) {
+			add(candidate)
 		}
-	}
 
-	// Try direct path with extensions
-	for _, ext := range extensions {
-		candidate := basePath + ext
-		if suppliedFiles[candidate] {
-			resolvedPaths = append(resolvedPaths, candidate)
+		for _, ext := range extensions {
+			add(basePath + ext)
 		}
-	}
 
-	// Try index file resolution (./utils -> ./utils/index.ts)
-	indexPaths := []string{
-		filepath.Join(basePath, "index.ts"),
-		filepath.Join(basePath, "index.tsx"),
-		filepath.Join(basePath, "index.js"),
-		filepath.Join(basePath, "index.jsx"),
-	}
+		// Index file resolution (./utils -> ./utils/index.ts)
+		add(filepath.Join(basePath, "index.ts"))
+		add(filepath.Join(basePath, "index.tsx"))
+		add(filepath.Join(basePath, "index.js"))
+		add(filepath.Join(basePath, "index.jsx"))
 
-	for _, indexPath := range indexPaths {
-		if suppliedFiles[indexPath] {
-			resolvedPaths = append(resolvedPaths, indexPath)
-		}
-	}
-
-	// If import already has an extension, try the exact path
-	if hasTypeScriptExtension(importPath) {
-		exactPath := basePath
-		if suppliedFiles[exactPath] {
-			resolvedPaths = append(resolvedPaths, exactPath)
+		if hasTypeScriptExtension(importPath) {
+			add(basePath)
 		}
 	}
 
@@ -508,18 +495,54 @@ func sourceCandidatesForJSImport(basePath string) []string {
 	}
 }
 
-func resolveTypeScriptBasePath(sourceFile, importPath string) (string, bool) {
-	// Resolve common alias format "@/..." to "<repo>/src/..."
-	if strings.HasPrefix(importPath, "@/") {
-		srcRoot, ok := projectSrcRootFromSourceFile(sourceFile)
-		if !ok {
-			return "", false
-		}
-		return filepath.Clean(filepath.Join(srcRoot, strings.TrimPrefix(importPath, "@/"))), true
+// resolveTypeScriptBasePaths returns candidate base paths (no extension) for
+// an import. It returns multiple candidates because alias resolution depends
+// on project layout (src-rooted vs project-root, e.g. Next.js App Router) and
+// optionally on tsconfig.json paths. The caller filters candidates against
+// the set of supplied project files.
+func resolveTypeScriptBasePaths(sourceFile, importPath string) []string {
+	if !strings.HasPrefix(importPath, "@/") {
+		sourceDir := filepath.Dir(sourceFile)
+		return []string{filepath.Clean(filepath.Join(sourceDir, importPath))}
 	}
 
-	sourceDir := filepath.Dir(sourceFile)
-	return filepath.Clean(filepath.Join(sourceDir, importPath)), true
+	var bases []string
+	seen := make(map[string]bool)
+	add := func(p string) {
+		if !seen[p] {
+			seen[p] = true
+			bases = append(bases, p)
+		}
+	}
+
+	// 1. tsconfig.json / jsconfig.json paths (canonical mapping).
+	if cfg := loadTsConfigFor(sourceFile); cfg != nil {
+		for _, p := range cfg.resolveAlias(importPath) {
+			add(p)
+		}
+	}
+
+	rest := strings.TrimPrefix(importPath, "@/")
+
+	// 2. Legacy heuristic: project's "src/" directory.
+	if srcRoot, ok := projectSrcRootFromSourceFile(sourceFile); ok {
+		add(filepath.Clean(filepath.Join(srcRoot, rest)))
+	}
+
+	// 3. Each ancestor of the source file as a potential project root.
+	// Covers Next.js / Vite layouts where "@/" maps to the repo root and
+	// no tsconfig is reachable on disk (e.g. unit tests with synthetic paths).
+	dir := filepath.Dir(sourceFile)
+	for {
+		add(filepath.Clean(filepath.Join(dir, rest)))
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			break
+		}
+		dir = parent
+	}
+
+	return bases
 }
 
 func projectSrcRootFromSourceFile(sourceFile string) (string, bool) {

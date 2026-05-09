@@ -500,6 +500,65 @@ const app = express();
 	assert.Contains(t, paths, "./constants")
 }
 
+// Regression: in Next.js App Router projects (and many Vite/CRA TS configs
+// without a src/ directory) the "@/" path alias maps to the project root,
+// not to "src/". Clarity currently only resolves "@/" when the target lives
+// under "src/", which causes outgoing edges from files like
+// app/signup/actions.ts (importing "@/lib/db", "@/lib/validators", etc.)
+// to silently disappear from the dependency graph.
+func TestResolveTypeScriptImportPath_AliasAtPrefixResolvesToProjectRoot(t *testing.T) {
+	suppliedFiles := map[string]bool{
+		"/project/lib/db.ts":         true,
+		"/project/lib/validators.ts": true,
+		"/project/lib/auth.ts":       true,
+		"/project/lib/schema.ts":     true,
+	}
+
+	sourceFile := "/project/app/signup/actions.ts"
+
+	resolved := ResolveTypeScriptImportPath(sourceFile, "@/lib/db", suppliedFiles)
+	assert.Contains(t, resolved, "/project/lib/db.ts", "expected @/lib/db to resolve to project-root lib/db.ts")
+
+	resolved = ResolveTypeScriptImportPath(sourceFile, "@/lib/validators", suppliedFiles)
+	assert.Contains(t, resolved, "/project/lib/validators.ts")
+
+	resolved = ResolveTypeScriptImportPath(sourceFile, "@/lib/auth", suppliedFiles)
+	assert.Contains(t, resolved, "/project/lib/auth.ts")
+
+	resolved = ResolveTypeScriptImportPath(sourceFile, "@/lib/schema", suppliedFiles)
+	assert.Contains(t, resolved, "/project/lib/schema.ts")
+}
+
+func TestResolveTypeScriptImportPath_AliasResolvedViaTsconfigPaths(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	libDir := filepath.Join(tmpDir, "lib")
+	require.NoError(t, os.MkdirAll(libDir, 0755))
+	dbFile := filepath.Join(libDir, "db.ts")
+	require.NoError(t, os.WriteFile(dbFile, []byte("export const db = {};"), 0644))
+
+	tsconfig := `{
+  // App Router default
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["./*"],
+    },
+  },
+}`
+	require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "tsconfig.json"), []byte(tsconfig), 0644))
+
+	appDir := filepath.Join(tmpDir, "app", "signup")
+	require.NoError(t, os.MkdirAll(appDir, 0755))
+	sourceFile := filepath.Join(appDir, "actions.ts")
+	require.NoError(t, os.WriteFile(sourceFile, []byte(""), 0644))
+
+	suppliedFiles := map[string]bool{dbFile: true}
+
+	resolved := ResolveTypeScriptImportPath(sourceFile, "@/lib/db", suppliedFiles)
+	assert.Contains(t, resolved, dbFile)
+}
+
 // Helper functions
 
 func extractPaths(imports []TypeScriptImport) []string {
