@@ -1,10 +1,12 @@
 package registry_test
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/LegacyCodeHQ/clarity/depgraph/registry"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestIsTestFile(t *testing.T) {
@@ -175,4 +177,37 @@ func TestIsTestFile(t *testing.T) {
 			assert.Equal(t, tc.want, registry.IsTestFile(tc.filePath, nil))
 		})
 	}
+}
+
+func TestIsTestFile_ZigUsesTestDeclarations(t *testing.T) {
+	testPath := "/project/lib/std/Io/Threaded/test.zig"
+	productionPath := "/project/lib/std/Io/Threaded.zig"
+	content := map[string][]byte{
+		testPath: []byte(`
+const std = @import("std");
+
+test "async context alignment" {
+    try std.testing.expect(true);
+}
+`),
+		productionPath: []byte(`
+const std = @import("../std.zig");
+
+pub fn run() void {}
+
+test {
+    _ = @import("Threaded/test.zig");
+}
+`),
+	}
+	contentReader := func(path string) ([]byte, error) {
+		if source, ok := content[path]; ok {
+			return source, nil
+		}
+		return nil, fmt.Errorf("missing test content for %s", path)
+	}
+
+	assert.True(t, registry.IsTestFile(testPath, contentReader))
+	assert.False(t, registry.IsTestFile(productionPath, contentReader))
+	require.False(t, registry.IsTestFile(testPath, nil), "test.zig basename alone is not enough to classify a Zig test file")
 }

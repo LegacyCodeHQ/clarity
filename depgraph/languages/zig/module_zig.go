@@ -23,8 +23,8 @@ func (Module) NewResolver(ctx *moduleapi.Context, contentReader vcs.ContentReade
 	return resolver{ctx: ctx, contentReader: contentReader}
 }
 
-func (Module) IsTestFile(filePath string, _ vcs.ContentReader) bool {
-	return IsTestFile(filePath)
+func (Module) IsTestFile(filePath string, contentReader vcs.ContentReader) bool {
+	return IsTestFileWithContent(filePath, contentReader)
 }
 
 type resolver struct {
