@@ -158,6 +158,16 @@ func TestIsTestFile(t *testing.T) {
 			filePath: "/project/app/main.py",
 			want:     false,
 		},
+		{
+			name:     "zig test suffix",
+			filePath: "/project/src/math_test.zig",
+			want:     true,
+		},
+		{
+			name:     "zig non-test file",
+			filePath: "/project/src/main.zig",
+			want:     false,
+		},
 	}
 
 	for _, tc := range tests {

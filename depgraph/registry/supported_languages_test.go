@@ -19,6 +19,7 @@ func TestSupportedLanguages(t *testing.T) {
 	foundSvelte := false
 	foundSwift := false
 	foundTypeScript := false
+	foundZig := false
 	for _, language := range languages {
 		switch language.Name {
 		case "C":
@@ -76,6 +77,11 @@ func TestSupportedLanguages(t *testing.T) {
 			if len(language.Extensions) != 2 {
 				t.Fatalf("TypeScript extension count = %d, want 2", len(language.Extensions))
 			}
+		case "Zig":
+			foundZig = true
+			if len(language.Extensions) != 1 {
+				t.Fatalf("Zig extension count = %d, want 1", len(language.Extensions))
+			}
 		}
 	}
 
@@ -111,6 +117,9 @@ func TestSupportedLanguages(t *testing.T) {
 	}
 	if !foundTypeScript {
 		t.Fatalf("SupportedLanguages() missing TypeScript")
+	}
+	if !foundZig {
+		t.Fatalf("SupportedLanguages() missing Zig")
 	}
 }
 
@@ -159,6 +168,9 @@ func TestIsSupportedLanguageExtension(t *testing.T) {
 	}
 	if !IsSupportedLanguageExtension(".kts") {
 		t.Fatalf("IsSupportedLanguageExtension(.kts) = false, want true")
+	}
+	if !IsSupportedLanguageExtension(".zig") {
+		t.Fatalf("IsSupportedLanguageExtension(.zig) = false, want true")
 	}
 	if IsSupportedLanguageExtension(".md") {
 		t.Fatalf("IsSupportedLanguageExtension(.md) = true, want false")

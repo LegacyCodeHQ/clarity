@@ -16,6 +16,7 @@ import (
 	"github.com/LegacyCodeHQ/clarity/depgraph/languages/svelte"
 	"github.com/LegacyCodeHQ/clarity/depgraph/languages/swift"
 	"github.com/LegacyCodeHQ/clarity/depgraph/languages/typescript"
+	"github.com/LegacyCodeHQ/clarity/depgraph/languages/zig"
 )
 
 var modules = []Module{
@@ -34,6 +35,7 @@ var modules = []Module{
 	svelte.Module{},
 	swift.Module{},
 	typescript.Module{},
+	zig.Module{},
 }
 
 // Modules returns supported language modules in deterministic order.

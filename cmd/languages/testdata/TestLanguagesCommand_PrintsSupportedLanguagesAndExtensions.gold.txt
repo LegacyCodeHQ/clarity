@@ -14,6 +14,7 @@
 ○ Svelte      .svelte
 ◐ Swift       .swift
 ◐ TypeScript  .ts, .tsx
+◐ Zig         .zig
 
 ------------------------------------------------------
 ○ Untested  ◐ Basic Tests  ● Actively Tested  ✓ Stable
