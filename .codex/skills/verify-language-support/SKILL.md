@@ -23,7 +23,8 @@ Use this workflow to validate language support end-to-end in `clarity`.
 ## Validate on a Real Repository (Always Interactive)
 
 1. Pick a representative repo for the language.
-2. Clone into `/tmp`.
+2. Clone into `/tmp` with a shallow depth of 50:
+   - `git clone --depth 50 <repo-url> /tmp/<repo>`
 3. Build a review queue before rendering graphs:
    - Use non-merge commits only.
    - Use commits with `5-30` changed files.
@@ -35,9 +36,9 @@ Use this workflow to validate language support end-to-end in `clarity`.
    - Show commit context immediately before the diagram:
      - `git -C /tmp/<repo> show -s --format='%h %s' <sha>`
    - In chat, print the commit message line before the Mermaid block so the user knows what change they are reviewing.
-   - `go run . graph --repo /tmp/<repo> -c <sha> -f mermaid`
+   - `go run . show --repo /tmp/<repo> -c <sha> -f mermaid`
    - Always include the rendered diagram directly in chat (Mermaid fenced block). If Mermaid is not visible, provide DOT/text fallback in chat.
-   - If diagrams still are not visible to the user, generate and open the graph URL in the browser (for example `clarity graph -u` or equivalent URL output).
+   - If diagrams still are not visible to the user, generate and open the graph URL in the browser (for example `clarity show -u` or equivalent URL output).
 6. Pause after each commit and wait for explicit user confirmation (for example, `next`) before continuing.
 7. Continue this request/response loop until the queue is complete or the user stops.
 8. After completing the default 10-commit queue, ask:
@@ -73,7 +74,7 @@ Use this workflow to validate language support end-to-end in `clarity`.
 ## Review Graph of Local Changes
 
 1. If 3 or more files changed, run:
-   - `./clarity graph -f mermaid`
+   - `./clarity show -f mermaid`
 2. Ensure test-to-code directionality and dependency density look plausible.
 
 ## Handoff Checklist
