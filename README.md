@@ -8,7 +8,7 @@
 
 Clarity is a software design tool for AI-native developers and coding agents.
 
-**Note:** Clarity supports [**15 languages**](#supported-languages) (parsing quality may vary by language).
+**Note:** Clarity supports [**16 languages**](#supported-languages) (parsing quality may vary by language).
 
 ## What You Get
 
@@ -139,6 +139,7 @@ In CLI workflows, agents are configured to open a generated visualization URL in
 - Svelte
 - Swift
 - TypeScript
+- Zig
 
 ---
 
