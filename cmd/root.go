@@ -21,9 +21,6 @@ import (
 // version is set via build-time ldflags
 var version = "dev"
 
-// buildDate is set via build-time ldflags
-var buildDate = "unknown"
-
 // commit is set via build-time ldflags
 var commit = "unknown"
 
@@ -54,10 +51,9 @@ Use cases:
 			Level: level,
 		})))
 		mcplogdlog.Info("command start", map[string]any{
-			"command":   cmd.Name(),
-			"version":   version,
-			"commit":    commit,
-			"buildDate": buildDate,
+			"command": cmd.Name(),
+			"version": version,
+			"commit":  commit,
 		})
 
 		if cpuProfilePath != "" {
@@ -117,7 +113,6 @@ func init() {
 	if rootCmd.Annotations == nil {
 		rootCmd.Annotations = make(map[string]string)
 	}
-	rootCmd.Annotations["buildDate"] = buildDate
 	rootCmd.Annotations["commit"] = commit
 
 	// Update version field dynamically (in case it was set via ldflags)
@@ -125,7 +120,6 @@ func init() {
 
 	// Customize version template to show additional build info
 	rootCmd.SetVersionTemplate(`{{with .Name}}{{printf "%s " .}}{{end}}{{printf "version %s" .Version}}
-Build date: {{printf "%s" (index .Annotations "buildDate")}}
 Commit: {{printf "%s" (index .Annotations "commit")}}
 `)
 }

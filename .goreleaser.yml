@@ -28,7 +28,6 @@ builds:
     ldflags:
       - -s -w
       - -X github.com/LegacyCodeHQ/clarity/cmd.version={{.Version}}
-      - -X github.com/LegacyCodeHQ/clarity/cmd.buildDate={{.Date}}
       - -X github.com/LegacyCodeHQ/clarity/cmd.commit={{.ShortCommit}}
     # Configure cross-compilation
     overrides:

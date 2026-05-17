@@ -4,7 +4,6 @@
 # Try to get version from git tag, otherwise use "dev"
 GIT_TAG := $(shell git describe --tags --exact-match 2>/dev/null || git describe --tags 2>/dev/null || echo "")
 VERSION ?= $(if $(GIT_TAG),$(GIT_TAG),dev)
-BUILD_DATE := $(shell date -u +"%Y-%m-%dT%H:%M:%SZ")
 COMMIT := $(shell git rev-parse --short HEAD 2>/dev/null || echo "unknown")
 # Check for uncommitted changes (staged, unstaged, or untracked) and add -dirty suffix if present
 DIRTY_CHECK := $(shell test -z "$$(git status --porcelain 2>/dev/null)" || echo "-dirty")
@@ -126,7 +125,7 @@ build-web:
 # No cross-compilation, no GoReleaser, no Zig required
 build-dev: build-web
 	@echo "Building for current platform with version: $(VERSION), commit: $(COMMIT)"
-	CGO_ENABLED=1 go build -tags dev -ldflags "-s -w -X github.com/LegacyCodeHQ/clarity/cmd.version=$(VERSION) -X github.com/LegacyCodeHQ/clarity/cmd.buildDate=$(BUILD_DATE) -X github.com/LegacyCodeHQ/clarity/cmd.commit=$(COMMIT) -X github.com/LegacyCodeHQ/clarity/cmd.enableDevCommands=true" -o clarity ./main.go
+	CGO_ENABLED=1 go build -tags dev -ldflags "-s -w -X github.com/LegacyCodeHQ/clarity/cmd.version=$(VERSION) -X github.com/LegacyCodeHQ/clarity/cmd.commit=$(COMMIT) -X github.com/LegacyCodeHQ/clarity/cmd.enableDevCommands=true" -o clarity ./main.go
 	@echo ""
 	@echo "Build successful! Run './clarity --version' to test"
 
