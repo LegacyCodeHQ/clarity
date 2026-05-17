@@ -39,20 +39,28 @@ Use this workflow to validate language support end-to-end in `clarity`.
    - `go run . show --repo /tmp/<repo> -c <sha> -f mermaid`
    - Always include the rendered diagram directly in chat (Mermaid fenced block). If Mermaid is not visible, provide DOT/text fallback in chat.
    - If diagrams still are not visible to the user, generate and open the graph URL in the browser (for example `clarity show -u` or equivalent URL output).
-6. Pause after each commit and wait for explicit user confirmation (for example, `next`) before continuing.
-7. Continue this request/response loop until the queue is complete or the user stops.
-8. After completing the default 10-commit queue, ask:
+6. Self-verify each rendered commit before asking the user to continue:
+   - Read the commit patch and changed file list:
+     - `git -C /tmp/<repo> show --stat --patch --minimal <sha>`
+   - For large patches, inspect the changed target-language files first.
+   - Confirm rendered edges are supported by source-level relationships such as imports, includes, module references, public declarations, re-export chains, test-to-production references, and cycles.
+   - Confirm notable missing edges are expected. For example, verify that isolated changed files truly do not import or reference each other, or that they are parallel copies, generated snapshots, docs, config, or independent tests.
+   - Include a short verification note with the graph that says what was checked and whether the relationships look correct, missing, or suspicious.
+   - If the graph appears wrong, pause the queue and investigate before moving on.
+7. Pause after each commit and wait for explicit user confirmation (for example, `next`) before continuing.
+8. Continue this request/response loop until the queue is complete or the user stops.
+9. After completing the default 10-commit queue, ask:
    - "Do you want me to proceed with updating maturity level and committing the changes?"
    - If the user says yes, do it immediately without extra confirmation:
      - Update module maturity as justified by validation results.
      - Update `cmd/languages` golden output if changed.
      - Run quality gates (`make lint`, `make test`).
      - Commit the changes with a focused `type: subject` message.
-9. Keep validation focused on edge quality for each commit:
+10. Keep validation focused on edge quality for each commit:
    - Production file incorrectly depends on test file
    - Fan-out caused by same-name declarations across source sets/targets
    - Missing edges where symbols are clearly referenced
-10. If the user asks a side question during review (for example what `.in` means), answer briefly and then resume the queue when prompted.
+11. If the user asks a side question during review (for example what `.in` means), answer briefly and then resume the queue when prompted.
 
 ## Fixing Issues
 
