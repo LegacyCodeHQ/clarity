@@ -16,6 +16,12 @@ Dart support is not available natively in go-tree-sitter. To add support for Dar
 2. The parser files (`parser.c`, `parser.h`, `scanner.c`) were copied into the `internal/tree_sitter/dart/` directory.
 3. Go bindings were created inside the same directory to interface with the C-based tree-sitter parser using CGo.
 
+### Zig
+
+Zig support uses generated parser files from [tree-sitter-grammars/tree-sitter-zig](https://github.com/tree-sitter-grammars/tree-sitter-zig), stored under `internal/tree_sitter/zig/`.
+
+The copied source is pinned to commit `976140ed1fc828c8fb2ff2bcfbe6853f1ae9f183`. See `internal/tree_sitter/zig/README.md` for the copied files and license details.
+
 ### Supporting Additional Languages
 
 1. Create a new language directory under `internal/tree_sitter/` and build and copy the appropriate tree-sitter files.
@@ -25,3 +31,4 @@ Dart support is not available natively in go-tree-sitter. To add support for Dar
 
 - [go-tree-sitter](https://github.com/smacker/go-tree-sitter)
 - [tree-sitter-dart](https://github.com/UserNobody14/tree-sitter-dart)
+- [tree-sitter-zig](https://github.com/tree-sitter-grammars/tree-sitter-zig)
