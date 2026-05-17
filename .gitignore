@@ -13,6 +13,7 @@ coverage.out
 coverage.html
 cover.out
 .gotools/
+.gocache/
 coverage.tmp
 *.coverprofile
 *.cover
