@@ -3,7 +3,7 @@ package dart_test
 import (
 	"testing"
 
-	"github.com/LegacyCodeHQ/clarity/tree_sitter_external/dart"
+	"github.com/LegacyCodeHQ/clarity/internal/tree_sitter/dart"
 )
 
 func TestCanLoadGrammar(t *testing.T) {

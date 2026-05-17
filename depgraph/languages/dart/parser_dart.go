@@ -7,7 +7,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/LegacyCodeHQ/clarity/tree_sitter_external/dart"
+	"github.com/LegacyCodeHQ/clarity/internal/tree_sitter/dart"
 
 	sitter "github.com/smacker/go-tree-sitter"
 )

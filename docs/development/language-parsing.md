@@ -13,13 +13,13 @@ The project uses [go-tree-sitter](https://github.com/smacker/go-tree-sitter) to 
 Dart support is not available natively in go-tree-sitter. To add support for Dart:
 
 1. The [tree-sitter-dart](https://github.com/UserNobody14/tree-sitter-dart) repository was cloned and the parser was built using the [tree-sitter-cli](https://github.com/tree-sitter/tree-sitter/blob/master/crates/cli/README.md) tool.
-2. The parser files (`parser.c`, `parser.h`, `scanner.c`) were copied into the `tree_sitter_external/dart/` directory.
+2. The parser files (`parser.c`, `parser.h`, `scanner.c`) were copied into the `internal/tree_sitter/dart/` directory.
 3. Go bindings were created inside the same directory to interface with the C-based tree-sitter parser using CGo.
 
 ### Supporting Additional Languages
 
-1. Create a new language directory under `tree_sitter_external/` and build and copy the appropriate tree-sitter files.
-2. Check the `tree_sitter_external/dart` directory for a reference implementation of the Go bindings.
+1. Create a new language directory under `internal/tree_sitter/` and build and copy the appropriate tree-sitter files.
+2. Check the `internal/tree_sitter/dart` directory for a reference implementation of the Go bindings.
 
 ## Resources
 
