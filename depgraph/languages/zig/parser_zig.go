@@ -4,9 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"regexp"
 	"strconv"
-	"strings"
 	"sync"
 
 	tree_sitter_zig "github.com/LegacyCodeHQ/clarity/internal/tree_sitter/zig"
@@ -26,7 +24,6 @@ var (
 			return parser
 		},
 	}
-	zigImportCallPattern = regexp.MustCompile(`^@import\s*\(\s*("(?:\\.|[^"\\])*")\s*\)$`)
 )
 
 func Imports(filePath string) ([]Import, error) {
@@ -64,8 +61,8 @@ func extractImports(rootNode *sitter.Node, sourceCode []byte) []Import {
 			return
 		}
 		if node.Type() == "builtin_function" {
-			if imp, ok := parseImportCall(node.Content(sourceCode)); ok {
-				imports = append(imports, imp)
+			if path, ok := zigImportNodePath(node, sourceCode); ok {
+				imports = append(imports, Import{Path: path})
 			}
 			return
 		}
@@ -79,18 +76,31 @@ func extractImports(rootNode *sitter.Node, sourceCode []byte) []Import {
 	return imports
 }
 
-func parseImportCall(content string) (Import, bool) {
-	matches := zigImportCallPattern.FindStringSubmatch(strings.TrimSpace(content))
-	if len(matches) != 2 {
-		return Import{}, false
+func zigImportNodePath(node *sitter.Node, sourceCode []byte) (string, bool) {
+	if node == nil || node.Type() != "builtin_function" || node.NamedChildCount() < 2 {
+		return "", false
 	}
 
-	path, err := strconv.Unquote(matches[1])
+	builtin := node.NamedChild(0)
+	if builtin == nil || builtin.Type() != "builtin_identifier" || builtin.Content(sourceCode) != "@import" {
+		return "", false
+	}
+
+	args := node.NamedChild(1)
+	if args == nil || args.Type() != "arguments" || args.NamedChildCount() != 1 {
+		return "", false
+	}
+
+	arg := args.NamedChild(0)
+	if arg == nil || arg.Type() != "string" {
+		return "", false
+	}
+
+	path, err := strconv.Unquote(arg.Content(sourceCode))
 	if err != nil || path == "" {
-		return Import{}, false
+		return "", false
 	}
-
-	return Import{Path: path}, true
+	return path, true
 }
 
 func dedupeImports(imports []Import) []Import {

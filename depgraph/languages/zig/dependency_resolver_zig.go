@@ -1,18 +1,13 @@
 package zig
 
 import (
+	"context"
 	"fmt"
 	"path/filepath"
-	"regexp"
-	"strconv"
 	"strings"
 
 	"github.com/LegacyCodeHQ/clarity/vcs"
-)
-
-var (
-	zigImportConstPattern    = regexp.MustCompile(`(?m)\b(?:pub\s+)?const\s+([A-Za-z_][A-Za-z0-9_]*)\s*=\s*@import\s*\(\s*("(?:\\.|[^"\\])*")\s*\)`)
-	zigQualifiedConstPattern = regexp.MustCompile(`(?m)\bconst\s+([A-Za-z_][A-Za-z0-9_]*)\s*=\s*([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)+)\s*;`)
+	sitter "github.com/smacker/go-tree-sitter"
 )
 
 func ResolveZigProjectImports(
@@ -81,8 +76,9 @@ func newZigReexportResolver(fileExt string, suppliedFiles map[string]bool, conte
 }
 
 func (r *zigReexportResolver) resolveQualifiedReferences(sourceFile string, sourceCode []byte) []string {
-	importAliases := r.parseZigImportAliases(sourceFile, sourceCode)
-	qualifiedAliases := parseZigQualifiedAliases(sourceCode)
+	declarations := parseZigConstDeclarations(sourceCode)
+	importAliases := r.resolveImportAliases(sourceFile, declarations.imports)
+	qualifiedAliases := declarations.qualified
 
 	var resolved []string
 	for _, ref := range qualifiedAliases {
@@ -150,26 +146,19 @@ func (r *zigReexportResolver) exportsForFile(filePath string) map[string]string 
 		return r.exportsCache[filePath]
 	}
 
-	exports := r.parseZigImportAliases(filePath, content)
+	exports := r.resolveImportAliases(filePath, parseZigConstDeclarations(content).imports)
 	r.exportsCache[filePath] = exports
 	return exports
 }
 
-func (r *zigReexportResolver) parseZigImportAliases(sourceFile string, sourceCode []byte) map[string]string {
+func (r *zigReexportResolver) resolveImportAliases(sourceFile string, importAliases map[string]string) map[string]string {
 	aliases := make(map[string]string)
-	for _, match := range zigImportConstPattern.FindAllSubmatch(sourceCode, -1) {
-		if len(match) != 3 {
-			continue
-		}
-		path, ok := cleanZigImportLiteral(string(match[2]))
-		if !ok {
-			continue
-		}
+	for name, path := range importAliases {
 		resolved, ok := r.resolveImportAliasPath(sourceFile, path)
 		if !ok {
 			continue
 		}
-		aliases[string(match[1])] = resolved
+		aliases[name] = resolved
 	}
 	return aliases
 }
@@ -200,17 +189,6 @@ func (r *zigReexportResolver) resolveStdImportPath(sourceFile string) (string, b
 	}
 }
 
-func parseZigQualifiedAliases(sourceCode []byte) map[string]string {
-	aliases := make(map[string]string)
-	for _, match := range zigQualifiedConstPattern.FindAllSubmatch(sourceCode, -1) {
-		if len(match) != 3 {
-			continue
-		}
-		aliases[string(match[1])] = string(match[2])
-	}
-	return aliases
-}
-
 func expandQualifiedAlias(segments []string, aliases map[string]string) []string {
 	seen := make(map[string]bool)
 	for len(segments) > 0 {
@@ -226,12 +204,117 @@ func expandQualifiedAlias(segments []string, aliases map[string]string) []string
 	return segments
 }
 
-func cleanZigImportLiteral(raw string) (string, bool) {
-	path, err := strconv.Unquote(raw)
-	if err != nil || path == "" {
+type zigConstDeclarations struct {
+	imports   map[string]string
+	qualified map[string]string
+}
+
+func parseZigConstDeclarations(sourceCode []byte) zigConstDeclarations {
+	declarations := zigConstDeclarations{
+		imports:   make(map[string]string),
+		qualified: make(map[string]string),
+	}
+
+	parser := sitter.NewParser()
+	parser.SetLanguage(zigLanguage)
+
+	tree, err := parser.ParseCtx(context.Background(), nil, sourceCode)
+	if err != nil {
+		return declarations
+	}
+	defer tree.Close()
+
+	var walk func(*sitter.Node)
+	walk = func(node *sitter.Node) {
+		if node == nil {
+			return
+		}
+		if node.Type() == "variable_declaration" {
+			name, value, ok := zigConstDeclarationParts(node, sourceCode)
+			if ok {
+				if importPath, ok := zigImportNodePath(value, sourceCode); ok {
+					declarations.imports[name] = importPath
+				} else if qualifiedPath, ok := zigQualifiedPathNode(value, sourceCode); ok {
+					declarations.qualified[name] = qualifiedPath
+				}
+			}
+			return
+		}
+
+		for i := 0; i < int(node.NamedChildCount()); i++ {
+			walk(node.NamedChild(i))
+		}
+	}
+
+	walk(tree.RootNode())
+	return declarations
+}
+
+func zigConstDeclarationParts(node *sitter.Node, sourceCode []byte) (string, *sitter.Node, bool) {
+	nameNode := node.ChildByFieldName("name")
+	if nameNode == nil {
+		for i := 0; i < int(node.NamedChildCount()); i++ {
+			child := node.NamedChild(i)
+			if child.Type() == "identifier" {
+				nameNode = child
+				break
+			}
+		}
+	}
+	if nameNode == nil {
+		return "", nil, false
+	}
+
+	header := strings.TrimSpace(string(sourceCode[node.StartByte():nameNode.StartByte()]))
+	if !strings.Contains(header, "const") || strings.Contains(header, "var") {
+		return "", nil, false
+	}
+
+	var valueNode *sitter.Node
+	for i := int(node.NamedChildCount()) - 1; i >= 0; i-- {
+		child := node.NamedChild(i)
+		if child == nil || child.Equal(nameNode) || child.Type() == "identifier" && child.Content(sourceCode) == nameNode.Content(sourceCode) {
+			continue
+		}
+		valueNode = child
+		break
+	}
+	if valueNode == nil {
+		return "", nil, false
+	}
+
+	return nameNode.Content(sourceCode), valueNode, true
+}
+
+func zigQualifiedPathNode(node *sitter.Node, sourceCode []byte) (string, bool) {
+	segments, ok := zigQualifiedPathSegments(node, sourceCode)
+	if !ok || len(segments) < 2 {
 		return "", false
 	}
-	return path, true
+	return strings.Join(segments, "."), true
+}
+
+func zigQualifiedPathSegments(node *sitter.Node, sourceCode []byte) ([]string, bool) {
+	if node == nil {
+		return nil, false
+	}
+
+	switch node.Type() {
+	case "identifier":
+		return []string{node.Content(sourceCode)}, true
+	case "field_expression":
+		objectSegments, ok := zigQualifiedPathSegments(node.ChildByFieldName("object"), sourceCode)
+		if !ok {
+			return nil, false
+		}
+		member := node.ChildByFieldName("member")
+		if member == nil || member.Type() != "identifier" {
+			return nil, false
+		}
+		return append(objectSegments, member.Content(sourceCode)), true
+	default:
+		return nil, false
+	}
 }
 
 func dedupePaths(paths []string) []string {
