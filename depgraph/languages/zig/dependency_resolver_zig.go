@@ -81,6 +81,14 @@ func (r *zigReexportResolver) resolveQualifiedReferences(sourceFile string, sour
 	qualifiedAliases := declarations.qualified
 
 	var resolved []string
+	for _, ref := range declarations.directReferences {
+		path, ok := r.resolveQualifiedReference(sourceFile, ref, importAliases, nil)
+		if !ok || path == sourceFile || !r.suppliedFiles[path] {
+			continue
+		}
+		resolved = append(resolved, path)
+	}
+
 	for _, ref := range qualifiedAliases {
 		path, ok := r.resolveQualifiedReference(sourceFile, ref, importAliases, qualifiedAliases)
 		if !ok || path == sourceFile || !r.suppliedFiles[path] {
@@ -177,9 +185,14 @@ func (r *zigReexportResolver) resolveImportAliasPath(sourceFile string, importPa
 
 func (r *zigReexportResolver) resolveStdImportPath(sourceFile string) (string, bool) {
 	for dir := filepath.Dir(sourceFile); ; dir = filepath.Dir(dir) {
-		candidate := filepath.Join(dir, "std", "std.zig")
-		if _, err := r.contentReader(candidate); err == nil {
-			return filepath.Clean(candidate), true
+		candidates := []string{
+			filepath.Join(dir, "std", "std.zig"),
+			filepath.Join(dir, "lib", "std", "std.zig"),
+		}
+		for _, candidate := range candidates {
+			if _, err := r.contentReader(candidate); err == nil {
+				return filepath.Clean(candidate), true
+			}
 		}
 
 		parent := filepath.Dir(dir)
@@ -190,6 +203,10 @@ func (r *zigReexportResolver) resolveStdImportPath(sourceFile string) (string, b
 }
 
 func expandQualifiedAlias(segments []string, aliases map[string]string) []string {
+	if len(aliases) == 0 {
+		return segments
+	}
+
 	seen := make(map[string]bool)
 	for len(segments) > 0 {
 		alias := segments[0]
@@ -205,14 +222,17 @@ func expandQualifiedAlias(segments []string, aliases map[string]string) []string
 }
 
 type zigConstDeclarations struct {
-	imports   map[string]string
-	qualified map[string]string
+	imports            map[string]string
+	qualified          map[string]string
+	directReferences   []string
+	directReferenceSet map[string]bool
 }
 
 func parseZigConstDeclarations(sourceCode []byte) zigConstDeclarations {
 	declarations := zigConstDeclarations{
-		imports:   make(map[string]string),
-		qualified: make(map[string]string),
+		imports:            make(map[string]string),
+		qualified:          make(map[string]string),
+		directReferenceSet: make(map[string]bool),
 	}
 
 	parser := sitter.NewParser()
@@ -238,7 +258,14 @@ func parseZigConstDeclarations(sourceCode []byte) zigConstDeclarations {
 					declarations.qualified[name] = qualifiedPath
 				}
 			}
-			return
+		}
+
+		if node.Type() == "field_expression" && !hasZigFieldExpressionParent(node) {
+			qualifiedPath, ok := zigQualifiedPathNode(node, sourceCode)
+			if ok && isDirectZigQualifiedReference(qualifiedPath) && !declarations.directReferenceSet[qualifiedPath] {
+				declarations.directReferenceSet[qualifiedPath] = true
+				declarations.directReferences = append(declarations.directReferences, qualifiedPath)
+			}
 		}
 
 		for i := 0; i < int(node.NamedChildCount()); i++ {
@@ -248,6 +275,15 @@ func parseZigConstDeclarations(sourceCode []byte) zigConstDeclarations {
 
 	walk(tree.RootNode())
 	return declarations
+}
+
+func isDirectZigQualifiedReference(path string) bool {
+	return strings.Count(path, ".") == 1
+}
+
+func hasZigFieldExpressionParent(node *sitter.Node) bool {
+	parent := node.Parent()
+	return parent != nil && parent.Type() == "field_expression"
 }
 
 func zigConstDeclarationParts(node *sitter.Node, sourceCode []byte) (string, *sitter.Node, bool) {
@@ -302,6 +338,13 @@ func zigQualifiedPathSegments(node *sitter.Node, sourceCode []byte) ([]string, b
 	switch node.Type() {
 	case "identifier":
 		return []string{node.Content(sourceCode)}, true
+	case "pointer_type":
+		for i := int(node.NamedChildCount()) - 1; i >= 0; i-- {
+			if segments, ok := zigQualifiedPathSegments(node.NamedChild(i), sourceCode); ok {
+				return segments, true
+			}
+		}
+		return nil, false
 	case "field_expression":
 		objectSegments, ok := zigQualifiedPathSegments(node.ChildByFieldName("object"), sourceCode)
 		if !ok {

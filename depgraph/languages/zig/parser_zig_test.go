@@ -211,6 +211,46 @@ const UnexpectedError = std.posix.UnexpectedError;
 	assert.NotContains(t, imports, posixPath)
 }
 
+func TestResolveZigProjectImportsIncludesDirectStdTargetReferences(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	stdPath := filepath.Join(tmpDir, "lib", "std", "std.zig")
+	targetPath := filepath.Join(tmpDir, "lib", "std", "Target.zig")
+	libCDirsPath := filepath.Join(tmpDir, "lib", "std", "zig", "LibCDirs.zig")
+	llvmPath := filepath.Join(tmpDir, "src", "codegen", "llvm.zig")
+
+	writeFile(t, stdPath, `pub const Target = @import("Target.zig");`)
+	writeFile(t, targetPath, `pub const Abi = enum { none, gnu };`)
+	writeFile(t, libCDirsPath, `
+const std = @import("../std.zig");
+
+pub fn detect(target: *const std.Target) void {
+    _ = target;
+}
+`)
+	writeFile(t, llvmPath, `
+const std = @import("std");
+
+pub fn targetTriple(target: *const std.Target) void {
+    _ = target;
+}
+`)
+
+	suppliedFiles := map[string]bool{
+		targetPath:   true,
+		libCDirsPath: true,
+		llvmPath:     true,
+	}
+
+	imports, err := ResolveZigProjectImports(libCDirsPath, libCDirsPath, ".zig", suppliedFiles, vcs.FilesystemContentReader())
+	require.NoError(t, err)
+	assert.ElementsMatch(t, []string{targetPath}, imports)
+
+	imports, err = ResolveZigProjectImports(llvmPath, llvmPath, ".zig", suppliedFiles, vcs.FilesystemContentReader())
+	require.NoError(t, err)
+	assert.ElementsMatch(t, []string{targetPath}, imports)
+}
+
 func writeFile(t *testing.T, path string, content string) {
 	t.Helper()
 	require.NoError(t, os.MkdirAll(filepath.Dir(path), 0755))
