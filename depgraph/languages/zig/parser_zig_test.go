@@ -164,6 +164,53 @@ fn coverage(run: *Run, fuzz: *std.Build.Fuzz) void {
 	assert.NotContains(t, imports, fuzzPath)
 }
 
+func TestResolveZigProjectImportsContinuesThroughSuppliedIntermediateReexports(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	stdPath := filepath.Join(tmpDir, "lib", "std", "std.zig")
+	osPath := filepath.Join(tmpDir, "lib", "std", "os.zig")
+	windowsPath := filepath.Join(tmpDir, "lib", "std", "os", "windows.zig")
+	kernel32Path := filepath.Join(tmpDir, "lib", "std", "os", "windows", "kernel32.zig")
+	posixPath := filepath.Join(tmpDir, "lib", "std", "posix.zig")
+
+	writeFile(t, stdPath, `
+pub const os = @import("os.zig");
+pub const posix = @import("posix.zig");
+`)
+	writeFile(t, osPath, `pub const windows = @import("os/windows.zig");`)
+	writeFile(t, windowsPath, `pub const kernel32 = @import("windows/kernel32.zig");`)
+	writeFile(t, kernel32Path, `
+const std = @import("../../std.zig");
+const windows = std.os.windows;
+const BOOL = windows.BOOL;
+`)
+	writeFile(t, posixPath, `
+const std = @import("std.zig");
+const windows = std.os.windows;
+const UnexpectedError = std.posix.UnexpectedError;
+`)
+
+	suppliedFiles := map[string]bool{
+		osPath:       true,
+		windowsPath:  true,
+		kernel32Path: true,
+		posixPath:    true,
+	}
+
+	imports, err := ResolveZigProjectImports(kernel32Path, kernel32Path, ".zig", suppliedFiles, vcs.FilesystemContentReader())
+	require.NoError(t, err)
+
+	assert.ElementsMatch(t, []string{windowsPath}, imports)
+	assert.NotContains(t, imports, osPath)
+
+	imports, err = ResolveZigProjectImports(posixPath, posixPath, ".zig", suppliedFiles, vcs.FilesystemContentReader())
+	require.NoError(t, err)
+
+	assert.ElementsMatch(t, []string{windowsPath}, imports)
+	assert.NotContains(t, imports, osPath)
+	assert.NotContains(t, imports, posixPath)
+}
+
 func writeFile(t *testing.T, path string, content string) {
 	t.Helper()
 	require.NoError(t, os.MkdirAll(filepath.Dir(path), 0755))

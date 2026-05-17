@@ -116,6 +116,10 @@ func (r *zigReexportResolver) resolveQualifiedReference(
 	if !ok {
 		return "", false
 	}
+	lastSuppliedFile := ""
+	if r.suppliedFiles[currentFile] {
+		lastSuppliedFile = currentFile
+	}
 
 	for _, segment := range segments[1:] {
 		exports := r.exportsForFile(currentFile)
@@ -125,12 +129,12 @@ func (r *zigReexportResolver) resolveQualifiedReference(
 		}
 		currentFile = nextFile
 		if r.suppliedFiles[currentFile] {
-			return currentFile, true
+			lastSuppliedFile = currentFile
 		}
 	}
 
-	if r.suppliedFiles[currentFile] && currentFile != sourceFile {
-		return currentFile, true
+	if lastSuppliedFile != "" && lastSuppliedFile != sourceFile {
+		return lastSuppliedFile, true
 	}
 	return "", false
 }
