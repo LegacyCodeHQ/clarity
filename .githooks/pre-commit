@@ -7,6 +7,13 @@ cd "$repo_root"
 # Git hooks inherit repo-scoped env vars that can break nested git commands.
 unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_PREFIX GIT_COMMON_DIR
 
+if ! command -v gitleaks >/dev/null 2>&1; then
+  echo "pre-commit: gitleaks not installed. Install: https://github.com/gitleaks/gitleaks#installing" >&2
+  exit 1
+fi
+echo "pre-commit: running gitleaks git --pre-commit --staged"
+gitleaks git --pre-commit --staged --redact --verbose
+
 echo "pre-commit: running make format-check"
 make format-check
 echo "pre-commit: running make lint"
