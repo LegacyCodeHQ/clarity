@@ -19,6 +19,7 @@ type ProjectImportResolver struct {
 	depCrateRootsCache sync.Map // crate root -> map[importName]crateRoot
 	modDepsCache       sync.Map // mod.rs path -> []string
 	importsCache       sync.Map // file path -> []RustImport
+	workspaceCache     sync.Map // directory path -> *cargoWorkspace (or nil sentinel)
 }
 
 func NewProjectImportResolver(suppliedFiles map[string]bool, contentReader vcs.ContentReader) *ProjectImportResolver {
@@ -323,6 +324,19 @@ func (r *ProjectImportResolver) dependencyCrateRoots(crateRoot string) map[strin
 		return result
 	}
 
+	// 1. Cargo workspace lookup. Modern Rust workspaces declare dependencies
+	// centrally in `[workspace.dependencies]` and members refer to them via
+	// `{ workspace = true }`. Without this lookup, every cross-crate edge in
+	// a workspace-style monorepo (uv, ruff, deno, oxc, bevy, …) is invisible.
+	if ws := r.loadCargoWorkspaceFor(crateRoot); ws != nil {
+		for name, dir := range ws.crates {
+			result[name] = dir
+		}
+	}
+
+	// 2. Per-crate `[dependencies]` path entries. These take precedence over
+	// the workspace mapping for the rare cases where a member crate overrides
+	// a workspace dependency.
 	cargoTomlPath := filepath.Join(crateRoot, "Cargo.toml")
 	content, err := r.contentReader(cargoTomlPath)
 	if err != nil {
