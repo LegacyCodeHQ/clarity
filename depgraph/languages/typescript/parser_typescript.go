@@ -3,6 +3,7 @@ package typescript
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -501,7 +502,20 @@ func sourceCandidatesForJSImport(basePath string) []string {
 // optionally on tsconfig.json paths. The caller filters candidates against
 // the set of supplied project files.
 func resolveTypeScriptBasePaths(sourceFile, importPath string) []string {
+	if strings.HasPrefix(importPath, "./") || strings.HasPrefix(importPath, "../") {
+		sourceDir := filepath.Dir(sourceFile)
+		return []string{filepath.Clean(filepath.Join(sourceDir, importPath))}
+	}
+
 	if !strings.HasPrefix(importPath, "@/") {
+		// Could be an npm workspace package (e.g. "@tanstack/query-core" or
+		// "lodash-es" inside a yarn/pnpm workspace).
+		if bases := resolveWorkspaceBasePaths(sourceFile, importPath); len(bases) > 0 {
+			return bases
+		}
+		// Fall back to the legacy behaviour of joining against the source
+		// dir. Harmless if nothing resolves; preserves any external-but-vendored
+		// patterns that happened to work before this change.
 		sourceDir := filepath.Dir(sourceFile)
 		return []string{filepath.Clean(filepath.Join(sourceDir, importPath))}
 	}
@@ -543,6 +557,91 @@ func resolveTypeScriptBasePaths(sourceFile, importPath string) []string {
 	}
 
 	return bases
+}
+
+// resolveWorkspaceBasePaths returns candidate base paths (no extension) when
+// importPath names a sibling workspace package, e.g. "@tanstack/query-core"
+// in a pnpm workspace. Returns nil if importPath is not a workspace
+// package or no workspace root is reachable from sourceFile.
+//
+// For a bare-package import (e.g. "@tanstack/query-core"), candidates are:
+//   - <pkgDir>/<main-without-extension>  (when package.json declares main)
+//   - <pkgDir>/src/index
+//   - <pkgDir>/index
+//
+// For a sub-path import (e.g. "@tanstack/query-core/devtools"), candidates are:
+//   - <pkgDir>/<subpath>
+//   - <pkgDir>/src/<subpath>          (common in JS monorepos that ship src/)
+//   - <pkgDir>/dist/<subpath>         (common compiled-output layout)
+//
+// Extension probing + index resolution is layered on top by
+// ResolveTypeScriptImportPath.
+func resolveWorkspaceBasePaths(sourceFile, importPath string) []string {
+	ws := loadNpmWorkspaceFor(sourceFile)
+	if ws == nil {
+		return nil
+	}
+	pkgDir, subpath, ok := ws.resolveWorkspacePackage(importPath)
+	if !ok {
+		return nil
+	}
+
+	var bases []string
+	seen := make(map[string]bool)
+	add := func(p string) {
+		p = filepath.Clean(p)
+		if !seen[p] {
+			seen[p] = true
+			bases = append(bases, p)
+		}
+	}
+
+	if subpath == "" {
+		// Bare-package import. Try the package.json main field first, then
+		// common JS / TS conventions.
+		if main := readPackageMain(pkgDir); main != "" {
+			add(filepath.Join(pkgDir, stripKnownExtension(main)))
+		}
+		add(filepath.Join(pkgDir, "src", "index"))
+		add(filepath.Join(pkgDir, "index"))
+		return bases
+	}
+
+	// Subpath import. The most common layouts in JS monorepos are
+	// pkg/<subpath> (subpath maps directly into src/), pkg/src/<subpath>
+	// (subpath is declared without the src/ prefix), or pkg/dist/<subpath>.
+	add(filepath.Join(pkgDir, subpath))
+	add(filepath.Join(pkgDir, "src", subpath))
+	add(filepath.Join(pkgDir, "dist", subpath))
+	return bases
+}
+
+// readPackageMain returns the value of the "main" field from a package.json
+// living in pkgDir, or "" if absent.
+func readPackageMain(pkgDir string) string {
+	data, err := os.ReadFile(filepath.Join(pkgDir, "package.json"))
+	if err != nil {
+		return ""
+	}
+	var raw struct {
+		Main string `json:"main"`
+	}
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return ""
+	}
+	return strings.TrimSpace(raw.Main)
+}
+
+// stripKnownExtension removes a trailing .js/.jsx/.ts/.tsx/.mjs/.cjs from a
+// path so that the resolver's extension-probing logic can append fresh
+// candidates without duplicating work.
+func stripKnownExtension(path string) string {
+	for _, ext := range []string{".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs"} {
+		if strings.HasSuffix(path, ext) {
+			return strings.TrimSuffix(path, ext)
+		}
+	}
+	return path
 }
 
 func projectSrcRootFromSourceFile(sourceFile string) (string, bool) {
