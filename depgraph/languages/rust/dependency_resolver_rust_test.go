@@ -205,6 +205,86 @@ func TestResolveRustProjectImports_DoesNotReturnSelfDependency(t *testing.T) {
 	assert.NotContains(t, imports, astgrepFile)
 }
 
+// TestResolveRustProjectImports_WorkspaceTrueDependency exercises the modern
+// Cargo-workspace dependency pattern, where the path lives in the root
+// workspace's `[workspace.dependencies]` and each member crate refers to it
+// via `{ workspace = true }`. This is the pattern uv, ruff, deno, and most
+// large Rust workspaces use; the failure mode is that every cross-crate
+// edge becomes invisible to clarity because `parseRustPathDependencyEntries`
+// only catches direct `path = ...` declarations on the importing crate.
+//
+// Layout under tmpDir/workspace:
+//
+//	Cargo.toml                    [workspace] members + [workspace.dependencies]
+//	crate-a/
+//	  Cargo.toml                  [dependencies] crate-b = { workspace = true }
+//	  src/main.rs                 use crate_b::foo::run;
+//	crate-b/
+//	  Cargo.toml                  [package] name = "crate-b"
+//	  src/lib.rs                  pub mod foo;
+//	  src/foo.rs                  pub fn run() {}
+func TestResolveRustProjectImports_WorkspaceTrueDependency(t *testing.T) {
+	tmpDir := t.TempDir()
+	workspaceRoot := filepath.Join(tmpDir, "workspace")
+	crateADir := filepath.Join(workspaceRoot, "crate-a")
+	crateBDir := filepath.Join(workspaceRoot, "crate-b")
+	require.NoError(t, os.MkdirAll(filepath.Join(crateADir, "src"), 0755))
+	require.NoError(t, os.MkdirAll(filepath.Join(crateBDir, "src"), 0755))
+
+	workspaceCargo := filepath.Join(workspaceRoot, "Cargo.toml")
+	crateACargo := filepath.Join(crateADir, "Cargo.toml")
+	crateAMain := filepath.Join(crateADir, "src", "main.rs")
+	crateBCargo := filepath.Join(crateBDir, "Cargo.toml")
+	crateBLib := filepath.Join(crateBDir, "src", "lib.rs")
+	crateBFoo := filepath.Join(crateBDir, "src", "foo.rs")
+
+	require.NoError(t, os.WriteFile(workspaceCargo, []byte(`
+[workspace]
+members = ["crate-a", "crate-b"]
+resolver = "2"
+
+[workspace.dependencies]
+crate-b = { version = "0.1.0", path = "crate-b" }
+`), 0644))
+
+	require.NoError(t, os.WriteFile(crateACargo, []byte(`
+[package]
+name = "crate-a"
+version = "0.1.0"
+
+[dependencies]
+crate-b = { workspace = true }
+`), 0644))
+	require.NoError(t, os.WriteFile(crateAMain, []byte(`
+use crate_b::foo::run;
+
+fn main() {
+    run();
+}
+`), 0644))
+
+	require.NoError(t, os.WriteFile(crateBCargo, []byte(`
+[package]
+name = "crate-b"
+version = "0.1.0"
+`), 0644))
+	require.NoError(t, os.WriteFile(crateBLib, []byte("pub mod foo;\n"), 0644))
+	require.NoError(t, os.WriteFile(crateBFoo, []byte("pub fn run() {}\n"), 0644))
+
+	supplied := map[string]bool{
+		workspaceCargo: true,
+		crateACargo:    true,
+		crateAMain:     true,
+		crateBCargo:    true,
+		crateBLib:      true,
+		crateBFoo:      true,
+	}
+
+	imports, err := ResolveRustProjectImports(crateAMain, crateAMain, supplied, os.ReadFile)
+	require.NoError(t, err)
+	assert.Contains(t, imports, crateBFoo, "expected crate_b::foo::run to resolve via workspace = true delegation")
+}
+
 func TestResolveRustProjectImports_CrossCratePathDependency(t *testing.T) {
 	tmpDir := t.TempDir()
 	workspaceRoot := filepath.Join(tmpDir, "workspace")
