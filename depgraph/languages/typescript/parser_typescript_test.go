@@ -559,6 +559,95 @@ func TestResolveTypeScriptImportPath_AliasResolvedViaTsconfigPaths(t *testing.T)
 	assert.Contains(t, resolved, dbFile)
 }
 
+// TestResolveTypeScriptImportPath_NpmWorkspacePackage exercises the scenario
+// hit by tanstack/query, vercel/ai, and every other pnpm/yarn/npm workspace:
+// package A imports package B by its npm-package name (e.g. "@tanstack/query-core"),
+// not by relative path. Today this returns nil — clarity classifies the import
+// as ExternalImport and silently drops it. The result on monorepo audits is
+// every package looking like an isolated island (Ca=Ce=I=0 everywhere).
+//
+// Layout under tmpDir:
+//
+//	package.json             { "workspaces": ["packages/*"] }
+//	packages/
+//	  query-core/
+//	    package.json         { "name": "@tanstack/query-core", "main": "src/index.ts" }
+//	    src/index.ts         export const QueryCache = ...
+//	  react-query/
+//	    package.json         { "name": "@tanstack/react-query" }
+//	    src/index.ts         import { QueryCache } from "@tanstack/query-core"
+func TestResolveTypeScriptImportPath_NpmWorkspacePackage(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Root workspace manifest
+	rootPkg := `{
+  "name": "tanstack-query-monorepo",
+  "private": true,
+  "workspaces": ["packages/*"]
+}`
+	require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "package.json"), []byte(rootPkg), 0644))
+
+	// query-core package
+	coreDir := filepath.Join(tmpDir, "packages", "query-core")
+	require.NoError(t, os.MkdirAll(filepath.Join(coreDir, "src"), 0755))
+	require.NoError(t, os.WriteFile(filepath.Join(coreDir, "package.json"),
+		[]byte(`{"name": "@tanstack/query-core", "main": "src/index.ts"}`), 0644))
+	coreIndex := filepath.Join(coreDir, "src", "index.ts")
+	require.NoError(t, os.WriteFile(coreIndex,
+		[]byte(`export class QueryCache {}`), 0644))
+
+	// react-query package — imports query-core by its npm name
+	rqDir := filepath.Join(tmpDir, "packages", "react-query")
+	require.NoError(t, os.MkdirAll(filepath.Join(rqDir, "src"), 0755))
+	require.NoError(t, os.WriteFile(filepath.Join(rqDir, "package.json"),
+		[]byte(`{"name": "@tanstack/react-query", "dependencies": {"@tanstack/query-core": "*"}}`), 0644))
+	rqIndex := filepath.Join(rqDir, "src", "index.ts")
+	require.NoError(t, os.WriteFile(rqIndex,
+		[]byte(`import { QueryCache } from "@tanstack/query-core";`), 0644))
+
+	suppliedFiles := map[string]bool{
+		coreIndex: true,
+		rqIndex:   true,
+	}
+
+	resolved := ResolveTypeScriptImportPath(rqIndex, "@tanstack/query-core", suppliedFiles)
+	assert.Contains(t, resolved, coreIndex, "expected @tanstack/query-core to resolve to packages/query-core/src/index.ts via package.json workspaces")
+}
+
+// TestResolveTypeScriptImportPath_NpmWorkspaceSubpath exercises the deeper case
+// where the import addresses a sub-path under the workspace package, e.g.
+// `@tanstack/query-core/devtools`. Resolution must map that to
+// `packages/query-core/devtools.ts` (or src/devtools.ts via main+exports).
+func TestResolveTypeScriptImportPath_NpmWorkspaceSubpath(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "package.json"),
+		[]byte(`{"name": "monorepo", "private": true, "workspaces": ["packages/*"]}`), 0644))
+
+	coreDir := filepath.Join(tmpDir, "packages", "query-core")
+	require.NoError(t, os.MkdirAll(filepath.Join(coreDir, "src"), 0755))
+	require.NoError(t, os.WriteFile(filepath.Join(coreDir, "package.json"),
+		[]byte(`{"name": "@tanstack/query-core"}`), 0644))
+	devtoolsFile := filepath.Join(coreDir, "src", "devtools.ts")
+	require.NoError(t, os.WriteFile(devtoolsFile, []byte(`export const x = 1;`), 0644))
+
+	consumerDir := filepath.Join(tmpDir, "packages", "react-query")
+	require.NoError(t, os.MkdirAll(filepath.Join(consumerDir, "src"), 0755))
+	require.NoError(t, os.WriteFile(filepath.Join(consumerDir, "package.json"),
+		[]byte(`{"name": "@tanstack/react-query"}`), 0644))
+	consumerFile := filepath.Join(consumerDir, "src", "index.ts")
+	require.NoError(t, os.WriteFile(consumerFile,
+		[]byte(`import { x } from "@tanstack/query-core/devtools";`), 0644))
+
+	suppliedFiles := map[string]bool{
+		devtoolsFile: true,
+		consumerFile: true,
+	}
+
+	resolved := ResolveTypeScriptImportPath(consumerFile, "@tanstack/query-core/devtools", suppliedFiles)
+	assert.Contains(t, resolved, devtoolsFile, "expected @tanstack/query-core/devtools to resolve to packages/query-core/src/devtools.ts")
+}
+
 // Helper functions
 
 func extractPaths(imports []TypeScriptImport) []string {
