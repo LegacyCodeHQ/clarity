@@ -81,11 +81,57 @@ pub mod public_mod;
 	imports, err := ParseRustImports([]byte(source))
 	require.NoError(t, err)
 
-	assert.Len(t, imports, 2)
-	assert.Equal(t, "crate::alpha", imports[0].Path)
+	// Brace groups expand to one import per symbol — the dependency resolver
+	// needs every name to reach its defining file.
+	assert.Len(t, imports, 3)
+	assert.Equal(t, "crate::alpha::beta", imports[0].Path)
 	assert.Equal(t, RustImportUse, imports[0].Kind)
-	assert.Equal(t, "public_mod", imports[1].Path)
-	assert.Equal(t, RustImportModDecl, imports[1].Kind)
+	assert.Equal(t, "crate::alpha::gamma", imports[1].Path)
+	assert.Equal(t, RustImportUse, imports[1].Kind)
+	assert.Equal(t, "public_mod", imports[2].Path)
+	assert.Equal(t, RustImportModDecl, imports[2].Kind)
+}
+
+// A single-level brace group on a `use super::` import — exactly the spear
+// `real_git.rs` pattern: `use super::{Git, Submodule};`. Each symbol must
+// become its own import path so the resolver can follow it through the
+// parent module's `pub use` re-exports.
+func TestParseRustImports_BraceGroupExpandsToOnePathPerSymbol(t *testing.T) {
+	source := `use super::{Git, Submodule};
+use super::Other;
+`
+	imports, err := ParseRustImports([]byte(source))
+	require.NoError(t, err)
+
+	paths := make([]string, 0, len(imports))
+	for _, imp := range imports {
+		if imp.Kind == RustImportUse {
+			paths = append(paths, imp.Path)
+		}
+	}
+	assert.Contains(t, paths, "super::Git", "expected braced symbol Git to become super::Git")
+	assert.Contains(t, paths, "super::Submodule", "expected braced symbol Submodule to become super::Submodule")
+	assert.Contains(t, paths, "super::Other", "expected non-braced super::Other to be preserved")
+	assert.NotContains(t, paths, "super", "the bare prefix should not leak into imports when symbols are present")
+}
+
+// Nested brace groups should also expand fully. `as` aliases are stripped
+// (we only care about the source identifier path), and a literal `self`
+// inside a group refers to the prefix itself.
+func TestParseRustImports_NestedBraceGroupAndSelfAndAs(t *testing.T) {
+	source := `use std::{io::{self, Read}, fs::File as F};`
+	imports, err := ParseRustImports([]byte(source))
+	require.NoError(t, err)
+
+	paths := make([]string, 0, len(imports))
+	for _, imp := range imports {
+		if imp.Kind == RustImportUse {
+			paths = append(paths, imp.Path)
+		}
+	}
+	assert.Contains(t, paths, "std::io", "self inside std::io group should reference the io prefix itself")
+	assert.Contains(t, paths, "std::io::Read")
+	assert.Contains(t, paths, "std::fs::File", "as alias should be stripped, leaving the underlying path")
 }
 
 func TestParseRustImports_CollectsQualifiedPathReferences(t *testing.T) {

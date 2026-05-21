@@ -84,6 +84,11 @@ func parseRustImportsFast(sourceCode []byte) ([]RustImport, bool) {
 	var stmt []byte
 
 	depth := 0
+	// True once we've entered a `{` whose enclosing statement is a `use`. We
+	// then have to preserve the brace group's contents in `stmt` so
+	// `parseTopLevelRustImportStatementBytes` can expand them — unlike other
+	// brace contexts (function bodies, struct literals) which we skip over.
+	inUseBrace := false
 	inLineComment := false
 	inBlockComment := 0
 	inString := false
@@ -166,8 +171,15 @@ func parseRustImportsFast(sourceCode []byte) ([]RustImport, bool) {
 
 		switch c {
 		case '{':
-			if depth == 0 && !isLikelyUsePrefix(stmt) {
-				stmt = stmt[:0]
+			if depth == 0 {
+				if isLikelyUsePrefix(stmt) {
+					inUseBrace = true
+				} else {
+					stmt = stmt[:0]
+				}
+			}
+			if inUseBrace {
+				stmt = append(stmt, c)
 			}
 			depth++
 			continue
@@ -175,18 +187,25 @@ func parseRustImportsFast(sourceCode []byte) ([]RustImport, bool) {
 			if depth > 0 {
 				depth--
 			}
+			if inUseBrace {
+				stmt = append(stmt, c)
+			}
 			continue
 		}
 
 		if depth > 0 {
+			if inUseBrace {
+				stmt = append(stmt, c)
+			}
 			continue
 		}
 
 		if c == ';' {
-			if imp, ok := parseTopLevelRustImportStatementBytes(stmt); ok {
-				imports = append(imports, imp)
+			if imps, ok := parseTopLevelRustImportStatementBytes(stmt); ok {
+				imports = append(imports, imps...)
 			}
 			stmt = stmt[:0]
+			inUseBrace = false
 			continue
 		}
 		if len(stmt) == 0 && (c == ' ' || c == '\t' || c == '\n' || c == '\r') {
@@ -202,38 +221,48 @@ func parseRustImportsFast(sourceCode []byte) ([]RustImport, bool) {
 	return imports, true
 }
 
-func parseTopLevelRustImportStatementBytes(stmt []byte) (RustImport, bool) {
+func parseTopLevelRustImportStatementBytes(stmt []byte) ([]RustImport, bool) {
 	s := trimSpaceBytes(stmt)
 	if len(s) == 0 {
-		return RustImport{}, false
+		return nil, false
 	}
 	s = stripLeadingRustAttributesBytes(s)
 	if len(s) == 0 {
-		return RustImport{}, false
+		return nil, false
 	}
 	s = stripRustVisibilityPrefixBytes(s)
 
 	switch {
 	case bytes.HasPrefix(s, []byte("use ")):
-		path := normalizeUsePathBytes(trimSpaceBytes(s[len("use "):]))
-		if len(path) == 0 {
-			return RustImport{}, false
+		paths := expandRustUsePathsBytes(trimSpaceBytes(s[len("use "):]))
+		if len(paths) == 0 {
+			return nil, false
 		}
-		return RustImport{Path: string(path), Kind: RustImportUse}, true
+		result := make([]RustImport, 0, len(paths))
+		for _, p := range paths {
+			if len(p) == 0 {
+				continue
+			}
+			result = append(result, RustImport{Path: string(p), Kind: RustImportUse})
+		}
+		if len(result) == 0 {
+			return nil, false
+		}
+		return result, true
 	case bytes.HasPrefix(s, []byte("extern crate ")):
 		name := leadingRustIdentBytes(trimSpaceBytes(s[len("extern crate "):]))
 		if len(name) == 0 {
-			return RustImport{}, false
+			return nil, false
 		}
-		return RustImport{Path: string(name), Kind: RustImportExternCrate}, true
+		return []RustImport{{Path: string(name), Kind: RustImportExternCrate}}, true
 	case bytes.HasPrefix(s, []byte("mod ")):
 		name := leadingRustIdentBytes(trimSpaceBytes(s[len("mod "):]))
 		if len(name) == 0 {
-			return RustImport{}, false
+			return nil, false
 		}
-		return RustImport{Path: string(name), Kind: RustImportModDecl}, true
+		return []RustImport{{Path: string(name), Kind: RustImportModDecl}}, true
 	default:
-		return RustImport{}, false
+		return nil, false
 	}
 }
 
@@ -283,26 +312,142 @@ func stripRustVisibilityPrefixBytes(s []byte) []byte {
 	return trimmed
 }
 
-func normalizeUsePathBytes(expr []byte) []byte {
-	path := trimSpaceBytes(expr)
-	if len(path) == 0 {
+// expandRustUsePathsBytes returns the individual import paths represented by
+// the body of a `use` statement (everything after `use `, without the
+// trailing `;`). For a simple path it returns one element; for brace groups
+// like `super::{Git, Submodule}` it returns one element per item, recursing
+// into nested groups. `self` inside a group references the prefix itself;
+// `as alias` is stripped from each leaf since the underlying path is what
+// the dependency resolver cares about.
+func expandRustUsePathsBytes(expr []byte) [][]byte {
+	expr = trimSpaceBytes(expr)
+	if len(expr) == 0 {
 		return nil
 	}
+
+	braceIdx := findTopLevelOpenBrace(expr)
+	if braceIdx < 0 {
+		if p := normalizeRustSimpleUsePathBytes(expr); len(p) > 0 {
+			return [][]byte{p}
+		}
+		return nil
+	}
+
+	prefix := stripTrailingColonColonBytes(trimSpaceBytes(expr[:braceIdx]))
+	end := matchingCloseBraceIndex(expr, braceIdx)
+	if end < 0 {
+		if p := normalizeRustSimpleUsePathBytes(prefix); len(p) > 0 {
+			return [][]byte{p}
+		}
+		return nil
+	}
+	inner := expr[braceIdx+1 : end]
+
+	var result [][]byte
+	for _, item := range splitTopLevelCommasBytes(inner) {
+		item = trimSpaceBytes(item)
+		if len(item) == 0 {
+			continue
+		}
+		if bytes.Equal(item, []byte("self")) {
+			if len(prefix) > 0 {
+				result = append(result, dupBytes(prefix))
+			}
+			continue
+		}
+		for _, sub := range expandRustUsePathsBytes(item) {
+			result = append(result, joinRustPathBytes(prefix, sub))
+		}
+	}
+	return result
+}
+
+func normalizeRustSimpleUsePathBytes(expr []byte) []byte {
+	path := trimSpaceBytes(expr)
 	if idx := bytes.Index(path, []byte(" as ")); idx >= 0 {
 		path = trimSpaceBytes(path[:idx])
 	}
-	if idx := bytes.IndexByte(path, '{'); idx >= 0 {
-		path = trimSpaceBytes(path[:idx])
-	}
-	for bytes.HasSuffix(path, []byte("::")) {
-		path = trimSpaceBytes(path[:len(path)-2])
-	}
+	path = stripTrailingColonColonBytes(path)
 	path = bytes.TrimPrefix(path, []byte("::"))
-	path = trimSpaceBytes(path)
-	if len(path) == 0 {
-		return nil
+	return trimSpaceBytes(path)
+}
+
+func stripTrailingColonColonBytes(p []byte) []byte {
+	for bytes.HasSuffix(p, []byte("::")) {
+		p = trimSpaceBytes(p[:len(p)-2])
 	}
-	return path
+	return p
+}
+
+// findTopLevelOpenBrace returns the index of the first `{` that opens a
+// brace group in `expr`. We don't care about string/comment hygiene here:
+// the bytes have already been filtered by `parseRustImportsFast`.
+func findTopLevelOpenBrace(expr []byte) int {
+	for i := 0; i < len(expr); i++ {
+		if expr[i] == '{' {
+			return i
+		}
+	}
+	return -1
+}
+
+func matchingCloseBraceIndex(expr []byte, open int) int {
+	if open < 0 || open >= len(expr) || expr[open] != '{' {
+		return -1
+	}
+	depth := 0
+	for i := open; i < len(expr); i++ {
+		switch expr[i] {
+		case '{':
+			depth++
+		case '}':
+			depth--
+			if depth == 0 {
+				return i
+			}
+		}
+	}
+	return -1
+}
+
+func splitTopLevelCommasBytes(inner []byte) [][]byte {
+	var items [][]byte
+	depth := 0
+	start := 0
+	for i := 0; i < len(inner); i++ {
+		switch inner[i] {
+		case '{':
+			depth++
+		case '}':
+			if depth > 0 {
+				depth--
+			}
+		case ',':
+			if depth == 0 {
+				items = append(items, inner[start:i])
+				start = i + 1
+			}
+		}
+	}
+	items = append(items, inner[start:])
+	return items
+}
+
+func joinRustPathBytes(prefix, suffix []byte) []byte {
+	if len(prefix) == 0 {
+		return dupBytes(suffix)
+	}
+	combined := make([]byte, 0, len(prefix)+2+len(suffix))
+	combined = append(combined, prefix...)
+	combined = append(combined, "::"...)
+	combined = append(combined, suffix...)
+	return combined
+}
+
+func dupBytes(b []byte) []byte {
+	out := make([]byte, len(b))
+	copy(out, b)
+	return out
 }
 
 func leadingRustIdentBytes(s []byte) []byte {
