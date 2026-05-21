@@ -170,9 +170,120 @@ resolved:
 		candidates = append(candidates, resolveRustCrateRootCandidates(crateRoot, r.suppliedFiles)...)
 	}
 
+	if len(candidates) == 0 {
+		if reExported := r.resolveRustReExportedSymbol(baseDir, parts); len(reExported) > 0 {
+			return reExported
+		}
+	}
+
 	candidates = deduplicateSuppliedFiles(candidates, r.suppliedFiles)
 	candidates = r.expandRustModRsCandidates(candidates)
 	return deduplicateSuppliedFiles(candidates, r.suppliedFiles)
+}
+
+// resolveRustReExportedSymbol handles the case where a `use` path's final
+// segment names a symbol that the containing module re-exports via
+// `pub use child::Symbol;`. For example, `use super::Fs;` from a sibling of
+// `trait_fs.rs` lands in the parent `fs/` directory with no file matching
+// "Fs". The fix: inspect the directory's module file (`mod.rs` or `<dir>.rs`)
+// for a `use *::Symbol;` whose last segment matches, then resolve that path
+// from the module file's perspective.
+//
+// This mirrors how Rust resolves the lookup: the symbol is brought into the
+// parent module's namespace by the re-export, so callers reach the original
+// defining file transparently.
+func (r *ProjectImportResolver) resolveRustReExportedSymbol(baseDir string, parts []string) []string {
+	if baseDir == "" || len(parts) == 0 {
+		return nil
+	}
+	symbol := parts[len(parts)-1]
+	if symbol == "" {
+		return nil
+	}
+	targetDir := baseDir
+	if len(parts) > 1 {
+		targetDir = filepath.Join(append([]string{baseDir}, parts[:len(parts)-1]...)...)
+	}
+	moduleFile := r.findRustModuleFileForDir(targetDir)
+	if moduleFile == "" {
+		return nil
+	}
+	imports, err := r.importsForFile(moduleFile)
+	if err != nil {
+		return nil
+	}
+
+	moduleDir := filepath.Dir(moduleFile)
+	var resolved []string
+	for _, imp := range imports {
+		if imp.Kind != RustImportUse {
+			continue
+		}
+		if lastRustPathSegment(imp.Path) != symbol {
+			continue
+		}
+		resolved = append(resolved, r.resolveRustReExportTarget(moduleDir, moduleFile, imp.Path)...)
+	}
+	return deduplicateSuppliedFiles(resolved, r.suppliedFiles)
+}
+
+// resolveRustReExportTarget resolves the target of a `pub use foo::bar::Symbol;`
+// re-export found in `moduleFile`. The path is interpreted relative to
+// `moduleDir` (the directory that owns the module file). For absolute paths
+// (crate::, super::, self::) we delegate to the normal resolver since those
+// forms work from any source file. For relative paths like `trait_fs::Fs`,
+// the segment names a child module declared by `moduleFile` and lives as a
+// sibling file in `moduleDir`.
+func (r *ProjectImportResolver) resolveRustReExportTarget(moduleDir, moduleFile, importPath string) []string {
+	path := strings.TrimSpace(importPath)
+	if path == "" {
+		return nil
+	}
+	switch firstRustPathSegment(path) {
+	case "crate", "super", "self":
+		return r.resolveRustUsePath(moduleFile, path)
+	}
+	parts := strings.Split(path, "::")
+	if len(parts) == 0 {
+		return nil
+	}
+	candidates := resolveRustModuleCandidates(moduleDir, parts, r.suppliedFiles)
+	if len(parts) > 1 && len(candidates) == 0 {
+		candidates = append(candidates, resolveRustModuleCandidates(moduleDir, parts[:len(parts)-1], r.suppliedFiles)...)
+	}
+	return deduplicateSuppliedFiles(candidates, r.suppliedFiles)
+}
+
+func (r *ProjectImportResolver) findRustModuleFileForDir(dir string) string {
+	candidates := []string{
+		filepath.Join(dir, "mod.rs"),
+		dir + ".rs",
+		filepath.Join(dir, "lib.rs"),
+		filepath.Join(dir, "main.rs"),
+	}
+	for _, candidate := range candidates {
+		if r.suppliedFiles[candidate] {
+			return candidate
+		}
+	}
+	// Fall back to disk: commit-scoped views (e.g., `clarity show -c HEAD`)
+	// only put changed files in `suppliedFiles`. To follow `pub use` chains
+	// through an unchanged `mod.rs`, we still need to read it.
+	if r.contentReader != nil {
+		for _, candidate := range candidates {
+			if _, err := r.contentReader(candidate); err == nil {
+				return candidate
+			}
+		}
+	}
+	return ""
+}
+
+func lastRustPathSegment(path string) string {
+	if idx := strings.LastIndex(path, "::"); idx >= 0 {
+		return path[idx+2:]
+	}
+	return path
 }
 
 func resolveRustCrateRootCandidates(crateRoot string, suppliedFiles map[string]bool) []string {
