@@ -41,6 +41,7 @@ Use cases:
 - Generate focused change snapshots with "clarity show"
 - Run repeatable design checks in developer and coding-agent workflows`,
 	Version: version,
+	RunE:    runRoot,
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 		verbose, _ := cmd.Flags().GetBool("verbose")
 		level := slog.LevelWarn
