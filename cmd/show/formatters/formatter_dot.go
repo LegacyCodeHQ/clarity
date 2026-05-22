@@ -73,11 +73,12 @@ func (f *dotFormatter) Format(g depgraph.FileDependencyGraph, opts RenderOptions
 
 	extensionColors := f.assignExtensionColors(filePaths)
 
-	// Count files by extension to find the majority extension
+	// Count files by type key to find the majority type. Extensionless files
+	// are keyed by basename so each one (e.g. `pre-commit`, `pre-push`) is its
+	// own type rather than collapsing into a single empty-string bucket.
 	extensionCounts := make(map[string]int)
 	for source := range adjacency {
-		ext := filepath.Ext(filepath.Base(source))
-		extensionCounts[ext]++
+		extensionCounts[fileTypeKey(source)]++
 	}
 
 	// Find the extension with the majority count
@@ -101,8 +102,7 @@ func (f *dotFormatter) Format(g depgraph.FileDependencyGraph, opts RenderOptions
 	// Track all files that have the majority extension
 	filesWithMajorityExtension := make(map[string]bool)
 	for source := range adjacency {
-		ext := filepath.Ext(filepath.Base(source))
-		if ext == majorityExtension {
+		if fileTypeKey(source) == majorityExtension {
 			filesWithMajorityExtension[source] = true
 		}
 	}
@@ -110,8 +110,7 @@ func (f *dotFormatter) Format(g depgraph.FileDependencyGraph, opts RenderOptions
 	// Count unique file extensions to determine if we need extension-based coloring
 	uniqueExtensions := make(map[string]bool)
 	for source := range adjacency {
-		ext := filepath.Ext(filepath.Base(source))
-		uniqueExtensions[ext] = true
+		uniqueExtensions[fileTypeKey(source)] = true
 	}
 	hasMultipleExtensions := len(uniqueExtensions) > 1
 
@@ -145,8 +144,7 @@ func (f *dotFormatter) Format(g depgraph.FileDependencyGraph, opts RenderOptions
 				color = "white"
 			} else if hasMultipleExtensions {
 				// Priority 3: Color based on extension (only if multiple extensions exist)
-				ext := filepath.Ext(sourceBase)
-				color = getColorForExtension(ext)
+				color = getColorForExtension(fileTypeKey(sourceBase))
 			} else {
 				// Priority 4: Single extension - use white (no need to differentiate)
 				color = "white"
@@ -252,10 +250,7 @@ func (f *dotFormatter) assignExtensionColors(filePaths []string) map[string]stri
 
 	uniqueExtensions := make(map[string]bool)
 	for _, filePath := range filePaths {
-		ext := filepath.Ext(filePath)
-		if ext != "" {
-			uniqueExtensions[ext] = true
-		}
+		uniqueExtensions[fileTypeKey(filePath)] = true
 	}
 
 	sortedExtensions := make([]string, 0, len(uniqueExtensions))

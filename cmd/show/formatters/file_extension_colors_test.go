@@ -48,9 +48,41 @@ func Test_getExtensionColors_FilesWithoutExtensions(t *testing.T) {
 
 	colors := getExtensionColors(fileNames)
 
-	assert.Len(t, colors, 1)
+	// Each extensionless file is its own type, keyed by filename.
+	assert.Len(t, colors, 4)
 	assert.Contains(t, colors, ".go")
-	assert.NotEmpty(t, colors[".go"])
+	assert.Contains(t, colors, "README")
+	assert.Contains(t, colors, "LICENSE")
+	assert.Contains(t, colors, "Makefile")
+	assert.NotContains(t, colors, "")
+}
+
+func Test_getExtensionColors_ExtensionlessFilesGetDistinctColors(t *testing.T) {
+	// Bug: files without an extension (e.g. git hook scripts `pre-commit` and
+	// `pre-push`) were lumped under a single empty-string key and all defaulted
+	// to white. Each extensionless filename should be treated as its own type
+	// and receive its own palette color.
+	fileNames := []string{
+		".githooks/pre-commit",
+		".githooks/pre-push",
+		"README.md",
+		"AGENTS.md",
+		"CLAUDE.md",
+	}
+
+	colors := getExtensionColors(fileNames)
+
+	assert.Contains(t, colors, "pre-commit")
+	assert.Contains(t, colors, "pre-push")
+	assert.Contains(t, colors, ".md")
+	assert.NotContains(t, colors, "")
+
+	assert.NotEmpty(t, colors["pre-commit"])
+	assert.NotEmpty(t, colors["pre-push"])
+	assert.NotEqual(t, colors["pre-commit"], colors["pre-push"],
+		"extensionless files with different names must get different colors")
+	assert.NotEqual(t, colors["pre-commit"], colors[".md"])
+	assert.NotEqual(t, colors["pre-push"], colors[".md"])
 }
 
 func Test_getExtensionColors_SameExtensionMultipleFiles(t *testing.T) {
@@ -164,10 +196,13 @@ func Test_getExtensionColors_MixedWithAndWithoutExtensions(t *testing.T) {
 
 	colors := getExtensionColors(fileNames)
 
-	assert.Len(t, colors, 3)
+	assert.Len(t, colors, 6)
 	assert.Contains(t, colors, ".go")
 	assert.Contains(t, colors, ".dart")
 	assert.Contains(t, colors, ".json")
+	assert.Contains(t, colors, "README")
+	assert.Contains(t, colors, "LICENSE")
+	assert.Contains(t, colors, "Makefile")
 	assert.NotContains(t, colors, "")
 }
 

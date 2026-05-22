@@ -7,7 +7,7 @@ digraph dependencies {
   fontsize=10;
   fontname=Courier;
 
-  ".gitignore" [label=".gitignore\n+6", style=filled, fillcolor=lightblue];
-  "Makefile" [label="🪴 Makefile\n+31", style=filled, fillcolor=white];
+  ".gitignore" [label=".gitignore\n+6", style=filled, fillcolor=white];
+  "Makefile" [label="🪴 Makefile\n+31", style=filled, fillcolor=mistyrose];
   "README.md" [label="README.md\n+51", style=filled, fillcolor=lightyellow];
 }

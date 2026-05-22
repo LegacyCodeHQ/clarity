@@ -11,13 +11,22 @@ var extensionColorPalette = []string{
 	"palegoldenrod", "thistle",
 }
 
+// fileTypeKey returns the key used to group a file for color assignment.
+// Files with an extension are grouped by extension (e.g. ".go"). Files without
+// an extension are grouped by their basename, so `pre-commit` and `pre-push`
+// become distinct types instead of collapsing into a single empty-string key.
+func fileTypeKey(path string) string {
+	base := filepath.Base(path)
+	if ext := filepath.Ext(base); ext != "" {
+		return ext
+	}
+	return base
+}
+
 func getExtensionColors(fileNames []string) map[string]string {
 	uniqueExtensions := make(map[string]bool)
 	for _, fileName := range fileNames {
-		ext := filepath.Ext(fileName)
-		if ext != "" {
-			uniqueExtensions[ext] = true
-		}
+		uniqueExtensions[fileTypeKey(fileName)] = true
 	}
 
 	sortedExtensions := make([]string, 0, len(uniqueExtensions))
