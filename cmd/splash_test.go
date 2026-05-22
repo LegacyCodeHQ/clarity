@@ -11,6 +11,7 @@ import (
 
 func TestRunRoot_PrintsSplashForEmptyInvocation(t *testing.T) {
 	t.Setenv("NO_COLOR", "1")
+	t.Setenv("COLUMNS", "100")
 
 	var out bytes.Buffer
 	cmd := &cobra.Command{}

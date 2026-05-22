@@ -2,11 +2,14 @@ package cmd
 
 import (
 	"fmt"
+	"io"
 	"os"
+	"strconv"
 	"strings"
 	"unicode/utf8"
 
 	"github.com/spf13/cobra"
+	"golang.org/x/term"
 )
 
 const clarityLogo = ` ██████╗██╗      █████╗ ██████╗ ██╗████████╗██╗   ██╗
@@ -28,32 +31,58 @@ const (
 
 func runRoot(cmd *cobra.Command, args []string) error {
 	if len(args) == 0 && cmd.Flags().NFlag() == 0 {
-		_, err := fmt.Fprint(cmd.OutOrStdout(), renderSplash(shouldColorSplash()))
+		out := cmd.OutOrStdout()
+		_, err := fmt.Fprint(out, renderSplash(terminalWidth(out), shouldColorSplash()))
 		return err
 	}
 
 	return cmd.Help()
 }
 
-func renderSplash(useColor bool) string {
+func renderSplash(screenWidth int, useColor bool) string {
 	logoColors := []string{ansiPurple, ansiPurple, ansiBlue, ansiCyan, ansiCyan, ansiBlue}
 	lines := strings.Split(clarityLogo, "\n")
 	width := maxLineWidth(lines)
+	outerPadding := centerPadding(width, screenWidth)
+	outerIndent := strings.Repeat(" ", outerPadding)
 
 	var b strings.Builder
 	b.WriteByte('\n')
 	for i, line := range lines {
 		color := logoColors[i%len(logoColors)]
+		b.WriteString(outerIndent)
 		b.WriteString(colorize(line, color+ansiBold, useColor))
 		b.WriteByte('\n')
 	}
 	b.WriteByte('\n')
+	b.WriteString(outerIndent)
 	b.WriteString(centerText("Software Design Maps for AI-Native Development", width, ansiYellow+ansiBold, useColor))
 	b.WriteString("\n\n")
+	b.WriteString(outerIndent)
 	b.WriteString(centerText("Run 'clarity --help' for usage information", width, ansiDim, useColor))
 	b.WriteString("\n\n")
 
 	return b.String()
+}
+
+func terminalWidth(out io.Writer) int {
+	if columns := os.Getenv("COLUMNS"); columns != "" {
+		if width, err := strconv.Atoi(columns); err == nil && width > 0 {
+			return width
+		}
+	}
+
+	file, ok := out.(*os.File)
+	if !ok {
+		return 0
+	}
+
+	width, _, err := term.GetSize(int(file.Fd()))
+	if err != nil {
+		return 0
+	}
+
+	return width
 }
 
 func maxLineWidth(lines []string) int {
@@ -66,13 +95,16 @@ func maxLineWidth(lines []string) int {
 	return width
 }
 
-func centerText(text string, width int, color string, useColor bool) string {
-	padding := 0
-	if textWidth := utf8.RuneCountInString(text); width > textWidth {
-		padding = (width - textWidth) / 2
+func centerPadding(contentWidth, screenWidth int) int {
+	if screenWidth <= contentWidth {
+		return 0
 	}
 
-	return strings.Repeat(" ", padding) + colorize(text, color, useColor)
+	return (screenWidth - contentWidth) / 2
+}
+
+func centerText(text string, width int, color string, useColor bool) string {
+	return strings.Repeat(" ", centerPadding(utf8.RuneCountInString(text), width)) + colorize(text, color, useColor)
 }
 
 func shouldColorSplash() bool {
