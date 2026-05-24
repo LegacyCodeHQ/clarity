@@ -367,6 +367,18 @@ func TestResolveTypeScriptImportPath_JSImportResolvesToTypeScriptSource(t *testi
 	assert.Contains(t, resolved, "/project/src/utils/cache.ts")
 }
 
+func TestResolveTypeScriptImportPath_CSSSideEffectImport(t *testing.T) {
+	suppliedFiles := map[string]bool{
+		"/project/src/App.tsx":       true,
+		"/project/src/tq/styles.css": true,
+	}
+
+	sourceFile := "/project/src/App.tsx"
+
+	resolved := ResolveTypeScriptImportPath(sourceFile, "./tq/styles.css", suppliedFiles)
+	assert.Contains(t, resolved, "/project/src/tq/styles.css")
+}
+
 func TestResolveTypeScriptImportPath_JSXImportResolvesToTSXSource(t *testing.T) {
 	suppliedFiles := map[string]bool{
 		"/project/src/components/Button.tsx": true,

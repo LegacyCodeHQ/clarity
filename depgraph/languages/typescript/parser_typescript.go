@@ -469,18 +469,16 @@ func ResolveTypeScriptImportPath(sourceFile, importPath string, suppliedFiles ma
 		add(filepath.Join(basePath, "index.js"))
 		add(filepath.Join(basePath, "index.jsx"))
 
-		if hasTypeScriptExtension(importPath) {
+		// Honour any explicit extension (e.g. ".ts", ".css", ".json"). The
+		// suppliedFiles filter is the source of truth for what's actually in
+		// the project, so resolving non-JS/TS imports such as CSS side-effect
+		// imports is safe and produces the expected edges in the graph.
+		if filepath.Ext(importPath) != "" {
 			add(basePath)
 		}
 	}
 
 	return resolvedPaths
-}
-
-// hasTypeScriptExtension checks if a path already has a TypeScript/JavaScript extension
-func hasTypeScriptExtension(path string) bool {
-	ext := filepath.Ext(path)
-	return ext == ".ts" || ext == ".tsx" || ext == ".js" || ext == ".jsx"
 }
 
 func sourceCandidatesForJSImport(basePath string) []string {
