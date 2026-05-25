@@ -108,7 +108,12 @@ func watchAndRebuild(ctx context.Context, repoPath string, opts *watchOptions, b
 
 		case <-debounceC:
 			publishCurrentGraph(repoPath, opts, b, formatter)
+			// Drop the timer too so the next event takes the
+			// `debounceTimer == nil` branch and re-arms debounceC.
+			// Without this, Reset would fire the timer into a nil
+			// channel and no further debounced rebuilds would happen.
 			debounceC = nil
+			debounceTimer = nil
 		}
 	}
 }

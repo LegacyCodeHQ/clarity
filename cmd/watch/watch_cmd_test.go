@@ -1,6 +1,7 @@
 package watch
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -520,4 +521,141 @@ func TestListenWithPortFallback_PicksNextAvailablePort(t *testing.T) {
 	defer ln.Close()
 
 	assert.Equal(t, occupiedPort+2, actualPort)
+}
+
+// TestWatchAndRebuild_DetectsFileRename reproduces the user-observed bug where
+// renaming a file in the working tree leaves clarity watch showing the
+// pre-rename graph until the watcher process is restarted.
+func TestWatchAndRebuild_DetectsFileRename(t *testing.T) {
+	dir := t.TempDir()
+	initGitRepo(t, dir)
+
+	// Seed a committed importer + importee so the importer (consumer.ts) is the
+	// stable "anchor" file whose dependencies we will mutate.
+	consumerPath := filepath.Join(dir, "consumer.ts")
+	originalPath := filepath.Join(dir, "chart.ts")
+	require.NoError(t, os.WriteFile(consumerPath, []byte("import './chart';\n"), 0o644))
+	require.NoError(t, os.WriteFile(originalPath, []byte("export const x = 1;\n"), 0o644))
+	runGit(t, dir, "add", ".")
+	runGit(t, dir, "commit", "-m", "seed")
+
+	b := newBroker()
+	formatter, err := formatters.NewFormatter("dot")
+	require.NoError(t, err)
+	opts := &watchOptions{}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go func() { _ = watchAndRebuild(ctx, dir, opts, b, formatter) }()
+
+	// Give the watcher a moment to install its fsnotify watches before we
+	// mutate the tree. Then create the first uncommitted change so the watcher
+	// publishes a baseline graph.
+	time.Sleep(100 * time.Millisecond)
+	require.NoError(t, os.WriteFile(consumerPath, []byte("import './chart';\n// edit\n"), 0o644))
+
+	// Wait for the watcher's first publish.
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		if snap, ok := latestSnapshot(b); ok && strings.Contains(snap, "consumer.ts") {
+			break
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	snap, _ := latestSnapshot(b)
+	require.Contains(t, snap, "consumer.ts", "watcher never published initial graph")
+
+	// Rename the importee. Update the importer to point at the new name so the
+	// edge stays valid. Both ops mirror what `git mv` + a re-import would do
+	// in real editor flow.
+	renamedPath := filepath.Join(dir, "ScatterPlot.ts")
+	require.NoError(t, os.Rename(originalPath, renamedPath))
+	require.NoError(t, os.WriteFile(consumerPath, []byte("import './ScatterPlot';\n"), 0o644))
+
+	// Wait long enough for fsnotify debounce + git state poll to fire.
+	deadline = time.Now().Add(3 * time.Second)
+	for time.Now().Before(deadline) {
+		if snap, ok := latestSnapshot(b); ok && strings.Contains(snap, "ScatterPlot.ts") {
+			break
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+
+	snap, ok := latestSnapshot(b)
+	require.True(t, ok, "no graph published after rename")
+	assert.Contains(t, snap, "ScatterPlot.ts", "post-rename graph missing new file name")
+	assert.NotContains(t, snap, "chart.ts", "post-rename graph still references old file name")
+}
+
+// TestWatchAndRebuild_DebounceFiresOnEverySaveCycle reproduces a watcher bug
+// where the debounce path only triggered a rebuild for the first event burst
+// after startup. Subsequent edits to an already-dirty file (the common
+// editor-save pattern) silently dropped because `debounceC` was set to nil
+// after the first fire and never re-armed to the timer's channel.
+func TestWatchAndRebuild_DebounceFiresOnEverySaveCycle(t *testing.T) {
+	dir := t.TempDir()
+	initGitRepo(t, dir)
+
+	target := filepath.Join(dir, "app.ts")
+	require.NoError(t, os.WriteFile(target, []byte("export const v = 0;\n"), 0o644))
+	runGit(t, dir, "add", ".")
+	runGit(t, dir, "commit", "-m", "seed")
+
+	b := newBroker()
+	formatter, err := formatters.NewFormatter("dot")
+	require.NoError(t, err)
+	opts := &watchOptions{}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go func() { _ = watchAndRebuild(ctx, dir, opts, b, formatter) }()
+
+	time.Sleep(100 * time.Millisecond)
+
+	// First edit makes the file dirty and changes porcelain — both the
+	// debounce arm and the git poller will trigger a rebuild here.
+	require.NoError(t, os.WriteFile(target, []byte("export const v = 1;\n"), 0o644))
+	waitForSnapshotID(t, b, 1, 2*time.Second)
+
+	// Second edit grows the file. Porcelain stays `" M app.ts"`, so the
+	// git poller sees state_changed=false — but the diff stats change, so
+	// the rendered DOT differs and a republish would NOT be deduped. The
+	// ONLY path that can republish here is the fsnotify debounce arm.
+	require.NoError(t, os.WriteFile(target, []byte("export const v = 2;\nexport const w = 3;\n"), 0o644))
+	waitForSnapshotID(t, b, 2, 2*time.Second)
+}
+
+func waitForSnapshotID(t *testing.T, b *broker, want int64, timeout time.Duration) {
+	t.Helper()
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		b.mu.Lock()
+		id := b.nextID
+		b.mu.Unlock()
+		if id >= want {
+			return
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	b.mu.Lock()
+	got := b.nextID
+	b.mu.Unlock()
+	t.Fatalf("broker never reached snapshot_id %d within %s (got %d)", want, timeout, got)
+}
+
+func latestSnapshot(b *broker) (string, bool) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if len(b.history) == 0 {
+		return "", false
+	}
+	return b.history[len(b.history)-1].DOT, true
+}
+
+func runGit(t *testing.T, dir string, args ...string) {
+	t.Helper()
+	cmd := exec.Command("git", args...)
+	cmd.Dir = dir
+	out, err := cmd.CombinedOutput()
+	require.NoError(t, err, "git %v failed: %s", args, out)
 }
