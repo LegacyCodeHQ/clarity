@@ -54,13 +54,36 @@ func ResolveMarkdownLinkPath(sourceFile, linkPath string, suppliedFiles map[stri
 
 	linkPath = stripRenderedExtension(linkPath)
 
+	var resolved []string
 	if strings.HasPrefix(linkPath, "/") {
-		return resolveSiteAbsoluteLink(linkPath, suppliedFiles)
+		resolved = resolveSiteAbsoluteLink(linkPath, suppliedFiles)
+	} else {
+		sourceDir := filepath.Dir(sourceFile)
+		candidate := filepath.Clean(filepath.Join(sourceDir, linkPath))
+		resolved = resolveCandidate(candidate, suppliedFiles)
 	}
 
-	sourceDir := filepath.Dir(sourceFile)
-	candidate := filepath.Clean(filepath.Join(sourceDir, linkPath))
-	return resolveCandidate(candidate, suppliedFiles)
+	return dropSelfReferences(sourceFile, resolved)
+}
+
+// dropSelfReferences removes the source file from a resolved result set so
+// `[anchor]: same-file.html#anchor` style links don't materialize as self-loops
+// in the dependency graph.
+func dropSelfReferences(sourceFile string, resolved []string) []string {
+	if len(resolved) == 0 {
+		return resolved
+	}
+	filtered := resolved[:0]
+	for _, r := range resolved {
+		if r == sourceFile {
+			continue
+		}
+		filtered = append(filtered, r)
+	}
+	if len(filtered) == 0 {
+		return nil
+	}
+	return filtered
 }
 
 // stripRenderedExtension drops the rendered HTML extension some authors write

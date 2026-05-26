@@ -156,3 +156,28 @@ func TestResolveMarkdownLinkPath_SiteAbsoluteNoMatch(t *testing.T) {
 	got := ResolveMarkdownLinkPath("/project/src/api/ssr.md", "/guide/missing/page", supplied)
 	assert.Nil(t, got)
 }
+
+// Markdown reference defs frequently link to anchors within the same file
+// (mdBook chapters do this for re-used phrases). Treating these as dependency
+// edges produces phantom self-loops in the graph; other clarity language
+// parsers do not emit self-edges.
+func TestResolveMarkdownLinkPath_SelfReferenceFiltered(t *testing.T) {
+	supplied := map[string]bool{
+		"/project/src/ch20-02-advanced-traits.md": true,
+	}
+
+	got := ResolveMarkdownLinkPath(
+		"/project/src/ch20-02-advanced-traits.md",
+		"ch20-02-advanced-traits.html",
+		supplied)
+	assert.Nil(t, got)
+}
+
+func TestResolveMarkdownLinkPath_SelfReferenceSiteAbsoluteFiltered(t *testing.T) {
+	supplied := map[string]bool{
+		"/project/src/guide/intro.md": true,
+	}
+
+	got := ResolveMarkdownLinkPath("/project/src/guide/intro.md", "/guide/intro", supplied)
+	assert.Nil(t, got)
+}
