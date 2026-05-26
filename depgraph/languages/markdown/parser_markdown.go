@@ -1,12 +1,14 @@
 package markdown
 
 import (
-	"bufio"
-	"bytes"
+	"context"
 	"fmt"
 	"os"
 	"regexp"
 	"strings"
+
+	sitter "github.com/smacker/go-tree-sitter"
+	tsmd "github.com/smacker/go-tree-sitter/markdown"
 )
 
 // MarkdownLink represents a link, image, or reference-definition target
@@ -27,15 +29,12 @@ func (l MarkdownLink) IsImage() bool {
 	return l.isImage
 }
 
-var (
-	// inlineLinkRe matches `[text](dest)` and `![alt](dest)`. The dest captures
-	// up to the next whitespace or closing paren so titles (`"..."`) are dropped.
-	inlineLinkRe = regexp.MustCompile(`(!?)\[[^\]]*\]\(\s*<?([^)\s>]+)>?[^)]*\)`)
-	// referenceDefRe matches `[label]: dest` at line start (after optional spaces).
-	referenceDefRe = regexp.MustCompile(`^\s{0,3}\[[^\]]+\]:\s*<?([^\s>]+)>?`)
-	// autolinkRe matches `<dest>` autolinks containing a path-like value.
-	autolinkRe = regexp.MustCompile(`<([^>\s]+\.[A-Za-z0-9]+)>`)
-)
+// htmlAttrRe extracts `src="..."` or `href="..."` from the raw text of an
+// `html_tag` node. Tree-sitter delineates HTML tag boundaries but does not
+// expose attribute names/values as named children, so we still need a small
+// regex to pull the destination out. Scoping by the html_tag node guarantees
+// we never read attributes from inside code blocks or other syntax.
+var htmlAttrRe = regexp.MustCompile(`(?i)\b(?:src|href)\s*=\s*(?:"([^"]*)"|'([^']*)')`)
 
 // MarkdownLinks reads a Markdown file and returns its extracted link targets.
 func MarkdownLinks(filePath string) ([]MarkdownLink, error) {
@@ -47,80 +46,115 @@ func MarkdownLinks(filePath string) ([]MarkdownLink, error) {
 }
 
 // ParseMarkdownLinks extracts link, image, and reference-definition targets
-// from Markdown source, skipping fenced code blocks and inline code spans.
+// from Markdown source using tree-sitter. Code spans, fenced code blocks, and
+// other non-link content are correctly excluded by the grammar.
 func ParseMarkdownLinks(sourceCode []byte) []MarkdownLink {
+	tree, err := tsmd.ParseCtx(context.Background(), nil, sourceCode)
+	if err != nil {
+		return nil
+	}
+
 	var links []MarkdownLink
-
-	scanner := bufio.NewScanner(bytes.NewReader(sourceCode))
-	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
-
-	inFence := false
-	var fenceMarker string
-
-	for scanner.Scan() {
-		line := scanner.Text()
-		trimmed := strings.TrimLeft(line, " \t")
-
-		if inFence {
-			if strings.HasPrefix(trimmed, fenceMarker) {
-				inFence = false
-				fenceMarker = ""
-			}
-			continue
+	add := func(dest string, isImage bool) {
+		if link, ok := normalizeLink(dest, isImage); ok {
+			links = append(links, link)
 		}
-		if strings.HasPrefix(trimmed, "```") {
-			inFence = true
-			fenceMarker = "```"
-			continue
-		}
-		if strings.HasPrefix(trimmed, "~~~") {
-			inFence = true
-			fenceMarker = "~~~"
-			continue
-		}
+	}
 
-		stripped := stripInlineCode(line)
-
-		if m := referenceDefRe.FindStringSubmatch(stripped); m != nil {
-			if link, ok := normalizeLink(m[1], false); ok {
-				links = append(links, link)
-			}
-			continue
-		}
-
-		for _, m := range inlineLinkRe.FindAllStringSubmatch(stripped, -1) {
-			isImage := m[1] == "!"
-			if link, ok := normalizeLink(m[2], isImage); ok {
-				links = append(links, link)
-			}
-		}
-
-		for _, m := range autolinkRe.FindAllStringSubmatch(stripped, -1) {
-			if link, ok := normalizeLink(m[1], false); ok {
-				links = append(links, link)
-			}
-		}
+	walkBlocks(tree.BlockTree().RootNode(), sourceCode, add)
+	for _, inline := range tree.InlineTrees() {
+		walkInline(inline.RootNode(), sourceCode, add)
 	}
 
 	return links
 }
 
-// stripInlineCode removes backtick-delimited spans from a line so links inside
-// inline code aren't extracted.
-func stripInlineCode(line string) string {
-	var b strings.Builder
-	b.Grow(len(line))
-	inCode := false
-	for i := 0; i < len(line); i++ {
-		if line[i] == '`' {
-			inCode = !inCode
-			continue
+// walkBlocks walks the block-level tree to extract destinations from
+// reference-definitions (`[label]: dest`). Inline-level constructs are handled
+// in a separate pass over the inline trees.
+func walkBlocks(n *sitter.Node, src []byte, add func(string, bool)) {
+	if n == nil {
+		return
+	}
+	switch n.Type() {
+	case "link_reference_definition":
+		if dest := findChildText(n, "link_destination", src); dest != "" {
+			add(dest, false)
 		}
-		if !inCode {
-			b.WriteByte(line[i])
+		return
+	case "html_block":
+		extractHTMLAttrs(string(src[n.StartByte():n.EndByte()]), add)
+		return
+	}
+	for i := 0; i < int(n.ChildCount()); i++ {
+		walkBlocks(n.Child(i), src, add)
+	}
+}
+
+// extractHTMLAttrs pulls `src` / `href` attribute values from a raw HTML
+// fragment. Used for both block-level `html_block` and inline-level `html_tag`
+// nodes, since tree-sitter does not parse HTML attributes into named children.
+func extractHTMLAttrs(html string, add func(string, bool)) {
+	isImage := htmlFragmentIsImage(html)
+	for _, m := range htmlAttrRe.FindAllStringSubmatch(html, -1) {
+		value := m[1]
+		if value == "" {
+			value = m[2]
+		}
+		if value != "" {
+			add(value, isImage)
 		}
 	}
-	return b.String()
+}
+
+// htmlFragmentIsImage reports whether the first tag in an HTML fragment is an
+// `<img>` element, so the resulting link is flagged as an image.
+func htmlFragmentIsImage(html string) bool {
+	trimmed := strings.TrimLeft(html, " \t\n<")
+	return strings.HasPrefix(strings.ToLower(trimmed), "img")
+}
+
+// walkInline walks an inline tree to extract destinations from images, inline
+// links, and `src` / `href` attributes inside `html_tag` nodes.
+func walkInline(n *sitter.Node, src []byte, add func(string, bool)) {
+	if n == nil {
+		return
+	}
+	switch n.Type() {
+	case "image":
+		if dest := findChildText(n, "link_destination", src); dest != "" {
+			add(dest, true)
+		}
+		return
+	case "inline_link":
+		if dest := findChildText(n, "link_destination", src); dest != "" {
+			add(dest, false)
+		}
+		return
+	case "html_tag":
+		extractHTMLAttrs(string(src[n.StartByte():n.EndByte()]), add)
+		return
+	}
+	for i := 0; i < int(n.ChildCount()); i++ {
+		walkInline(n.Child(i), src, add)
+	}
+}
+
+// findChildText returns the text of the first descendant matching nodeType,
+// or "" if none exists.
+func findChildText(n *sitter.Node, nodeType string, src []byte) string {
+	if n == nil {
+		return ""
+	}
+	if n.Type() == nodeType {
+		return string(src[n.StartByte():n.EndByte()])
+	}
+	for i := 0; i < int(n.ChildCount()); i++ {
+		if result := findChildText(n.Child(i), nodeType, src); result != "" {
+			return result
+		}
+	}
+	return ""
 }
 
 // normalizeLink trims a destination string and rejects values that can't refer

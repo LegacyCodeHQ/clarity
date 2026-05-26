@@ -68,6 +68,31 @@ See [the guide][g] and [api][a].
 	assert.Contains(t, paths, "api/index.md")
 }
 
+// Authors often use raw HTML inside Markdown (especially `<img>` with width
+// attributes) because Markdown image syntax has no sizing controls. Tree-sitter
+// recognizes those as `html_tag` nodes; the parser must extract `src` / `href`
+// attribute values so the referenced files don't appear as orphan graph nodes.
+func TestParseMarkdownLinks_ExtractsHTMLImgAndAnchorTags(t *testing.T) {
+	source := `
+# Release notes
+
+<kbd><img alt="screenshot" src="media/screenshot.png" width="400"/></kbd>
+
+<img src='media/single_quoted.png'>
+
+<a href="docs/setup.md">Setup</a>
+
+` + "```\n<img src=\"media/in_code_fence.png\">\n```" + `
+`
+	paths := extractPaths(ParseMarkdownLinks([]byte(source)))
+
+	assert.Contains(t, paths, "media/screenshot.png")
+	assert.Contains(t, paths, "media/single_quoted.png")
+	assert.Contains(t, paths, "docs/setup.md")
+	assert.NotContains(t, paths, "media/in_code_fence.png",
+		"HTML tags inside fenced code blocks must not be extracted")
+}
+
 func TestParseMarkdownLinks_IgnoresFencedAndInlineCode(t *testing.T) {
 	source := "Real [link](./real.md)\n" +
 		"Inline `code [fake](./fake.md)` here.\n" +
