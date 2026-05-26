@@ -172,7 +172,13 @@ func TestIsSupportedLanguageExtension(t *testing.T) {
 	if !IsSupportedLanguageExtension(".zig") {
 		t.Fatalf("IsSupportedLanguageExtension(.zig) = false, want true")
 	}
-	if IsSupportedLanguageExtension(".md") {
-		t.Fatalf("IsSupportedLanguageExtension(.md) = true, want false")
+	if !IsSupportedLanguageExtension(".md") {
+		t.Fatalf("IsSupportedLanguageExtension(.md) = false, want true")
+	}
+	if !IsSupportedLanguageExtension(".markdown") {
+		t.Fatalf("IsSupportedLanguageExtension(.markdown) = false, want true")
+	}
+	if IsSupportedLanguageExtension(".unknownext") {
+		t.Fatalf("IsSupportedLanguageExtension(.unknownext) = true, want false")
 	}
 }

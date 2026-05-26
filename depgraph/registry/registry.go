@@ -9,6 +9,7 @@ import (
 	"github.com/LegacyCodeHQ/clarity/depgraph/languages/java"
 	"github.com/LegacyCodeHQ/clarity/depgraph/languages/javascript"
 	"github.com/LegacyCodeHQ/clarity/depgraph/languages/kotlin"
+	"github.com/LegacyCodeHQ/clarity/depgraph/languages/markdown"
 	"github.com/LegacyCodeHQ/clarity/depgraph/languages/python"
 	"github.com/LegacyCodeHQ/clarity/depgraph/languages/ruby"
 	"github.com/LegacyCodeHQ/clarity/depgraph/languages/rust"
@@ -28,6 +29,7 @@ var modules = []Module{
 	javascript.Module{},
 	java.Module{},
 	kotlin.Module{},
+	markdown.Module{},
 	python.Module{},
 	ruby.Module{},
 	rust.Module{},

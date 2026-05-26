@@ -342,8 +342,8 @@ func TestIsRelevantChange_UnsupportedExtension(t *testing.T) {
 	txtEvent := fsnotify.Event{Name: "README.txt", Op: fsnotify.Write}
 	assert.False(t, isRelevantChange(txtEvent))
 
-	mdEvent := fsnotify.Event{Name: "docs.md", Op: fsnotify.Write}
-	assert.False(t, isRelevantChange(mdEvent))
+	binEvent := fsnotify.Event{Name: "image.png", Op: fsnotify.Write}
+	assert.False(t, isRelevantChange(binEvent))
 }
 
 func TestIsRelevantChange_ChmodIgnored(t *testing.T) {

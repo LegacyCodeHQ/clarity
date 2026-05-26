@@ -7,6 +7,7 @@
 ◐ JavaScript  .js, .jsx, .mjs, .cjs
 ◐ Java        .java
 ◐ Kotlin      .kt, .kts
+○ Markdown    .md, .markdown
 ◐ Python      .py
 ◐ Ruby        .rb
 ◐ Rust        .rs
