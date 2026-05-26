@@ -56,6 +56,23 @@ func TestParseUnifiedDiff_AdditionsAndDeletions(t *testing.T) {
 	assert.False(t, fd.IsNew)
 }
 
+func TestParseUnifiedDiff_NoCountHunk(t *testing.T) {
+	// `@@ -5 +7 @@` (count omitted on both sides → 1 line each)
+	raw := strings.Join([]string{
+		"diff --git a/f b/f",
+		"--- a/f",
+		"+++ b/f",
+		"@@ -5 +7 @@",
+		"-old line",
+		"+new line",
+		"",
+	}, "\n")
+	got := parseUnifiedDiff(raw)
+	fd := got["f"]
+	assert.Equal(t, []int{5}, fd.Deletions)
+	assert.Equal(t, []int{7}, fd.Additions)
+}
+
 func TestParseUnifiedDiff_NewFile(t *testing.T) {
 	raw := strings.Join([]string{
 		"diff --git a/src/new.rs b/src/new.rs",

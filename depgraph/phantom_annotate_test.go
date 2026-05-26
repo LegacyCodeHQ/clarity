@@ -68,6 +68,27 @@ func TestAnnotateRustPhantomsShow(t *testing.T) {
 	assert.Nil(t, goMeta.Phantom, "non-rust files get no phantom")
 }
 
+func TestAnnotateRustPhantomsShow_SkipsTestFiles(t *testing.T) {
+	graph := depgraph.MustDependencyGraph(map[string][]string{
+		"/project/src/lib.rs":     {},
+		"/project/tests/integ.rs": {},
+	})
+	contentReader := func(path string) ([]byte, error) {
+		return []byte(rustWithTests), nil
+	}
+	fg, err := depgraph.NewFileDependencyGraph(graph, nil, contentReader)
+	require.NoError(t, err)
+
+	// /project/tests/integ.rs is classified IsTest by path convention and
+	// must not get a phantom of its own.
+	require.True(t, fg.Meta.Files["/project/tests/integ.rs"].IsTest)
+
+	fg.AnnotateRustPhantomsShow(contentReader)
+
+	assert.Nil(t, fg.Meta.Files["/project/tests/integ.rs"].Phantom, "test-classified files get no phantom")
+	assert.NotNil(t, fg.Meta.Files["/project/src/lib.rs"].Phantom, "regular .rs file with test region gets phantom")
+}
+
 func TestAnnotateRustPhantomsShow_NilContentReader(t *testing.T) {
 	graph := depgraph.MustDependencyGraph(map[string][]string{
 		"/project/src/lib.rs": {},

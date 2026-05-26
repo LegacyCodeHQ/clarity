@@ -385,6 +385,54 @@ func TestBuildDOTGraph_ProducesOutput(t *testing.T) {
 	assert.Contains(t, dot, "main.go")
 }
 
+func TestBuildDOTGraph_RustPhantomTestOnly(t *testing.T) {
+	dir := t.TempDir()
+	initGitRepo(t, dir)
+
+	const initial = `pub fn add(a: i32, b: i32) -> i32 { a + b }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn it_adds() { assert_eq!(add(1, 2), 3); }
+}
+`
+	const modified = `pub fn add(a: i32, b: i32) -> i32 { a + b }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn it_adds() { assert_eq!(add(1, 2), 3); }
+    #[test]
+    fn it_adds_zero() { assert_eq!(add(0, 0), 0); }
+}
+`
+	libPath := filepath.Join(dir, "lib.rs")
+	require.NoError(t, os.WriteFile(libPath, []byte(initial), 0o644))
+	requireCmd(t, dir, "git", "add", "lib.rs")
+	requireCmd(t, dir, "git", "commit", "-m", "initial")
+	require.NoError(t, os.WriteFile(libPath, []byte(modified), 0o644))
+
+	opts := &watchOptions{}
+	formatter, err := formatters.NewFormatter("dot")
+	require.NoError(t, err)
+	dot, err := buildDOTGraph(dir, opts, formatter)
+	require.NoError(t, err)
+
+	assert.Contains(t, dot, "::tests", "phantom node must appear when test region changed")
+	assert.Contains(t, dot, "fillcolor=lightgreen", "phantom node is green")
+}
+
+func requireCmd(t *testing.T, dir string, args ...string) {
+	t.Helper()
+	cmd := exec.Command(args[0], args[1:]...)
+	cmd.Dir = dir
+	out, err := cmd.CombinedOutput()
+	require.NoError(t, err, "cmd %v failed: %s", args, out)
+}
+
 func TestBuildDOTGraph_NoUncommittedChanges(t *testing.T) {
 	dir := t.TempDir()
 	initGitRepo(t, dir)
