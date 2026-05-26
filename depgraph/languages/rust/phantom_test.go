@@ -58,6 +58,82 @@ pub fn add(a: i32, b: i32) -> i32 {
 `
 )
 
+func TestIsTestAttr(t *testing.T) {
+	tests := []struct {
+		line string
+		want bool
+	}{
+		{"#[cfg(test)]", true},
+		{"  #[cfg(test)]  ", true},
+		{"#[test]", true},
+		{"#[tokio::test]", true},
+		{"#[async_std::test]", true},
+		{"#[rstest]", true},
+		{"#[test_case]", true},
+		{`#[cfg(all(test, feature = "x"))]`, true},
+		{`#[cfg(any(test, debug_assertions))]`, true},
+		{"#[cfg(all(feature = \"x\", test))]", true},
+		{"#[cfg(not(test))]", false},
+		{`#[cfg(all(not(test), feature = "x"))]`, false},
+		{"#[cfg(any(not(test), not(production)))]", false},
+		{"#[cfg(all(any(test, debug_assertions), feature = \"x\"))]", true},
+		{`#[cfg(feature = "test")]`, false},
+		{"#[derive(Debug)]", false},
+		{"fn main() {}", false},
+		{"// #[cfg(test)]", false},
+	}
+	for _, tc := range tests {
+		t.Run(tc.line, func(t *testing.T) {
+			got := isTestAttr(tc.line)
+			if got != tc.want {
+				t.Fatalf("isTestAttr(%q) = %v, want %v", tc.line, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestFindTestRegion_GatedByCfgAll(t *testing.T) {
+	content := `pub fn add(a: i32, b: i32) -> i32 { a + b }
+
+#[cfg(all(test, feature = "extras"))]
+mod tests {
+    #[test]
+    fn it_works() {}
+}
+`
+	start, end, ok := FindTestRegion([]byte(content))
+	if !ok {
+		t.Fatalf("expected ok=true")
+	}
+	if start != 3 || end != 7 {
+		t.Fatalf("range = [%d, %d], want [3, 7]", start, end)
+	}
+}
+
+func TestFindTestRegion_ModuleScopeTestFn(t *testing.T) {
+	content := `pub fn add(a: i32, b: i32) -> i32 { a + b }
+
+#[test]
+fn it_adds() { assert_eq!(add(1, 2), 3); }
+`
+	start, end, ok := FindTestRegion([]byte(content))
+	if !ok {
+		t.Fatalf("expected ok=true for module-scope #[test]")
+	}
+	if start != 3 || end != 4 {
+		t.Fatalf("range = [%d, %d], want [3, 4]", start, end)
+	}
+}
+
+func TestFindTestRegion_CfgNotTestIgnored(t *testing.T) {
+	content := `#[cfg(not(test))]
+fn only_in_prod() {}
+`
+	if _, _, ok := FindTestRegion([]byte(content)); ok {
+		t.Fatalf("expected ok=false for cfg(not(test))")
+	}
+}
+
 func TestFindTestRegion(t *testing.T) {
 	tests := []struct {
 		name      string

@@ -17,9 +17,19 @@ type PhantomDecision struct {
 }
 
 // FindTestRegion returns the inclusive 1-indexed line range covering test-only
-// code in a Rust source file: the `#[cfg(test)] mod tests { ... }` block and
-// any module-scope items gated by `#[cfg(test)]`. Doctests in `///` comments
-// are NOT counted. Returns ok=false when no such region exists.
+// code in a Rust source file. A test region is any item carrying an attribute
+// that gates it to test builds:
+//
+//   - `#[cfg(test)]`, `#[cfg(all(test, ...))]`, `#[cfg(any(test, ...))]`
+//     (and nested combinations), but NOT `#[cfg(not(test))]`
+//   - `#[test]`, `#[tokio::test]`, `#[async_std::test]`, `#[rstest]`, `#[test_case]`
+//
+// Doctests inside `///` comments are NOT counted. Returns ok=false when no
+// such region exists.
+//
+// Known limitation: the item-end finder uses naive brace counting and does
+// not strip string literals or `// }` comments. Hand-crafted Rust that places
+// a `}` inside a string in the test region can mis-balance the count.
 func FindTestRegion(content []byte) (startLine, endLine int, ok bool) {
 	if len(content) == 0 {
 		return 0, 0, false
@@ -30,7 +40,7 @@ func FindTestRegion(content []byte) (startLine, endLine int, ok bool) {
 
 	i := 0
 	for i < len(lines) {
-		if strings.TrimSpace(lines[i]) != "#[cfg(test)]" {
+		if !isTestAttr(lines[i]) {
 			i++
 			continue
 		}
@@ -59,6 +69,132 @@ func FindTestRegion(content []byte) (startLine, endLine int, ok bool) {
 		return 0, 0, false
 	}
 	return minStart, maxEnd, true
+}
+
+// isTestAttr reports whether a single source line is an attribute that gates
+// the following item to test builds.
+func isTestAttr(line string) bool {
+	line = strings.TrimSpace(line)
+	if !strings.HasPrefix(line, "#[") || !strings.HasSuffix(line, "]") {
+		return false
+	}
+	body := strings.TrimSpace(line[2 : len(line)-1])
+
+	switch body {
+	case "test", "tokio::test", "async_std::test", "rstest", "test_case":
+		return true
+	}
+
+	if strings.HasPrefix(body, "cfg(") && strings.HasSuffix(body, ")") {
+		return cfgEnablesTest(body[len("cfg(") : len(body)-1])
+	}
+	return false
+}
+
+// cfgEnablesTest reports whether a `cfg(...)` expression is satisfied in test
+// mode — i.e. contains at least one positive `test` predicate not enclosed
+// in an odd number of `not(...)` wrappers.
+func cfgEnablesTest(expr string) bool {
+	return hasPositiveTest(expr, 0)
+}
+
+func hasPositiveTest(expr string, negationDepth int) bool {
+	i := 0
+	for i < len(expr) {
+		c := expr[i]
+		if c == ' ' || c == '\t' || c == ',' {
+			i++
+			continue
+		}
+		if c == '"' {
+			// Skip a string literal so `feature = "test"` doesn't match.
+			i++
+			for i < len(expr) && expr[i] != '"' {
+				if expr[i] == '\\' && i+1 < len(expr) {
+					i++
+				}
+				i++
+			}
+			if i < len(expr) {
+				i++
+			}
+			continue
+		}
+		if c == '=' {
+			// Skip past `=` and the following value so the value side of
+			// a key=value pair never seeds a `test` match.
+			i++
+			for i < len(expr) && (expr[i] == ' ' || expr[i] == '\t') {
+				i++
+			}
+			if i < len(expr) && expr[i] == '"' {
+				continue
+			}
+			for i < len(expr) && isCfgIdentChar(expr[i]) {
+				i++
+			}
+			continue
+		}
+		start := i
+		for i < len(expr) && isCfgIdentChar(expr[i]) {
+			i++
+		}
+		ident := expr[start:i]
+		if ident == "" {
+			i++
+			continue
+		}
+		if i < len(expr) && expr[i] == '(' {
+			end := matchingParen(expr, i)
+			if end == -1 {
+				return false
+			}
+			inner := expr[i+1 : end]
+			switch ident {
+			case "not":
+				if hasPositiveTest(inner, negationDepth+1) {
+					return true
+				}
+			case "all", "any":
+				if hasPositiveTest(inner, negationDepth) {
+					return true
+				}
+			}
+			i = end + 1
+			continue
+		}
+		if ident == "test" && negationDepth%2 == 0 {
+			return true
+		}
+	}
+	return false
+}
+
+func matchingParen(s string, open int) int {
+	depth := 0
+	for i := open; i < len(s); i++ {
+		switch s[i] {
+		case '(':
+			depth++
+		case ')':
+			depth--
+			if depth == 0 {
+				return i
+			}
+		}
+	}
+	return -1
+}
+
+func isCfgIdentChar(c byte) bool {
+	switch {
+	case c >= 'a' && c <= 'z',
+		c >= 'A' && c <= 'Z',
+		c >= '0' && c <= '9',
+		c == '_', c == ':':
+		return true
+	}
+	return false
 }
 
 // findItemEnd returns the 0-indexed line on which the Rust item starting at
