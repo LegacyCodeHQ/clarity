@@ -30,7 +30,7 @@ func TestMermaid_PhantomNode_ShowMode(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Contains(t, out, "n0p[", "phantom node definition missing")
-	assert.Contains(t, out, "n0p --- n0", "phantom→prod edge missing")
+	assert.Contains(t, out, "n0p -.-> n0", "phantom→prod edge missing")
 	assert.Contains(t, out, "classDef phantomTest")
 	assert.Contains(t, out, "class n0p phantomTest")
 	assert.NotContains(t, out, "phantomProdContext", "prod should not be context-styled in show mode")

@@ -234,7 +234,7 @@ func (f mermaidFormatter) Format(g depgraph.FileDependencyGraph, opts RenderOpti
 		}
 		prodID := nodeIDs[nodeNames[source]]
 		hasEdges = true
-		edgesSB.WriteString(fmt.Sprintf("    %s --- %s\n", phantomID, prodID))
+		edgesSB.WriteString(fmt.Sprintf("    %s -.-> %s\n", phantomID, prodID))
 		phantomEdgeIndices = append(phantomEdgeIndices, edgeIndex)
 		edgeIndex++
 	}
