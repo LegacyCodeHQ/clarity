@@ -156,6 +156,24 @@ func TestResolveJavaScriptImportPath_CJS(t *testing.T) {
 	assert.Contains(t, resolved, "/project/src/legacy/index.cjs")
 }
 
+func TestResolveJavaScriptImportPath_ExplicitNonJSExtension(t *testing.T) {
+	// Side-effect imports like `import './storybook.css'` from .jsx files must
+	// resolve to the CSS file when it exists in suppliedFiles. Mirrors the
+	// TypeScript resolver's behaviour for .css/.json side-effect imports.
+	suppliedFiles := map[string]bool{
+		"/project/.storybook/storybook.css": true,
+		"/project/src/data.json":            true,
+	}
+
+	sourceFile := "/project/.storybook/preview.jsx"
+
+	resolved := ResolveJavaScriptImportPath(sourceFile, "./storybook.css", suppliedFiles)
+	assert.Contains(t, resolved, "/project/.storybook/storybook.css")
+
+	resolved = ResolveJavaScriptImportPath("/project/src/app.js", "./data.json", suppliedFiles)
+	assert.Contains(t, resolved, "/project/src/data.json")
+}
+
 func TestJavaScriptImports_MJSFile(t *testing.T) {
 	filePath := filepath.Join("testdata", "sample.test.mjs")
 	imports, err := JavaScriptImports(filePath)

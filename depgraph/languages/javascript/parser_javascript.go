@@ -451,19 +451,15 @@ func ResolveJavaScriptImportPath(sourceFile, importPath string, suppliedFiles ma
 		}
 	}
 
-	// If import already has an extension, try the exact path
-	if hasJavaScriptExtension(importPath) {
-		exactPath := basePath
-		if suppliedFiles[exactPath] {
-			resolvedPaths = append(resolvedPaths, exactPath)
+	// Honour any explicit extension (e.g. ".js", ".css", ".json"). The
+	// suppliedFiles filter is the source of truth for what's actually in the
+	// project, so resolving non-JS imports such as CSS side-effect imports is
+	// safe and produces the expected edges in the graph.
+	if filepath.Ext(importPath) != "" {
+		if suppliedFiles[basePath] {
+			resolvedPaths = append(resolvedPaths, basePath)
 		}
 	}
 
 	return resolvedPaths
-}
-
-// hasJavaScriptExtension checks if a path already has a JavaScript extension
-func hasJavaScriptExtension(path string) bool {
-	ext := filepath.Ext(path)
-	return ext == ".js" || ext == ".jsx" || ext == ".mjs" || ext == ".cjs"
 }
