@@ -112,3 +112,47 @@ func TestResolveMarkdownLinkPath_MissingTarget(t *testing.T) {
 	got := ResolveMarkdownLinkPath("/project/docs/intro.md", "./missing.md", supplied)
 	assert.Nil(t, got)
 }
+
+// Static-site generators (VitePress, Docusaurus, Astro Starlight, ...) link
+// between docs with site-absolute URLs starting with "/". These should resolve
+// against the project regardless of where the source file lives.
+func TestResolveMarkdownLinkPath_SiteAbsoluteLink(t *testing.T) {
+	supplied := map[string]bool{
+		"/project/src/api/sfc-spec.md":         true,
+		"/project/src/guide/scaling-up/sfc.md": true,
+		"/project/src/guide/scaling-up/ssr.md": true,
+		"/project/src/api/general.md":          true,
+	}
+
+	got := ResolveMarkdownLinkPath("/project/src/api/sfc-spec.md", "/guide/scaling-up/sfc", supplied)
+	assert.Equal(t, []string{"/project/src/guide/scaling-up/sfc.md"}, got)
+
+	got = ResolveMarkdownLinkPath("/project/src/api/sfc-spec.md", "/api/general", supplied)
+	assert.Equal(t, []string{"/project/src/api/general.md"}, got)
+}
+
+// VitePress renders pages as .html, and authors often write links with the
+// rendered extension. Strip the rendered extension before resolving so the
+// underlying .md source is found.
+func TestResolveMarkdownLinkPath_HtmlExtensionStripped(t *testing.T) {
+	supplied := map[string]bool{
+		"/project/src/guide/scaling-up/tooling.md": true,
+	}
+
+	got := ResolveMarkdownLinkPath(
+		"/project/src/tutorial/description.md",
+		"/guide/scaling-up/tooling.html",
+		supplied)
+	assert.Equal(t, []string{"/project/src/guide/scaling-up/tooling.md"}, got)
+}
+
+// A site-absolute link that doesn't match any supplied file must not produce
+// a false match (e.g. a substring collision with an unrelated file).
+func TestResolveMarkdownLinkPath_SiteAbsoluteNoMatch(t *testing.T) {
+	supplied := map[string]bool{
+		"/project/src/api/sfc-spec.md": true,
+	}
+
+	got := ResolveMarkdownLinkPath("/project/src/api/ssr.md", "/guide/missing/page", supplied)
+	assert.Nil(t, got)
+}
