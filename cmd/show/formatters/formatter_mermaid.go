@@ -305,7 +305,7 @@ func (f mermaidFormatter) Format(g depgraph.FileDependencyGraph, opts RenderOpti
 		stylesSB.WriteString(fmt.Sprintf("    class %s phantomTest\n", strings.Join(phantomNodes, ",")))
 	}
 	if len(prodContextNodes) > 0 {
-		stylesSB.WriteString("    classDef phantomProdContext stroke-dasharray: 5 5\n")
+		stylesSB.WriteString("    classDef phantomProdContext stroke:#666666,stroke-dasharray: 5 5\n")
 		stylesSB.WriteString(fmt.Sprintf("    class %s phantomProdContext\n", strings.Join(prodContextNodes, ",")))
 	}
 	for _, idx := range phantomEdgeIndices {

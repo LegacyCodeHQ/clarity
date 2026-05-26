@@ -18,15 +18,23 @@ type jsonGraphOutput struct {
 }
 
 type jsonGraphNode struct {
-	Path       string         `json:"path"`
-	Name       string         `json:"name"`
-	Attributes []string       `json:"attributes,omitempty"`
-	Stats      *jsonNodeStats `json:"stats,omitempty"`
+	Path       string           `json:"path"`
+	Name       string           `json:"name"`
+	Attributes []string         `json:"attributes,omitempty"`
+	Stats      *jsonNodeStats   `json:"stats,omitempty"`
+	Phantom    *jsonPhantomNode `json:"phantom,omitempty"`
 }
 
 type jsonNodeStats struct {
 	Additions int `json:"additions"`
 	Deletions int `json:"deletions"`
+}
+
+type jsonPhantomNode struct {
+	Kind        string         `json:"kind"`
+	Stats       *jsonNodeStats `json:"stats,omitempty"`
+	ProdChanged bool           `json:"prodChanged"`
+	IsNew       bool           `json:"isNew,omitempty"`
 }
 
 type jsonGraphEdge struct {
@@ -71,6 +79,20 @@ func (f jsonGraphFormatter) Format(g depgraph.FileDependencyGraph, label string)
 			if fileMetadata.Stats.IsNew {
 				node.Attributes = append(node.Attributes, "new")
 			}
+		}
+		if fileMetadata.Phantom != nil {
+			phantom := &jsonPhantomNode{
+				Kind:        fileMetadata.Phantom.Kind,
+				ProdChanged: fileMetadata.Phantom.ProdChanged,
+			}
+			if fileMetadata.Phantom.Stats != nil {
+				phantom.Stats = &jsonNodeStats{
+					Additions: fileMetadata.Phantom.Stats.Additions,
+					Deletions: fileMetadata.Phantom.Stats.Deletions,
+				}
+				phantom.IsNew = fileMetadata.Phantom.Stats.IsNew
+			}
+			node.Phantom = phantom
 		}
 		nodes = append(nodes, node)
 	}

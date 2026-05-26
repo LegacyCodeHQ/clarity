@@ -50,6 +50,29 @@ func TestJSONGraphFormatter_Format_TestFileAttribute(t *testing.T) {
 	g.Assert(t, t.Name(), []byte(output))
 }
 
+func TestJSONGraphFormatter_Format_Phantom(t *testing.T) {
+	graph := testJSONFileGraph(t, map[string][]string{
+		"/project/src/lib.rs": {},
+	}, nil)
+	meta := graph.Meta.Files["/project/src/lib.rs"]
+	meta.Phantom = &depgraph.PhantomMetadata{
+		Kind:        "rust-test",
+		Stats:       &vcs.FileStats{Additions: 4, Deletions: 1},
+		ProdChanged: true,
+	}
+	meta.Stats = &vcs.FileStats{Additions: 2}
+	graph.Meta.Files["/project/src/lib.rs"] = meta
+
+	formatter := jsonGraphFormatter{}
+	output, err := formatter.Format(graph, "phantom-label")
+	require.NoError(t, err)
+
+	require.Contains(t, output, `"phantom":`)
+	require.Contains(t, output, `"kind": "rust-test"`)
+	require.Contains(t, output, `"additions": 4`)
+	require.Contains(t, output, `"prodChanged": true`)
+}
+
 func TestJSONGraphFormatter_Format_Cycles(t *testing.T) {
 	graph := testJSONFileGraph(t, map[string][]string{
 		"/project/a.go": {"/project/b.go"},
