@@ -216,6 +216,8 @@ func runGraph(cmd *cobra.Command, opts *graphOptions) error {
 		}
 	}
 
+	fileGraph.AnnotateRustPhantomsShow(contentReader)
+
 	formatter, err := formatters.NewFormatter(opts.outputFormat)
 	if err != nil {
 		return err

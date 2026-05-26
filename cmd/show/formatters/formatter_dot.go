@@ -177,20 +177,54 @@ func (f *dotFormatter) Format(g depgraph.FileDependencyGraph, opts RenderOptions
 				}
 			}
 
-			if hasFileMetadata && fileMetadata.IsPruned {
-				if cycleNodes[source] {
-					sb.WriteString(fmt.Sprintf("  %q [label=%q, style=\"filled,dashed\", fillcolor=%s, color=red];\n", sourceNodeKey, nodeLabel, color))
-				} else {
-					sb.WriteString(fmt.Sprintf("  %q [label=%q, style=\"filled,dashed\", fillcolor=%s, color=gray];\n", sourceNodeKey, nodeLabel, color))
-				}
-			} else if cycleNodes[source] {
+			prodIsContext := hasFileMetadata &&
+				fileMetadata.Phantom != nil &&
+				fileMetadata.Phantom.Stats != nil &&
+				!fileMetadata.Phantom.ProdChanged
+
+			switch {
+			case hasFileMetadata && fileMetadata.IsPruned && cycleNodes[source]:
+				sb.WriteString(fmt.Sprintf("  %q [label=%q, style=\"filled,dashed\", fillcolor=%s, color=red];\n", sourceNodeKey, nodeLabel, color))
+			case hasFileMetadata && fileMetadata.IsPruned:
+				sb.WriteString(fmt.Sprintf("  %q [label=%q, style=\"filled,dashed\", fillcolor=%s, color=gray];\n", sourceNodeKey, nodeLabel, color))
+			case cycleNodes[source]:
 				sb.WriteString(fmt.Sprintf("  %q [label=%q, style=filled, fillcolor=%s, color=red];\n", sourceNodeKey, nodeLabel, color))
-			} else {
+			case prodIsContext:
+				sb.WriteString(fmt.Sprintf("  %q [label=%q, style=\"filled,dashed\", fillcolor=%s];\n", sourceNodeKey, nodeLabel, color))
+			default:
 				sb.WriteString(fmt.Sprintf("  %q [label=%q, style=filled, fillcolor=%s];\n", sourceNodeKey, nodeLabel, color))
 			}
 			styledNodes[sourceNodeKey] = true
 		}
 	}
+	for _, source := range filePaths {
+		meta, ok := g.Meta.Files[source]
+		if !ok || meta.Phantom == nil {
+			continue
+		}
+		sourceKey := dotNodeKey(source, opts.BasePath)
+		phantomKey := sourceKey + "::tests"
+		phantomLabel := nodeNames[source]
+		if meta.Phantom.Stats != nil {
+			stats := *meta.Phantom.Stats
+			if stats.IsNew {
+				phantomLabel = fmt.Sprintf("🪴 %s", phantomLabel)
+			}
+			var parts []string
+			if stats.Additions > 0 {
+				parts = append(parts, fmt.Sprintf("+%d", stats.Additions))
+			}
+			if stats.Deletions > 0 {
+				parts = append(parts, fmt.Sprintf("-%d", stats.Deletions))
+			}
+			if len(parts) > 0 {
+				phantomLabel = fmt.Sprintf("%s\n%s", phantomLabel, strings.Join(parts, " "))
+			}
+		}
+		sb.WriteString(fmt.Sprintf("  %q [label=%q, style=\"filled,dashed\", fillcolor=lightgreen, color=darkgreen];\n", phantomKey, phantomLabel))
+		sb.WriteString(fmt.Sprintf("  %q -> %q [style=dashed, color=darkgreen, arrowhead=none];\n", phantomKey, sourceKey))
+	}
+
 	// Determine whether we have any edges before writing the section separator.
 	hasEdges := false
 	for _, deps := range adjacency {

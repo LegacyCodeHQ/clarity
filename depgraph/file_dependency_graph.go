@@ -27,6 +27,18 @@ type FileMetadata struct {
 	IsTest    bool
 	IsPruned  bool
 	Extension string
+	Phantom   *PhantomMetadata
+}
+
+// PhantomMetadata describes a sibling "phantom" node attached to a file to
+// represent in-file test code as a distinct visual node. Kind identifies the
+// language-specific source of the phantom (e.g. "rust-test"). Stats carries
+// any per-line attribution for watch mode; nil in show mode. ProdChanged is
+// true when the prod side of the file also has changes (watch mode only).
+type PhantomMetadata struct {
+	Kind        string
+	Stats       *vcs.FileStats
+	ProdChanged bool
 }
 
 // FileEdge identifies a directed edge between two files.
