@@ -157,11 +157,50 @@ func (f mermaidFormatter) Format(g depgraph.FileDependencyGraph, opts RenderOpti
 		}
 	}
 
+	phantomIDs := make(map[string]string)
+	var phantomNodes []string
+	var prodContextNodes []string
+	for _, source := range filePaths {
+		meta, ok := g.Meta.Files[source]
+		if !ok || meta.Phantom == nil {
+			continue
+		}
+		prodID := nodeIDs[nodeNames[source]]
+		phantomID := prodID + "p"
+		phantomIDs[source] = phantomID
+
+		phantomLabel := nodeNames[source]
+		if meta.Phantom.Stats != nil {
+			stats := *meta.Phantom.Stats
+			if stats.IsNew {
+				phantomLabel = fmt.Sprintf("🪴 %s", phantomLabel)
+			}
+			var parts []string
+			if stats.Additions > 0 {
+				parts = append(parts, fmt.Sprintf("+%d", stats.Additions))
+			}
+			if stats.Deletions > 0 {
+				parts = append(parts, fmt.Sprintf("-%d", stats.Deletions))
+			}
+			if len(parts) > 0 {
+				phantomLabel = fmt.Sprintf("%s<br/>%s", phantomLabel, strings.Join(parts, " "))
+			}
+		}
+		phantomLabel = strings.ReplaceAll(phantomLabel, "\"", "#quot;")
+		sb.WriteString(fmt.Sprintf("    %s[\"%s\"]\n", phantomID, phantomLabel))
+		phantomNodes = append(phantomNodes, phantomID)
+
+		if meta.Phantom.Stats != nil && !meta.Phantom.ProdChanged {
+			prodContextNodes = append(prodContextNodes, prodID)
+		}
+	}
+
 	// Define edges
 	var edgesSB strings.Builder
 	hasEdges := false
 	edgeIndex := 0
 	var cycleEdgeIndices []int
+	var phantomEdgeIndices []int
 	for _, source := range filePaths {
 		deps := adjacency[source]
 		sortedDeps := make([]string, len(deps))
@@ -186,6 +225,18 @@ func (f mermaidFormatter) Format(g depgraph.FileDependencyGraph, opts RenderOpti
 			}
 			edgeIndex++
 		}
+	}
+
+	for _, source := range filePaths {
+		phantomID, ok := phantomIDs[source]
+		if !ok {
+			continue
+		}
+		prodID := nodeIDs[nodeNames[source]]
+		hasEdges = true
+		edgesSB.WriteString(fmt.Sprintf("    %s --- %s\n", phantomID, prodID))
+		phantomEdgeIndices = append(phantomEdgeIndices, edgeIndex)
+		edgeIndex++
 	}
 
 	// Add styles for different node types
@@ -217,7 +268,7 @@ func (f mermaidFormatter) Format(g depgraph.FileDependencyGraph, opts RenderOpti
 		}
 	}
 
-	hasStyles := len(testNodes) > 0 || len(majorityExtensionNodes) > 0 || len(cycleNodes) > 0 || len(cycleEdgeIndices) > 0 || len(prunedNodes) > 0
+	hasStyles := len(testNodes) > 0 || len(majorityExtensionNodes) > 0 || len(cycleNodes) > 0 || len(cycleEdgeIndices) > 0 || len(prunedNodes) > 0 || len(phantomNodes) > 0 || len(prodContextNodes) > 0
 	var stylesSB strings.Builder
 
 	// Define style classes
@@ -248,6 +299,17 @@ func (f mermaidFormatter) Format(g depgraph.FileDependencyGraph, opts RenderOpti
 	}
 	for _, idx := range cycleEdgeIndices {
 		stylesSB.WriteString(fmt.Sprintf("    linkStyle %d stroke:#d62728,stroke-width:3px,stroke-dasharray: 5 5\n", idx))
+	}
+	if len(phantomNodes) > 0 {
+		stylesSB.WriteString("    classDef phantomTest fill:#90EE90,stroke:#228B22,stroke-dasharray: 5 5,color:#000000\n")
+		stylesSB.WriteString(fmt.Sprintf("    class %s phantomTest\n", strings.Join(phantomNodes, ",")))
+	}
+	if len(prodContextNodes) > 0 {
+		stylesSB.WriteString("    classDef phantomProdContext stroke-dasharray: 5 5\n")
+		stylesSB.WriteString(fmt.Sprintf("    class %s phantomProdContext\n", strings.Join(prodContextNodes, ",")))
+	}
+	for _, idx := range phantomEdgeIndices {
+		stylesSB.WriteString(fmt.Sprintf("    linkStyle %d stroke:#228B22,stroke-dasharray: 5 5\n", idx))
 	}
 
 	if hasEdges {
