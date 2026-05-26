@@ -181,3 +181,44 @@ func TestResolveMarkdownLinkPath_SelfReferenceSiteAbsoluteFiltered(t *testing.T)
 	got := ResolveMarkdownLinkPath("/project/src/guide/intro.md", "/guide/intro", supplied)
 	assert.Nil(t, got)
 }
+
+// Hugo URLs carry trailing slashes by convention ("/docs/concepts/foo/").
+// The trailing slash is a URL artefact, not a directory marker, and the link
+// usually resolves to either a leaf .md or a Hugo section index (_index.md).
+func TestResolveMarkdownLinkPath_SiteAbsoluteTrailingSlashLeafFile(t *testing.T) {
+	supplied := map[string]bool{
+		"/repo/content/ja/docs/concepts/storage/volumes.md": true,
+	}
+
+	got := ResolveMarkdownLinkPath(
+		"/repo/content/ja/docs/concepts/storage/storage-classes.md",
+		"/ja/docs/concepts/storage/volumes/",
+		supplied)
+	assert.Equal(t, []string{"/repo/content/ja/docs/concepts/storage/volumes.md"}, got)
+}
+
+func TestResolveMarkdownLinkPath_SiteAbsoluteHugoSectionIndex(t *testing.T) {
+	supplied := map[string]bool{
+		"/repo/content/en/docs/concepts/storage/_index.md": true,
+	}
+
+	got := ResolveMarkdownLinkPath(
+		"/repo/content/en/docs/concepts/configuration/secret.md",
+		"/docs/concepts/storage/",
+		supplied)
+	assert.Equal(t, []string{"/repo/content/en/docs/concepts/storage/_index.md"}, got)
+}
+
+// Relative links to a Hugo section (e.g. `(./storage/)`) should also pick up
+// the `_index.md` section file.
+func TestResolveMarkdownLinkPath_RelativeHugoSectionIndex(t *testing.T) {
+	supplied := map[string]bool{
+		"/repo/content/en/docs/concepts/storage/_index.md": true,
+	}
+
+	got := ResolveMarkdownLinkPath(
+		"/repo/content/en/docs/concepts/configuration/secret.md",
+		"../storage/",
+		supplied)
+	assert.Equal(t, []string{"/repo/content/en/docs/concepts/storage/_index.md"}, got)
+}

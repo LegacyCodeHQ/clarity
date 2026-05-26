@@ -125,10 +125,14 @@ func resolveSiteAbsoluteLink(linkPath string, suppliedFiles map[string]bool) []s
 }
 
 // siteAbsoluteCandidateSuffixes returns the file-suffix expansions to try for
-// a site-absolute link, in priority order.
+// a site-absolute link, in priority order. Trailing slashes are stripped
+// because they are a URL convention, not a filesystem directory marker; a
+// Hugo URL like `/docs/foo/` may resolve to either `docs/foo.md` (leaf) or
+// `docs/foo/_index.md` (section index).
 func siteAbsoluteCandidateSuffixes(linkPath string) []string {
 	sep := string(filepath.Separator)
 	clean := strings.TrimPrefix(linkPath, "/")
+	clean = strings.TrimRight(clean, "/")
 	clean = filepath.FromSlash(clean)
 
 	var suffixes []string
@@ -138,6 +142,7 @@ func siteAbsoluteCandidateSuffixes(linkPath string) []string {
 		suffixes = append(
 			suffixes,
 			sep+clean+".md",
+			sep+clean+sep+"_index.md",
 			sep+clean+sep+"README.md",
 			sep+clean+sep+"index.md")
 	}
@@ -145,13 +150,14 @@ func siteAbsoluteCandidateSuffixes(linkPath string) []string {
 }
 
 // resolveCandidate matches a fully-joined relative candidate against the
-// supplied file set, with `.md` and directory-index fallbacks.
+// supplied file set, with `.md` and directory-index fallbacks. Hugo section
+// pages live in `_index.md`; mdBook/GitHub use `README.md` or `index.md`.
 func resolveCandidate(candidate string, suppliedFiles map[string]bool) []string {
 	if suppliedFiles[candidate] {
 		return []string{candidate}
 	}
 
-	for _, indexName := range []string{"README.md", "index.md"} {
+	for _, indexName := range []string{"_index.md", "README.md", "index.md"} {
 		indexed := filepath.Join(candidate, indexName)
 		if suppliedFiles[indexed] {
 			return []string{indexed}
