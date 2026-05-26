@@ -506,16 +506,22 @@ func resolveTypeScriptBasePaths(sourceFile, importPath string) []string {
 	}
 
 	if !strings.HasPrefix(importPath, "@/") {
+		var bases []string
 		// Could be an npm workspace package (e.g. "@tanstack/query-core" or
 		// "lodash-es" inside a yarn/pnpm workspace).
-		if bases := resolveWorkspaceBasePaths(sourceFile, importPath); len(bases) > 0 {
-			return bases
+		bases = append(bases, resolveWorkspaceBasePaths(sourceFile, importPath)...)
+		// Bare specifiers resolve against tsconfig baseUrl. This is the
+		// convention used by Superset and others where `src/...` is reachable
+		// without a `paths` entry because baseUrl points at the project root.
+		if cfg := loadTsConfigFor(sourceFile); cfg != nil && cfg.baseURL != "" {
+			bases = append(bases, filepath.Clean(filepath.Join(cfg.baseURL, importPath)))
 		}
 		// Fall back to the legacy behaviour of joining against the source
 		// dir. Harmless if nothing resolves; preserves any external-but-vendored
 		// patterns that happened to work before this change.
 		sourceDir := filepath.Dir(sourceFile)
-		return []string{filepath.Clean(filepath.Join(sourceDir, importPath))}
+		bases = append(bases, filepath.Clean(filepath.Join(sourceDir, importPath)))
+		return bases
 	}
 
 	var bases []string

@@ -87,19 +87,61 @@ func parseTsConfig(dir string, data []byte) *tsConfig {
 	}
 }
 
-var (
-	lineCommentRe   = regexp.MustCompile(`(?m)//[^\n]*`)
-	blockCommentRe  = regexp.MustCompile(`(?s)/\*.*?\*/`)
-	trailingCommaRe = regexp.MustCompile(`,(\s*[}\]])`)
-)
+var trailingCommaRe = regexp.MustCompile(`,(\s*[}\]])`)
 
 // stripJSONC removes line comments, block comments, and trailing commas so
-// that JSONC tsconfig files parse with the standard library.
+// that JSONC tsconfig files parse with the standard library. Comments inside
+// string literals must be preserved — naive regex stripping mistakes glob
+// patterns like "@scope/pkg/*" for block-comment openers and corrupts the
+// file.
 func stripJSONC(data []byte) []byte {
-	out := blockCommentRe.ReplaceAll(data, nil)
-	out = lineCommentRe.ReplaceAll(out, nil)
-	out = trailingCommaRe.ReplaceAll(out, []byte("$1"))
-	return out
+	out := make([]byte, 0, len(data))
+	inString := false
+	for i := 0; i < len(data); i++ {
+		c := data[i]
+		if inString {
+			out = append(out, c)
+			if c == '\\' && i+1 < len(data) {
+				out = append(out, data[i+1])
+				i++
+				continue
+			}
+			if c == '"' {
+				inString = false
+			}
+			continue
+		}
+		if c == '"' {
+			inString = true
+			out = append(out, c)
+			continue
+		}
+		if c == '/' && i+1 < len(data) {
+			next := data[i+1]
+			if next == '/' {
+				j := i + 2
+				for j < len(data) && data[j] != '\n' {
+					j++
+				}
+				i = j - 1
+				continue
+			}
+			if next == '*' {
+				j := i + 2
+				for j+1 < len(data) && !(data[j] == '*' && data[j+1] == '/') {
+					j++
+				}
+				if j+1 < len(data) {
+					i = j + 1
+				} else {
+					i = len(data)
+				}
+				continue
+			}
+		}
+		out = append(out, c)
+	}
+	return trailingCommaRe.ReplaceAll(out, []byte("$1"))
 }
 
 // resolveAlias maps an import like "@/lib/db" through compilerOptions.paths.

@@ -571,6 +571,47 @@ func TestResolveTypeScriptImportPath_AliasResolvedViaTsconfigPaths(t *testing.T)
 	assert.Contains(t, resolved, dbFile)
 }
 
+// TestResolveTypeScriptImportPath_BaseUrlBareImport exercises the convention
+// used by Superset and many other frontends: a tsconfig with `baseUrl: "."`
+// and no `paths` entry for `src/*`, where test files import production code
+// via the bare specifier `src/...`. TypeScript resolves these against
+// baseUrl; clarity must do the same or test→production edges go missing.
+func TestResolveTypeScriptImportPath_BaseUrlBareImport(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Mirrors Superset's tsconfig: JSONC block comments AND glob patterns
+	// containing `/*` inside path strings. A naive regex-based JSONC stripper
+	// will misread the glob as a block-comment opener and eat a huge swath
+	// of the file, leaving baseUrl empty.
+	tsconfig := `{
+  "compilerOptions": {
+    /* Type Checking */
+    "noImplicitAny": true,
+
+    "baseUrl": ".",
+    "paths": {
+      "@superset-ui/core": ["./packages/superset-ui-core/src"],
+      "@superset-ui/core/*": ["./packages/superset-ui-core/src/*"],
+      "@superset-ui/plugin-chart-*": ["./plugins/plugin-chart-*/src"]
+    }
+  }
+}`
+	require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "tsconfig.json"), []byte(tsconfig), 0644))
+
+	actionsDir := filepath.Join(tmpDir, "src", "SqlLab", "actions")
+	require.NoError(t, os.MkdirAll(actionsDir, 0755))
+	prodFile := filepath.Join(actionsDir, "sqlLab.ts")
+	require.NoError(t, os.WriteFile(prodFile, []byte("export const x = 1;"), 0644))
+	testFile := filepath.Join(actionsDir, "sqlLab.test.ts")
+	require.NoError(t, os.WriteFile(testFile, []byte(""), 0644))
+
+	suppliedFiles := map[string]bool{prodFile: true, testFile: true}
+
+	resolved := ResolveTypeScriptImportPath(testFile, "src/SqlLab/actions/sqlLab", suppliedFiles)
+	assert.Contains(t, resolved, prodFile,
+		"baseUrl-relative bare imports must resolve against tsconfig baseUrl")
+}
+
 // TestResolveTypeScriptImportPath_NpmWorkspacePackage exercises the scenario
 // hit by tanstack/query, vercel/ai, and every other pnpm/yarn/npm workspace:
 // package A imports package B by its npm-package name (e.g. "@tanstack/query-core"),
