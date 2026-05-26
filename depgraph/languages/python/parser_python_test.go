@@ -99,13 +99,15 @@ func TestResolvePythonAbsoluteImportPath(t *testing.T) {
 		"/project/legacy/src/other/external_lookalike/model.py": true,
 	}
 
-	resolved := ResolvePythonAbsoluteImportPath("dexter.model", suppliedFiles)
+	sourcePath := "/project/legacy/src/dexter/caller.py"
+
+	resolved := ResolvePythonAbsoluteImportPath(sourcePath, "dexter.model", suppliedFiles)
 	assert.Equal(t, []string{"/project/legacy/src/dexter/model.py"}, resolved)
 
-	resolved = ResolvePythonAbsoluteImportPath("dexter.tools", suppliedFiles)
+	resolved = ResolvePythonAbsoluteImportPath(sourcePath, "dexter.tools", suppliedFiles)
 	assert.Equal(t, []string{"/project/legacy/src/dexter/tools/__init__.py"}, resolved)
 
-	resolved = ResolvePythonAbsoluteImportPath("dexter.tools.finance.api", suppliedFiles)
+	resolved = ResolvePythonAbsoluteImportPath(sourcePath, "dexter.tools.finance.api", suppliedFiles)
 	assert.Equal(t, []string{"/project/legacy/src/dexter/tools/finance/api.py"}, resolved)
 }
 

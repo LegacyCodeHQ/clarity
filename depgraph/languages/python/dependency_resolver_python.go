@@ -27,7 +27,7 @@ func ResolvePythonProjectImports(
 	for _, imp := range imports {
 		resolvedFiles := ResolvePythonImportPath(absPath, imp.Path(), suppliedFiles)
 		projectImports = append(projectImports, resolvedFiles...)
-		resolvedFiles = ResolvePythonAbsoluteImportPath(imp.Path(), suppliedFiles)
+		resolvedFiles = ResolvePythonAbsoluteImportPath(absPath, imp.Path(), suppliedFiles)
 		projectImports = append(projectImports, resolvedFiles...)
 	}
 

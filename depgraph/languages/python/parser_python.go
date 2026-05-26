@@ -303,7 +303,7 @@ func ResolvePythonImportPath(sourceFile, importPath string, suppliedFiles map[st
 
 // ResolvePythonAbsoluteImportPath resolves an absolute Python package import
 // (e.g. "dexter.tools.finance.api") to matching project files.
-func ResolvePythonAbsoluteImportPath(importPath string, suppliedFiles map[string]bool) []string {
+func ResolvePythonAbsoluteImportPath(absSourcePath, importPath string, suppliedFiles map[string]bool) []string {
 	if importPath == "" || strings.HasPrefix(importPath, ".") {
 		return nil
 	}
@@ -314,6 +314,9 @@ func ResolvePythonAbsoluteImportPath(importPath string, suppliedFiles map[string
 
 	var resolvedPaths []string
 	for suppliedPath := range suppliedFiles {
+		if suppliedPath == absSourcePath {
+			continue
+		}
 		if strings.HasSuffix(suppliedPath, fileSuffix) || strings.HasSuffix(suppliedPath, packageSuffix) {
 			resolvedPaths = append(resolvedPaths, suppliedPath)
 		}
