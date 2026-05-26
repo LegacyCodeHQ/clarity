@@ -222,7 +222,7 @@ func (f *dotFormatter) Format(g depgraph.FileDependencyGraph, opts RenderOptions
 			}
 		}
 		sb.WriteString(fmt.Sprintf("  %q [label=%q, style=\"filled,dashed\", fillcolor=lightgreen, color=darkgreen];\n", phantomKey, phantomLabel))
-		sb.WriteString(fmt.Sprintf("  %q -> %q [style=dashed, color=darkgreen];\n", phantomKey, sourceKey))
+		sb.WriteString(fmt.Sprintf("  %q -> %q [style=dashed, color=darkgreen, arrowsize=1.2, penwidth=1.4];\n", phantomKey, sourceKey))
 	}
 
 	// Determine whether we have any edges before writing the section separator.
