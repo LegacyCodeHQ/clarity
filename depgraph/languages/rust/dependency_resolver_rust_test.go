@@ -494,3 +494,104 @@ version = "0.1.0"
 	require.NoError(t, err)
 	assert.Contains(t, imports, crateBFoo)
 }
+
+// TestResolveRustProjectImports_UseSuperBareIdentDefinedInParentMod exercises
+// the case where a child file imports a bare identifier (constant, type,
+// function) from its parent module file via `use super::IDENT;`. The
+// resolver previously looked only for a file or directory named `IDENT.rs` /
+// `IDENT/mod.rs` and missed the symbol when it lived in the parent `mod.rs`
+// itself — leaving the dependency edge invisible.
+//
+// Layout:
+//
+//	src/lib.rs                  declares `mod activity;`
+//	src/activity/mod.rs         declares `mod window;` + `pub const DAYS_IN_WEEK: usize = 7;`
+//	src/activity/window.rs      `use super::DAYS_IN_WEEK;`
+//
+// Resolving window.rs's imports must yield the parent mod.rs.
+func TestResolveRustProjectImports_UseSuperBareIdentDefinedInParentMod(t *testing.T) {
+	tmpDir := t.TempDir()
+	crateRoot := filepath.Join(tmpDir, "mycrate")
+	srcDir := filepath.Join(crateRoot, "src")
+	activityDir := filepath.Join(srcDir, "activity")
+	require.NoError(t, os.MkdirAll(activityDir, 0755))
+
+	cargoToml := filepath.Join(crateRoot, "Cargo.toml")
+	libFile := filepath.Join(srcDir, "lib.rs")
+	modFile := filepath.Join(activityDir, "mod.rs")
+	windowFile := filepath.Join(activityDir, "window.rs")
+
+	require.NoError(t, os.WriteFile(cargoToml, []byte("[package]\nname = \"mycrate\"\n"), 0644))
+	require.NoError(t, os.WriteFile(libFile, []byte("pub mod activity;\n"), 0644))
+	require.NoError(t, os.WriteFile(modFile, []byte("mod window;\npub const DAYS_IN_WEEK: usize = 7;\n"), 0644))
+	require.NoError(t, os.WriteFile(windowFile, []byte("use super::DAYS_IN_WEEK;\n"), 0644))
+
+	supplied := map[string]bool{
+		cargoToml:  true,
+		libFile:    true,
+		modFile:    true,
+		windowFile: true,
+	}
+
+	imports, err := ResolveRustProjectImports(windowFile, windowFile, supplied, os.ReadFile)
+	require.NoError(t, err)
+	assert.Contains(t, imports, modFile)
+}
+
+// TestResolveRustProjectImports_UseCratePathSymbolDoesNotExpandSiblings
+// exercises the case where a `use crate::module::Symbol` import targets a
+// specific item defined in one child of `module/`. The resolver previously
+// fell back to "the module's whole mod.rs" when the symbol path didn't match
+// a file directly, then expanded mod.rs into every child module — attributing
+// the dependency to siblings the importer never actually touches.
+//
+// Layout:
+//
+//	src/lib.rs              declares `mod git;` + `mod consumer;`
+//	src/git/mod.rs          declares 3 children + `pub use` re-exports each
+//	src/git/real_git.rs     `pub struct RealGit;`
+//	src/git/submodule.rs    `pub struct Submodule;`
+//	src/git/trait_git.rs    `pub trait Git {}`
+//	src/consumer.rs         `use crate::git::Git;`
+//
+// Resolving consumer.rs's imports must include `trait_git.rs` (where `Git`
+// is defined) but NOT `real_git.rs` or `submodule.rs`.
+func TestResolveRustProjectImports_UseCratePathSymbolDoesNotExpandSiblings(t *testing.T) {
+	tmpDir := t.TempDir()
+	crateRoot := filepath.Join(tmpDir, "mycrate")
+	srcDir := filepath.Join(crateRoot, "src")
+	gitDir := filepath.Join(srcDir, "git")
+	require.NoError(t, os.MkdirAll(gitDir, 0755))
+
+	cargoToml := filepath.Join(crateRoot, "Cargo.toml")
+	libFile := filepath.Join(srcDir, "lib.rs")
+	gitMod := filepath.Join(gitDir, "mod.rs")
+	realGitFile := filepath.Join(gitDir, "real_git.rs")
+	submoduleFile := filepath.Join(gitDir, "submodule.rs")
+	traitGitFile := filepath.Join(gitDir, "trait_git.rs")
+	consumerFile := filepath.Join(srcDir, "consumer.rs")
+
+	require.NoError(t, os.WriteFile(cargoToml, []byte("[package]\nname = \"mycrate\"\n"), 0644))
+	require.NoError(t, os.WriteFile(libFile, []byte("pub mod git;\npub mod consumer;\n"), 0644))
+	require.NoError(t, os.WriteFile(gitMod, []byte("mod real_git;\nmod submodule;\nmod trait_git;\n\npub use real_git::RealGit;\npub use submodule::Submodule;\npub use trait_git::Git;\n"), 0644))
+	require.NoError(t, os.WriteFile(realGitFile, []byte("pub struct RealGit;\n"), 0644))
+	require.NoError(t, os.WriteFile(submoduleFile, []byte("pub struct Submodule;\n"), 0644))
+	require.NoError(t, os.WriteFile(traitGitFile, []byte("pub trait Git {}\n"), 0644))
+	require.NoError(t, os.WriteFile(consumerFile, []byte("use crate::git::Git;\n"), 0644))
+
+	supplied := map[string]bool{
+		cargoToml:     true,
+		libFile:       true,
+		gitMod:        true,
+		realGitFile:   true,
+		submoduleFile: true,
+		traitGitFile:  true,
+		consumerFile:  true,
+	}
+
+	imports, err := ResolveRustProjectImports(consumerFile, consumerFile, supplied, os.ReadFile)
+	require.NoError(t, err)
+	assert.Contains(t, imports, traitGitFile, "Git trait is defined in trait_git.rs and should be the resolved target")
+	assert.NotContains(t, imports, realGitFile, "real_git.rs is a sibling that consumer.rs never references")
+	assert.NotContains(t, imports, submoduleFile, "submodule.rs is a sibling that consumer.rs never references")
+}

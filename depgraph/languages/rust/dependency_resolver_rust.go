@@ -163,16 +163,44 @@ resolved:
 	}
 
 	candidates := resolveRustModuleCandidates(baseDir, parts, r.suppliedFiles)
-	if len(parts) > 1 && len(candidates) == 0 {
-		candidates = append(candidates, resolveRustModuleCandidates(baseDir, parts[:len(parts)-1], r.suppliedFiles)...)
+	// Track whether the full import path matched a real file/directory. If it
+	// didn't, the last segment is most likely a *symbol* — and the dependency
+	// belongs to the file that defines that symbol, not to every sibling of
+	// the prefix module.
+	matchedFullPath := len(candidates) > 0
+
+	if !matchedFullPath && len(parts) > 1 {
+		// Symbol path (e.g. `crate::git::Git`). Look up the symbol against the
+		// prefix module's `pub use` re-exports first — that's the form Rust
+		// programs use to expose child items from a directory's mod.rs.
+		if reExported := r.resolveRustReExportedSymbol(sourceFile, baseDir, parts); len(reExported) > 0 {
+			return reExported
+		}
+		// No re-export; attribute the edge to the prefix module file (where
+		// the symbol could live as a top-level item) — and crucially, do NOT
+		// run `expandRustModRsCandidates`, because the user named one symbol
+		// rather than importing the whole module. Expanding here would draw
+		// false-positive edges to every child of the prefix mod.rs.
+		candidates = resolveRustModuleCandidates(baseDir, parts[:len(parts)-1], r.suppliedFiles)
+		return deduplicateSuppliedFiles(candidates, r.suppliedFiles)
 	}
 	if rootedInLocalCrate && len(parts) == 1 && len(candidates) == 0 {
 		candidates = append(candidates, resolveRustCrateRootCandidates(crateRoot, r.suppliedFiles)...)
 	}
 
 	if len(candidates) == 0 {
-		if reExported := r.resolveRustReExportedSymbol(baseDir, parts); len(reExported) > 0 {
+		if reExported := r.resolveRustReExportedSymbol(sourceFile, baseDir, parts); len(reExported) > 0 {
 			return reExported
+		}
+		// Bare identifier reached via `super::`/`self::` with no matching
+		// file, directory, or re-export — the symbol must be a top-level item
+		// (const, type, function) defined directly in the parent module file.
+		// Without this fallback, `use super::DAYS_IN_WEEK;` produces no edge
+		// at all when DAYS_IN_WEEK lives in the parent `mod.rs`.
+		if !rootedInLocalCrate && len(parts) == 1 {
+			if moduleFile := r.findRustModuleFileForDir(baseDir); moduleFile != "" && moduleFile != sourceFile {
+				return []string{moduleFile}
+			}
 		}
 	}
 
@@ -192,7 +220,7 @@ resolved:
 // This mirrors how Rust resolves the lookup: the symbol is brought into the
 // parent module's namespace by the re-export, so callers reach the original
 // defining file transparently.
-func (r *ProjectImportResolver) resolveRustReExportedSymbol(baseDir string, parts []string) []string {
+func (r *ProjectImportResolver) resolveRustReExportedSymbol(sourceFile, baseDir string, parts []string) []string {
 	if baseDir == "" || len(parts) == 0 {
 		return nil
 	}
@@ -205,7 +233,11 @@ func (r *ProjectImportResolver) resolveRustReExportedSymbol(baseDir string, part
 		targetDir = filepath.Join(append([]string{baseDir}, parts[:len(parts)-1]...)...)
 	}
 	moduleFile := r.findRustModuleFileForDir(targetDir)
-	if moduleFile == "" {
+	// `moduleFile == sourceFile` means we'd ask the importing file to act as
+	// its own re-export source — and chase its own use statement back into
+	// `resolveRustUsePath`, which blows the stack. (Example: `use
+	// crate::engine::astgrep::Foo;` written inside `engine/astgrep.rs`.)
+	if moduleFile == "" || moduleFile == sourceFile {
 		return nil
 	}
 	imports, err := r.importsForFile(moduleFile)
