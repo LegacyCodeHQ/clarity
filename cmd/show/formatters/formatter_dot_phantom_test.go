@@ -35,7 +35,7 @@ func TestDOT_PhantomNode_ShowMode(t *testing.T) {
 	assert.Contains(t, out, `"/project/src/lib.rs::tests"`, "phantom node id missing")
 	assert.Contains(t, out, `fillcolor=lightgreen`, "phantom node should be green")
 	assert.Contains(t, out, `"/project/src/lib.rs::tests" -> "/project/src/lib.rs"`, "phantom→prod edge missing")
-	assert.Contains(t, out, `style=dashed, color=darkgreen`, "phantom edge should be dashed green")
+	assert.Contains(t, out, `style=dotted, color=darkgreen`, "phantom edge should be dotted green")
 
 	// Prod node still solid in show mode (no Stats on the phantom).
 	prodLine := lineWithSourceKey(out, `"/project/src/lib.rs"`, "[")

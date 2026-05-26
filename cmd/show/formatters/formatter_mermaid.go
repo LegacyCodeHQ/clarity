@@ -301,7 +301,7 @@ func (f mermaidFormatter) Format(g depgraph.FileDependencyGraph, opts RenderOpti
 		stylesSB.WriteString(fmt.Sprintf("    linkStyle %d stroke:#d62728,stroke-width:3px,stroke-dasharray: 5 5\n", idx))
 	}
 	if len(phantomNodes) > 0 {
-		stylesSB.WriteString("    classDef phantomTest fill:#90EE90,stroke:#228B22,stroke-dasharray: 5 5,color:#000000\n")
+		stylesSB.WriteString("    classDef phantomTest fill:#90EE90,stroke:#228B22,stroke-dasharray: 1 4,color:#000000\n")
 		stylesSB.WriteString(fmt.Sprintf("    class %s phantomTest\n", strings.Join(phantomNodes, ",")))
 	}
 	if len(prodContextNodes) > 0 {
