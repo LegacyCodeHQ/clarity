@@ -47,6 +47,10 @@ func buildDOTGraph(repoPath string, opts *watchOptions, formatter formatters.For
 		return "", fmt.Errorf("failed to build file graph metadata: %w", err)
 	}
 
+	if diffs, diffErr := git.GetUncommittedFileDiffs(repoPath); diffErr == nil {
+		fileGraph.AnnotateRustPhantomsWatch(diffs, git.GitCommitContentReader(repoPath, "HEAD"), contentReader)
+	}
+
 	direction, ok := formatters.ParseDirection(opts.direction)
 	if !ok {
 		direction = formatters.DefaultDirection
