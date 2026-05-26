@@ -66,6 +66,60 @@ func GetUncommittedFileDiffs(repoPath string) (map[string]vcs.FileDiff, error) {
 	return out, nil
 }
 
+// GetCommitFileDiffs returns per-line additions and deletions for files
+// modified in a single commit, computed against that commit's first parent.
+// Line numbers in Additions reference the commit's post-image; line numbers
+// in Deletions reference the parent's content.
+func GetCommitFileDiffs(repoPath, commitID string) (map[string]vcs.FileDiff, error) {
+	if !isGitRepository(repoPath) {
+		return nil, fmt.Errorf("%s is not a git repository", repoPath)
+	}
+	repoRoot, err := GetRepositoryRoot(repoPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get repository root: %w", err)
+	}
+
+	// `git diff <commit>~ <commit>` is undefined for the root commit; fall back
+	// to `--root <commit>` which diffs against the empty tree.
+	stdout, _, err := runGitCommand(repoPath, "diff", "--unified=0", "--no-color", commitID+"~", commitID)
+	if err != nil {
+		// Root commit has no parent; fall back to diff-tree --root which emits
+		// a synthetic diff against the empty tree.
+		var stderr string
+		stdout, stderr, err = runGitCommand(repoPath, "diff-tree", "--root", "--unified=0", "--no-color", "-p", commitID)
+		if err != nil {
+			return nil, gitCommandError(err, stderr)
+		}
+	}
+	return absolutize(repoRoot, parseUnifiedDiff(string(stdout))), nil
+}
+
+// GetCommitRangeFileDiffs returns per-line additions and deletions for files
+// changed between two commits. Inputs are the same as `git diff from..to`.
+func GetCommitRangeFileDiffs(repoPath, fromCommit, toCommit string) (map[string]vcs.FileDiff, error) {
+	if !isGitRepository(repoPath) {
+		return nil, fmt.Errorf("%s is not a git repository", repoPath)
+	}
+	repoRoot, err := GetRepositoryRoot(repoPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get repository root: %w", err)
+	}
+
+	stdout, stderr, err := runGitCommand(repoPath, "diff", "--unified=0", "--no-color", fromCommit, toCommit)
+	if err != nil {
+		return nil, gitCommandError(err, stderr)
+	}
+	return absolutize(repoRoot, parseUnifiedDiff(string(stdout))), nil
+}
+
+func absolutize(repoRoot string, diffs map[string]vcs.FileDiff) map[string]vcs.FileDiff {
+	out := make(map[string]vcs.FileDiff, len(diffs))
+	for relPath, fd := range diffs {
+		out[filepath.Join(repoRoot, relPath)] = fd
+	}
+	return out
+}
+
 // parseUnifiedDiff walks `git diff --unified=0` output and emits per-file
 // FileDiff structures with 1-indexed line numbers.
 func parseUnifiedDiff(diff string) map[string]vcs.FileDiff {

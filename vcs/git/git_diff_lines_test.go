@@ -77,6 +77,46 @@ func TestParseUnifiedDiff_NewFile(t *testing.T) {
 	assert.Equal(t, []int{1, 2, 3}, fd.Additions)
 }
 
+func TestGetCommitFileDiffs(t *testing.T) {
+	tmpDir := t.TempDir()
+	setupGitRepo(t, tmpDir)
+
+	createFile(t, tmpDir, "lib.rs", "line a\nline b\nline c\n")
+	gitAdd(t, tmpDir, "lib.rs")
+	gitCommit(t, tmpDir, "initial")
+
+	createFile(t, tmpDir, "lib.rs", "line a\nline b2\nline c\nline d\n")
+	gitAdd(t, tmpDir, "lib.rs")
+	sha := gitCommitAndGetSHA(t, tmpDir, "second")
+
+	diffs, err := GetCommitFileDiffs(tmpDir, sha)
+	require.NoError(t, err)
+
+	resolvedDir, err := filepath.EvalSymlinks(tmpDir)
+	require.NoError(t, err)
+	fd, ok := diffs[filepath.Join(resolvedDir, "lib.rs")]
+	require.True(t, ok)
+	assert.Equal(t, []int{2}, fd.Deletions, "original line 2 (line b) removed")
+	assert.Equal(t, []int{2, 4}, fd.Additions, "new line 2 (line b2) and new line 4 (line d)")
+}
+
+func TestGetCommitFileDiffs_RootCommit(t *testing.T) {
+	tmpDir := t.TempDir()
+	setupGitRepo(t, tmpDir)
+
+	createFile(t, tmpDir, "lib.rs", "line a\nline b\n")
+	gitAdd(t, tmpDir, "lib.rs")
+	sha := gitCommitAndGetSHA(t, tmpDir, "root")
+
+	diffs, err := GetCommitFileDiffs(tmpDir, sha)
+	require.NoError(t, err, "root commit should fall back to --root")
+	resolvedDir, _ := filepath.EvalSymlinks(tmpDir)
+	fd, ok := diffs[filepath.Join(resolvedDir, "lib.rs")]
+	require.True(t, ok)
+	assert.True(t, fd.IsNew)
+	assert.Equal(t, []int{1, 2}, fd.Additions)
+}
+
 func TestGetUncommittedFileDiffs(t *testing.T) {
 	tmpDir := t.TempDir()
 	setupGitRepo(t, tmpDir)

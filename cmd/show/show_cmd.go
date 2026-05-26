@@ -216,7 +216,7 @@ func runGraph(cmd *cobra.Command, opts *graphOptions) error {
 		}
 	}
 
-	fileGraph.AnnotateRustPhantomsShow(contentReader)
+	annotateRustPhantoms(&fileGraph, opts, contentReader, fromCommit, toCommit, isCommitRange)
 
 	formatter, err := formatters.NewFormatter(opts.outputFormat)
 	if err != nil {
@@ -598,6 +598,42 @@ func selectContentReader(opts *graphOptions, toCommit string) vcs.ContentReader 
 		return git.GitCommitContentReader(opts.repoPath, toCommit)
 	}
 	return vcs.FilesystemContentReader()
+}
+
+// annotateRustPhantoms attaches phantom-test metadata to .rs files in the
+// graph. Commit-scoped views use watch-mode rules (phantom only when the test
+// region actually changed in the diff); other views use show-mode rules
+// (phantom whenever an in-file test region exists).
+func annotateRustPhantoms(
+	fg *depgraph.FileDependencyGraph,
+	opts *graphOptions,
+	newContent vcs.ContentReader,
+	fromCommit, toCommit string,
+	isCommitRange bool,
+) {
+	if opts.commitID == "" || toCommit == "" {
+		fg.AnnotateRustPhantomsShow(newContent)
+		return
+	}
+
+	var diffs map[string]vcs.FileDiff
+	var oldContent vcs.ContentReader
+	var err error
+
+	switch {
+	case isCommitRange:
+		diffs, err = git.GetCommitRangeFileDiffs(opts.repoPath, fromCommit, toCommit)
+		oldContent = git.GitCommitContentReader(opts.repoPath, fromCommit)
+	default:
+		diffs, err = git.GetCommitFileDiffs(opts.repoPath, toCommit)
+		oldContent = git.GitCommitContentReader(opts.repoPath, toCommit+"~")
+	}
+
+	if err != nil {
+		fg.AnnotateRustPhantomsShow(newContent)
+		return
+	}
+	fg.AnnotateRustPhantomsWatch(diffs, oldContent, newContent)
 }
 
 func applyTargetFileFilter(opts *graphOptions, pathResolver PathResolver, graph depgraph.DependencyGraph, filePaths []string) (depgraph.DependencyGraph, []string, map[string]bool, error) {
