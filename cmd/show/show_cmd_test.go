@@ -1120,3 +1120,64 @@ func gitRun(t *testing.T, repoDir string, args ...string) {
 		t.Fatalf("git %v failed: %v\nstderr: %s", args, err, strings.TrimSpace(stderr.String()))
 	}
 }
+
+const rustWithTestRegion = `pub fn add(a: i32, b: i32) -> i32 {
+    a + b
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn it_adds() { assert_eq!(add(1, 2), 3); }
+}
+`
+
+func TestGraphRust_PhantomDefaultOn(t *testing.T) {
+	repoDir := t.TempDir()
+	rsFile := filepath.Join(repoDir, "lib.rs")
+	if err := os.WriteFile(rsFile, []byte(rustWithTestRegion), 0o644); err != nil {
+		t.Fatalf("os.WriteFile() error = %v", err)
+	}
+
+	cmd := NewCommand()
+	cmd.SetArgs([]string{"-i", rsFile, "-f", "dot", "--allow-outside-repo"})
+
+	var stdout bytes.Buffer
+	cmd.SetOut(&stdout)
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("cmd.Execute() error = %v", err)
+	}
+
+	output := stdout.String()
+	if !strings.Contains(output, "::tests") {
+		t.Fatalf("baseline expected phantom node ::tests for rust with #[cfg(test)] region, got:\n%s", output)
+	}
+}
+
+func TestGraphRust_NoPhantomFlag_SuppressesPhantom(t *testing.T) {
+	repoDir := t.TempDir()
+	rsFile := filepath.Join(repoDir, "lib.rs")
+	if err := os.WriteFile(rsFile, []byte(rustWithTestRegion), 0o644); err != nil {
+		t.Fatalf("os.WriteFile() error = %v", err)
+	}
+
+	cmd := NewCommand()
+	cmd.SetArgs([]string{"-i", rsFile, "-f", "dot", "--allow-outside-repo", "--no-phantom"})
+
+	var stdout bytes.Buffer
+	cmd.SetOut(&stdout)
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("cmd.Execute() error = %v", err)
+	}
+
+	output := stdout.String()
+	if strings.Contains(output, "::tests") {
+		t.Fatalf("--no-phantom should suppress ::tests phantom node, got:\n%s", output)
+	}
+	if !strings.Contains(output, "lib.rs") {
+		t.Fatalf("expected lib.rs prod node to remain in output, got:\n%s", output)
+	}
+}

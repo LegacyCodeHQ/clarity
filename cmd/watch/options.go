@@ -10,6 +10,7 @@ type watchOptions struct {
 	excludeExt string
 	includes   []string
 	excludes   []string
+	noPhantom  bool
 }
 
 func defaultWatchOptions() *watchOptions {

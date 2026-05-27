@@ -46,6 +46,7 @@ func NewCommand() *cobra.Command {
 		"d",
 		opts.direction,
 		fmt.Sprintf("Graph direction (%s)", formatters.SupportedDirections()))
+	cmd.Flags().BoolVar(&opts.noPhantom, "no-phantom", false, "Suppress phantom test nodes (Rust files with #[cfg(test)] regions are rendered as a single node)")
 
 	return cmd
 }

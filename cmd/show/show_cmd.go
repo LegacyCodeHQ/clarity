@@ -41,6 +41,7 @@ type graphOptions struct {
 	alsoPatterns []string
 	edgeLabels   bool
 	noStats      bool
+	noPhantom    bool
 }
 
 const (
@@ -110,6 +111,7 @@ func NewCommand() *cobra.Command {
 	cmd.Flags().StringSliceVar(&opts.alsoPatterns, "also", nil, "Include files matching glob patterns that connect to --file graph (requires --file)")
 	cmd.Flags().BoolVar(&opts.edgeLabels, "label", false, "Add deterministic short labels to edges")
 	cmd.Flags().BoolVar(&opts.noStats, "no-stats", false, "Skip file addition/deletion statistics for faster rendering")
+	cmd.Flags().BoolVar(&opts.noPhantom, "no-phantom", false, "Suppress phantom test nodes (Rust files with #[cfg(test)] regions are rendered as a single node)")
 
 	return cmd
 }
@@ -216,7 +218,9 @@ func runGraph(cmd *cobra.Command, opts *graphOptions) error {
 		}
 	}
 
-	annotateRustPhantoms(&fileGraph, opts, contentReader, fromCommit, toCommit, isCommitRange)
+	if !opts.noPhantom {
+		annotateRustPhantoms(&fileGraph, opts, contentReader, fromCommit, toCommit, isCommitRange)
+	}
 
 	formatter, err := formatters.NewFormatter(opts.outputFormat)
 	if err != nil {
