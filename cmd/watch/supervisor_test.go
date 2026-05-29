@@ -1,0 +1,136 @@
+package watch
+
+import (
+	"context"
+	"os/exec"
+	"path/filepath"
+	"testing"
+	"time"
+
+	"github.com/LegacyCodeHQ/clarity/cmd/show/formatters"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+)
+
+func TestPlanInitialRepos_PrimaryNoWorktrees(t *testing.T) {
+	repo := initRepoWithCommit(t)
+
+	repos, mode, err := planInitialRepos(repo)
+	require.NoError(t, err)
+	assert.Equal(t, modePrimary, mode)
+	require.Len(t, repos, 1)
+	assert.Equal(t, primaryRepoID, repos[0].ID)
+	assert.True(t, repos[0].IsPrimary)
+}
+
+func TestPlanInitialRepos_PrimaryWithLinkedWorktree(t *testing.T) {
+	repo := initRepoWithCommit(t)
+	wt := filepath.Join(t.TempDir(), "linked")
+	runGit(t, repo, "worktree", "add", "-b", "feat/x", wt)
+
+	repos, mode, err := planInitialRepos(repo)
+	require.NoError(t, err)
+	assert.Equal(t, modePrimary, mode)
+	require.Len(t, repos, 2)
+
+	assert.Equal(t, primaryRepoID, repos[0].ID)
+	assert.True(t, repos[0].IsPrimary)
+	// The linked worktree comes after the primary, with a derived id.
+	assert.True(t, repos[1].ID != primaryRepoID, "linked worktree should not get the primary id")
+	assert.False(t, repos[1].IsPrimary)
+	assert.Contains(t, repos[1].Label, "feat/x", "label should include the branch name")
+}
+
+func TestPlanInitialRepos_LinkedModeReturnsOnlyCwd(t *testing.T) {
+	repo := initRepoWithCommit(t)
+	wt := filepath.Join(t.TempDir(), "linked")
+	runGit(t, repo, "worktree", "add", "-b", "feat/x", wt)
+
+	repos, mode, err := planInitialRepos(wt)
+	require.NoError(t, err)
+	assert.Equal(t, modeLinked, mode)
+	require.Len(t, repos, 1)
+	assert.Equal(t, primaryRepoID, repos[0].ID, "cwd-tree gets the 'primary' id regardless of git's notion")
+	assert.True(t, repos[0].IsPrimary)
+}
+
+func TestPlanInitialRepos_NonRepoErrors(t *testing.T) {
+	_, _, err := planInitialRepos(t.TempDir())
+	require.Error(t, err)
+}
+
+// TestSupervisor_DetectsLiveWorktreeAdd is the core test for the user-facing
+// behavior: starting `clarity watch` in the primary tree should make a newly
+// added linked worktree appear as a tab without restarting.
+func TestSupervisor_DetectsLiveWorktreeAdd(t *testing.T) {
+	repo := initRepoWithCommit(t)
+	b := newBroker()
+	formatter, err := formatters.NewFormatter("dot")
+	require.NoError(t, err)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	supervisorDone := make(chan struct{})
+	go func() {
+		_ = runSupervisor(ctx, repo, &watchOptions{}, b, formatter)
+		close(supervisorDone)
+	}()
+
+	// Wait for the initial primary tab to register.
+	require.Eventually(t, func() bool {
+		b.mu.Lock()
+		defer b.mu.Unlock()
+		return len(b.repos) == 1
+	}, 2*time.Second, 20*time.Millisecond, "primary tab should register on startup")
+
+	// Add a worktree from outside the supervisor and expect it to appear as a tab.
+	wt := filepath.Join(t.TempDir(), "live-added")
+	runGit(t, repo, "worktree", "add", "-b", "feat/live", wt)
+
+	require.Eventually(t, func() bool {
+		b.mu.Lock()
+		defer b.mu.Unlock()
+		return len(b.repos) == 2
+	}, 3*time.Second, 50*time.Millisecond, "supervisor should add a tab for the new worktree")
+
+	b.mu.Lock()
+	gotIDs := []string{b.repos[0].ID, b.repos[1].ID}
+	b.mu.Unlock()
+	assert.Contains(t, gotIDs, primaryRepoID)
+	assert.NotEqual(t, primaryRepoID, gotIDs[1], "second tab should be the linked worktree, not another primary")
+
+	// Removing the worktree should drop the tab.
+	runGit(t, repo, "worktree", "remove", "--force", wt)
+	require.Eventually(t, func() bool {
+		b.mu.Lock()
+		defer b.mu.Unlock()
+		return len(b.repos) == 1
+	}, 3*time.Second, 50*time.Millisecond, "supervisor should drop the tab after worktree remove")
+
+	cancel()
+	select {
+	case <-supervisorDone:
+	case <-time.After(2 * time.Second):
+		t.Fatal("supervisor did not exit after cancel")
+	}
+}
+
+// initRepoWithCommit creates a fresh git repo with one commit so worktree-add
+// can succeed, then returns its absolute path.
+func initRepoWithCommit(t *testing.T) string {
+	t.Helper()
+	dir := t.TempDir()
+	cmds := [][]string{
+		{"git", "init"},
+		{"git", "config", "user.email", "test@test.com"},
+		{"git", "config", "user.name", "Test"},
+		{"git", "commit", "--allow-empty", "-m", "init"},
+	}
+	for _, args := range cmds {
+		cmd := exec.Command(args[0], args[1:]...)
+		cmd.Dir = dir
+		out, err := cmd.CombinedOutput()
+		require.NoError(t, err, "cmd %v failed: %s", args, out)
+	}
+	return dir
+}

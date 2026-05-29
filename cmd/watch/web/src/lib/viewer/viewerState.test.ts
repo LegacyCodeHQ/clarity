@@ -6,19 +6,21 @@ import {
   formatSnapshotMeta,
   getViewModel,
   mergePayload,
+  selectRepo,
   type ViewerState,
 } from './viewerState';
 import type { Snapshot, Collection } from '../protocol/viewerProtocol';
 
 const TIMESTAMP = "2026-02-12T10:00:00Z";
 
-function snapshot(id: number, dot = `digraph ${id} {}`): Snapshot {
-  return { id, timestamp: TIMESTAMP, dot };
+function snapshot(id: number, dot = `digraph ${id} {}`, repoId = "primary"): Snapshot {
+  return { id, repoId, timestamp: TIMESTAMP, dot };
 }
 
-function collection(id: number, snapshots: Snapshot[]): Collection {
+function collection(id: number, snapshots: Snapshot[], repoId = "primary"): Collection {
   return {
     id,
+    repoId,
     timestamp: TIMESTAMP,
     snapshots,
   };
@@ -26,6 +28,9 @@ function collection(id: number, snapshots: Snapshot[]): Collection {
 
 function baseState(): ViewerState {
   return {
+    repos: [],
+    selectedRepoID: "primary",
+    byRepo: {},
     workingSnapshots: [],
     pastCollections: [],
     selectedCollectionID: null,
@@ -174,6 +179,86 @@ describe('applyLiveSelection', () => {
     expect(next.selectedCollectionID).toBe(null);
     expect(next.selectedCollectionSnapshotIndex).toBe(0);
     expect(next.liveSnapshotIndex).toBe(null);
+  });
+});
+
+describe('selectRepo', () => {
+  it('switches the active tab and reprojects working snapshots', () => {
+    const state = mergePayload(baseState(), {
+      repos: [
+        { id: "primary", path: "/p", label: "primary", isPrimary: true },
+        { id: "wt-aaaaaaaa", path: "/wt", label: "wt", isPrimary: false },
+      ],
+      workingSnapshots: [
+        snapshot(1, "digraph p {}", "primary"),
+        snapshot(2, "digraph w {}", "wt-aaaaaaaa"),
+      ],
+      pastCollections: [],
+    });
+
+    expect(state.selectedRepoID).toBe("primary");
+    expect(state.workingSnapshots).toEqual([snapshot(1, "digraph p {}", "primary")]);
+
+    const switched = selectRepo(state, "wt-aaaaaaaa");
+    expect(switched.selectedRepoID).toBe("wt-aaaaaaaa");
+    expect(switched.workingSnapshots).toEqual([snapshot(2, "digraph w {}", "wt-aaaaaaaa")]);
+  });
+
+  it('ignores selection for unknown repo id', () => {
+    const state = mergePayload(baseState(), {
+      repos: [{ id: "primary", path: "/p", label: "primary", isPrimary: true }],
+      workingSnapshots: [snapshot(1)],
+      pastCollections: [],
+    });
+
+    const same = selectRepo(state, "nonexistent");
+    expect(same).toBe(state);
+  });
+
+  it('falls back to primary if the previously selected repo disappears', () => {
+    let state = mergePayload(baseState(), {
+      repos: [
+        { id: "primary", path: "/p", label: "primary", isPrimary: true },
+        { id: "wt-aaaaaaaa", path: "/wt", label: "wt", isPrimary: false },
+      ],
+      workingSnapshots: [
+        snapshot(1, "digraph p {}", "primary"),
+        snapshot(2, "digraph w {}", "wt-aaaaaaaa"),
+      ],
+      pastCollections: [],
+    });
+    state = selectRepo(state, "wt-aaaaaaaa");
+    expect(state.selectedRepoID).toBe("wt-aaaaaaaa");
+
+    // Simulate the worktree being removed: payload no longer lists it.
+    const next = mergePayload(state, {
+      repos: [{ id: "primary", path: "/p", label: "primary", isPrimary: true }],
+      workingSnapshots: [snapshot(1, "digraph p {}", "primary")],
+      pastCollections: [],
+    });
+    expect(next.selectedRepoID).toBe("primary");
+    expect(next.workingSnapshots).toEqual([snapshot(1, "digraph p {}", "primary")]);
+  });
+
+  it('resets timeline selection when switching tabs', () => {
+    let state = mergePayload(baseState(), {
+      repos: [
+        { id: "primary", path: "/p", label: "primary", isPrimary: true },
+        { id: "wt-aaaaaaaa", path: "/wt", label: "wt", isPrimary: false },
+      ],
+      workingSnapshots: [
+        snapshot(1, "digraph p1 {}", "primary"),
+        snapshot(2, "digraph p2 {}", "primary"),
+        snapshot(3, "digraph w {}", "wt-aaaaaaaa"),
+      ],
+      pastCollections: [],
+    });
+    state = applySliderInput(state, "0");
+    expect(state.liveSnapshotIndex).toBe(0);
+
+    const switched = selectRepo(state, "wt-aaaaaaaa");
+    expect(switched.liveSnapshotIndex).toBe(null);
+    expect(switched.selectedCollectionID).toBe(null);
   });
 });
 

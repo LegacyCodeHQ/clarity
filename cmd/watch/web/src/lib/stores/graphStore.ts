@@ -10,6 +10,7 @@ import {
   applySliderInput,
   applyLiveSelection,
   applySourceSelection,
+  selectRepo,
   getViewModel,
   type ViewerState,
   type ViewModel,
@@ -18,6 +19,9 @@ import type { GraphStreamPayload } from '../protocol/viewerProtocol';
 
 function createGraphStore() {
   const initialState: ViewerState = normalizeState({
+    repos: [],
+    selectedRepoID: "primary",
+    byRepo: {},
     workingSnapshots: [],
     pastCollections: [],
     selectedCollectionID: null,
@@ -30,37 +34,26 @@ function createGraphStore() {
   return {
     subscribe,
 
-    /**
-     * Merge a new payload from the SSE stream
-     */
     mergePayload: (payload: GraphStreamPayload) => {
       update(state => mergePayload(state, payload));
     },
 
-    /**
-     * Handle slider input change
-     */
     onSliderInput: (rawValue: string) => {
       update(state => applySliderInput(state, rawValue));
     },
 
-    /**
-     * Jump to latest snapshot (live mode)
-     */
     onJumpToLatest: () => {
       update(state => applyLiveSelection(state));
     },
 
-    /**
-     * Handle source selection change (live or collection)
-     */
     onSourceChange: (selected: string) => {
       update(state => applySourceSelection(state, selected));
     },
 
-    /**
-     * Reset to initial state
-     */
+    onSelectRepo: (repoID: string) => {
+      update(state => selectRepo(state, repoID));
+    },
+
     reset: () => {
       update(() => initialState);
     },

@@ -99,17 +99,6 @@ func runWatch(cmd *cobra.Command, opts *watchOptions) error {
 		}
 	}()
 
-	dot, err := buildDOTGraph(repoPath, opts, formatter)
-	if errors.Is(err, errNoUncommittedChanges) {
-		b.clearWorkingSet()
-		fmt.Fprintf(cmd.OutOrStdout(), "No uncommitted changes yet, waiting for file changes...\n")
-	} else if err != nil {
-		mcplogdlog.Error("watch: initial graph build failed", map[string]any{"error": err.Error()})
-		return fmt.Errorf("initial graph build failed: %w", err)
-	} else {
-		b.publish(dot)
-	}
-
 	fmt.Fprintf(cmd.OutOrStdout(), "Watching %s\n", repoPath)
 	if actualPort != opts.port {
 		fmt.Fprintf(cmd.OutOrStdout(), "Port %d in use, using %d\n", opts.port, actualPort)
@@ -117,7 +106,7 @@ func runWatch(cmd *cobra.Command, opts *watchOptions) error {
 	fmt.Fprintf(cmd.OutOrStdout(), "Serving at http://localhost:%d\n", actualPort)
 	fmt.Fprintf(cmd.OutOrStdout(), "Press Ctrl+C to stop\n")
 
-	err = watchAndRebuild(ctx, repoPath, opts, b, formatter)
+	err = runSupervisor(ctx, repoPath, opts, b, formatter)
 
 	srv.Close()
 	return err

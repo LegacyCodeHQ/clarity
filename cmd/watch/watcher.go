@@ -31,7 +31,7 @@ var skippedDirs = map[string]bool{
 	".vscode":      true,
 }
 
-func watchAndRebuild(ctx context.Context, repoPath string, opts *watchOptions, b *broker, formatter formatters.Formatter) error {
+func watchAndRebuild(ctx context.Context, repoID, repoPath string, opts *watchOptions, b *broker, formatter formatters.Formatter) error {
 	watcher, err := fsnotify.NewWatcher()
 	if err != nil {
 		return fmt.Errorf("failed to create file watcher: %w", err)
@@ -102,12 +102,12 @@ func watchAndRebuild(ctx context.Context, repoPath string, opts *watchOptions, b
 			lastGitStateSig = stateSig
 			lastHeadSig = headSig
 			if headChanged {
-				b.archiveWorkingSet()
+				b.archiveWorkingSet(repoID)
 			}
-			publishCurrentGraph(repoPath, opts, b, formatter)
+			publishCurrentGraph(repoID, repoPath, opts, b, formatter)
 
 		case <-debounceC:
-			publishCurrentGraph(repoPath, opts, b, formatter)
+			publishCurrentGraph(repoID, repoPath, opts, b, formatter)
 			// Drop the timer too so the next event takes the
 			// `debounceTimer == nil` branch and re-arms debounceC.
 			// Without this, Reset would fire the timer into a nil
@@ -130,17 +130,17 @@ func stopAndDrainTimer(timer *time.Timer) {
 	}
 }
 
-func publishCurrentGraph(repoPath string, opts *watchOptions, b *broker, formatter formatters.Formatter) {
+func publishCurrentGraph(repoID, repoPath string, opts *watchOptions, b *broker, formatter formatters.Formatter) {
 	dot, err := buildDOTGraph(repoPath, opts, formatter)
 	if errors.Is(err, errNoUncommittedChanges) {
-		b.clearWorkingSet()
+		b.clearWorkingSet(repoID)
 		return
 	}
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "graph rebuild error: %v\n", err)
 		return
 	}
-	b.publish(dot)
+	b.publish(repoID, dot)
 }
 
 func isRelevantChange(event fsnotify.Event) bool {

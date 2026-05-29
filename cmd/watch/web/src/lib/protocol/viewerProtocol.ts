@@ -3,23 +3,49 @@
  * These functions validate and normalize untrusted JSON payloads from the server.
  */
 
+export interface RepoDescriptor {
+  id: string;
+  path: string;
+  label: string;
+  isPrimary: boolean;
+}
+
 export interface Snapshot {
   id: number;
+  repoId?: string;
   timestamp: string;
   dot: string;
 }
 
 export interface Collection {
   id: number;
+  repoId?: string;
   timestamp: string;
   snapshots: Snapshot[];
 }
 
 export interface GraphStreamPayload {
+  repos?: RepoDescriptor[];
   workingSnapshots: Snapshot[];
   pastCollections: Collection[];
   latestWorkingId?: number;
   latestPastCollectionId?: number;
+}
+
+function normalizeRepo(repo: unknown): RepoDescriptor | null {
+  if (!repo || typeof repo !== "object") {
+    return null;
+  }
+  const r = repo as Record<string, unknown>;
+  if (typeof r.id !== "string" || r.id === "") {
+    return null;
+  }
+  return {
+    id: r.id,
+    path: typeof r.path === "string" ? r.path : "",
+    label: typeof r.label === "string" ? r.label : r.id,
+    isPrimary: r.isPrimary === true,
+  };
 }
 
 function normalizeSnapshot(snapshot: unknown): Snapshot | null {
@@ -33,6 +59,7 @@ function normalizeSnapshot(snapshot: unknown): Snapshot | null {
 
   return {
     id: Number.isFinite(s.id) ? (s.id as number) : 0,
+    repoId: typeof s.repoId === "string" ? s.repoId : "",
     timestamp: typeof s.timestamp === "string" ? s.timestamp : new Date(0).toISOString(),
     dot: s.dot,
   };
@@ -49,6 +76,7 @@ function normalizeCollection(collection: unknown): Collection | null {
 
   return {
     id: Number.isFinite(c.id) ? (c.id as number) : 0,
+    repoId: typeof c.repoId === "string" ? c.repoId : "",
     timestamp: typeof c.timestamp === "string" ? c.timestamp : new Date(0).toISOString(),
     snapshots: c.snapshots
       .map(normalizeSnapshot)
@@ -63,6 +91,7 @@ function normalizeCollection(collection: unknown): Collection | null {
 export function normalizeGraphStreamPayload(payload: unknown): GraphStreamPayload {
   if (!payload || typeof payload !== "object") {
     return {
+      repos: [],
       workingSnapshots: [],
       pastCollections: [],
     };
@@ -71,6 +100,9 @@ export function normalizeGraphStreamPayload(payload: unknown): GraphStreamPayloa
   const p = payload as Record<string, unknown>;
 
   return {
+    repos: Array.isArray(p.repos)
+      ? p.repos.map(normalizeRepo).filter((repo): repo is RepoDescriptor => repo !== null)
+      : [],
     workingSnapshots: Array.isArray(p.workingSnapshots)
       ? p.workingSnapshots.map(normalizeSnapshot).filter((snapshot): snapshot is Snapshot => snapshot !== null)
       : [],

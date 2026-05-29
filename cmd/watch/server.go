@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -19,20 +20,31 @@ const maxSnapshots = 250
 
 const watchPageTitleSuffix = "clarity watch"
 
-// broker manages SSE client connections and broadcasts graph snapshots.
-type broker struct {
-	mu             sync.Mutex
-	clients        map[chan protocol.GraphStreamPayload]struct{}
+// repoState holds the per-worktree snapshot history and archived cycles.
+type repoState struct {
 	history        []protocol.GraphSnapshot
 	archivedCycles []protocol.SnapshotCollection
-	nextID         int64
-	nextCycleID    int64
 	hasState       bool
+}
+
+// broker manages SSE client connections and broadcasts graph snapshots.
+// It maintains independent snapshot history per registered worktree (`repoID`)
+// while aggregating them into a single flat SSE payload.
+type broker struct {
+	mu          sync.Mutex
+	clients     map[chan protocol.GraphStreamPayload]struct{}
+	repos       []protocol.RepoDescriptor
+	repoIndex   map[string]int
+	repoStates  map[string]*repoState
+	nextID      int64
+	nextCycleID int64
 }
 
 func newBroker() *broker {
 	return &broker{
-		clients: make(map[chan protocol.GraphStreamPayload]struct{}),
+		clients:    make(map[chan protocol.GraphStreamPayload]struct{}),
+		repoIndex:  make(map[string]int),
+		repoStates: make(map[string]*repoState),
 	}
 }
 
@@ -55,118 +67,220 @@ func (b *broker) unsubscribe(ch chan protocol.GraphStreamPayload) {
 	b.mu.Unlock()
 }
 
-func (b *broker) publish(dot string) {
+// registerRepo adds a worktree to the broker's tab set. If `desc.ID` already
+// exists, the descriptor is updated in place (path/label/isPrimary may change
+// on git operations like `worktree move`).
+func (b *broker) registerRepo(desc protocol.RepoDescriptor) {
 	b.mu.Lock()
-	if len(b.history) > 0 && b.history[len(b.history)-1].DOT == dot {
+	if idx, ok := b.repoIndex[desc.ID]; ok {
+		b.repos[idx] = desc
+	} else {
+		b.repoIndex[desc.ID] = len(b.repos)
+		b.repos = append(b.repos, desc)
+		b.repoStates[desc.ID] = &repoState{}
+	}
+	b.broadcastLocked()
+	b.mu.Unlock()
+}
+
+// unregisterRepo removes a worktree (e.g. when `git worktree remove` runs).
+// Drops the tab and its snapshot history.
+func (b *broker) unregisterRepo(repoID string) {
+	b.mu.Lock()
+	idx, ok := b.repoIndex[repoID]
+	if !ok {
+		b.mu.Unlock()
+		return
+	}
+	b.repos = append(b.repos[:idx], b.repos[idx+1:]...)
+	delete(b.repoIndex, repoID)
+	delete(b.repoStates, repoID)
+	for id, i := range b.repoIndex {
+		if i > idx {
+			b.repoIndex[id] = i - 1
+		}
+	}
+	b.broadcastLocked()
+	b.mu.Unlock()
+}
+
+// stateForLocked returns the per-repo state, creating it for an unregistered
+// repoID. This keeps tests and single-repo callers ergonomic; the supervisor
+// will registerRepo first in real flows.
+func (b *broker) stateForLocked(repoID string) *repoState {
+	if s, ok := b.repoStates[repoID]; ok {
+		return s
+	}
+	s := &repoState{}
+	b.repoStates[repoID] = s
+	return s
+}
+
+func (b *broker) publish(repoID, dot string) {
+	b.mu.Lock()
+	s := b.stateForLocked(repoID)
+	if len(s.history) > 0 && s.history[len(s.history)-1].DOT == dot {
 		b.mu.Unlock()
 		return
 	}
 
 	b.nextID++
-	b.history = append(b.history, protocol.GraphSnapshot{
+	s.history = append(s.history, protocol.GraphSnapshot{
 		ID:        b.nextID,
+		RepoID:    repoID,
 		Timestamp: time.Now().UTC(),
 		DOT:       dot,
 	})
-	if len(b.history) > maxSnapshots {
-		b.history = b.history[len(b.history)-maxSnapshots:]
+	if len(s.history) > maxSnapshots {
+		s.history = s.history[len(s.history)-maxSnapshots:]
 	}
-	b.hasState = true
+	s.hasState = true
 
-	payload, _ := b.currentPayloadLocked()
-	for ch := range b.clients {
-		pushLatestPayload(ch, payload)
-	}
+	b.broadcastLocked()
 	b.mu.Unlock()
 }
 
-func (b *broker) archiveWorkingSet() {
+func (b *broker) archiveWorkingSet(repoID string) {
 	b.mu.Lock()
-	if len(b.history) > 0 {
-		archivedSnapshots := make([]protocol.GraphSnapshot, len(b.history))
-		copy(archivedSnapshots, b.history)
+	s := b.stateForLocked(repoID)
+	if len(s.history) > 0 {
+		archivedSnapshots := make([]protocol.GraphSnapshot, len(s.history))
+		copy(archivedSnapshots, s.history)
 		b.nextCycleID++
-		b.archivedCycles = append(b.archivedCycles, protocol.SnapshotCollection{
+		s.archivedCycles = append(s.archivedCycles, protocol.SnapshotCollection{
 			ID:        b.nextCycleID,
+			RepoID:    repoID,
 			Timestamp: time.Now().UTC(),
 			Snapshots: archivedSnapshots,
 		})
 	}
 
-	b.history = nil
-	b.hasState = true
-	payload, _ := b.currentPayloadLocked()
-	for ch := range b.clients {
-		pushLatestPayload(ch, payload)
-	}
+	s.history = nil
+	s.hasState = true
+	b.broadcastLocked()
 	b.mu.Unlock()
 }
 
-func (b *broker) clearWorkingSet() {
+func (b *broker) clearWorkingSet(repoID string) {
 	b.mu.Lock()
-	if len(b.history) == 0 && b.hasState {
+	s := b.stateForLocked(repoID)
+	if len(s.history) == 0 && s.hasState {
 		b.mu.Unlock()
 		return
 	}
 
-	b.history = nil
-	b.hasState = true
-	payload, _ := b.currentPayloadLocked()
-	for ch := range b.clients {
-		pushLatestPayload(ch, payload)
-	}
+	s.history = nil
+	s.hasState = true
+	b.broadcastLocked()
 	b.mu.Unlock()
 }
 
+func (b *broker) broadcastLocked() {
+	payload, ok := b.currentPayloadLocked()
+	if !ok {
+		return
+	}
+	for ch := range b.clients {
+		pushLatestPayload(ch, payload)
+	}
+}
+
 func (b *broker) currentPayloadLocked() (protocol.GraphStreamPayload, bool) {
-	pastCollections := b.copyArchivedCyclesLocked()
-	latestPastCollectionID := b.latestPastCollectionIDLocked()
-	if len(b.history) == 0 {
-		if b.hasState {
-			return protocol.GraphStreamPayload{
-				WorkingSnapshots:       []protocol.GraphSnapshot{},
-				PastCollections:        pastCollections,
-				LatestWorkingID:        0,
-				LatestPastCollectionID: latestPastCollectionID,
-			}, true
+	anyHasState := false
+	for _, s := range b.repoStates {
+		if s.hasState {
+			anyHasState = true
+			break
 		}
+	}
+	if !anyHasState && len(b.repos) == 0 {
 		return protocol.GraphStreamPayload{}, false
 	}
 
-	snapshots := make([]protocol.GraphSnapshot, len(b.history))
-	copy(snapshots, b.history)
+	repos := make([]protocol.RepoDescriptor, len(b.repos))
+	copy(repos, b.repos)
+
+	working := b.collectWorkingLocked()
+	past := b.collectPastLocked()
+
+	var latestWorkingID int64
+	for _, snap := range working {
+		if snap.ID > latestWorkingID {
+			latestWorkingID = snap.ID
+		}
+	}
+	var latestPastID int64
+	for _, coll := range past {
+		if coll.ID > latestPastID {
+			latestPastID = coll.ID
+		}
+	}
 
 	return protocol.GraphStreamPayload{
-		WorkingSnapshots:       snapshots,
-		PastCollections:        pastCollections,
-		LatestWorkingID:        b.history[len(b.history)-1].ID,
-		LatestPastCollectionID: latestPastCollectionID,
+		Repos:                  repos,
+		WorkingSnapshots:       working,
+		PastCollections:        past,
+		LatestWorkingID:        latestWorkingID,
+		LatestPastCollectionID: latestPastID,
 	}, true
 }
 
-func (b *broker) copyArchivedCyclesLocked() []protocol.SnapshotCollection {
-	if len(b.archivedCycles) == 0 {
-		return []protocol.SnapshotCollection{}
-	}
-
-	copied := make([]protocol.SnapshotCollection, len(b.archivedCycles))
-	for i, cycle := range b.archivedCycles {
-		snapshots := make([]protocol.GraphSnapshot, len(cycle.Snapshots))
-		copy(snapshots, cycle.Snapshots)
-		copied[i] = protocol.SnapshotCollection{
-			ID:        cycle.ID,
-			Timestamp: cycle.Timestamp,
-			Snapshots: snapshots,
+// collectWorkingLocked returns a flat, deterministic list of working snapshots
+// across every repo: outer order follows repo registration order; inner order
+// preserves per-repo history order.
+func (b *broker) collectWorkingLocked() []protocol.GraphSnapshot {
+	repoIDs := b.orderedRepoIDsLocked()
+	working := []protocol.GraphSnapshot{}
+	for _, id := range repoIDs {
+		s := b.repoStates[id]
+		if s == nil {
+			continue
 		}
+		working = append(working, s.history...)
 	}
-	return copied
+	return working
 }
 
-func (b *broker) latestPastCollectionIDLocked() int64 {
-	if len(b.archivedCycles) == 0 {
-		return 0
+func (b *broker) collectPastLocked() []protocol.SnapshotCollection {
+	repoIDs := b.orderedRepoIDsLocked()
+	past := []protocol.SnapshotCollection{}
+	for _, id := range repoIDs {
+		s := b.repoStates[id]
+		if s == nil {
+			continue
+		}
+		for _, cycle := range s.archivedCycles {
+			snapshots := make([]protocol.GraphSnapshot, len(cycle.Snapshots))
+			copy(snapshots, cycle.Snapshots)
+			past = append(past, protocol.SnapshotCollection{
+				ID:        cycle.ID,
+				RepoID:    cycle.RepoID,
+				Timestamp: cycle.Timestamp,
+				Snapshots: snapshots,
+			})
+		}
 	}
-	return b.archivedCycles[len(b.archivedCycles)-1].ID
+	return past
+}
+
+// orderedRepoIDsLocked returns repo IDs in registration order, then any
+// orphan repo states (registered via publish without registerRepo) sorted
+// alphabetically for determinism in tests.
+func (b *broker) orderedRepoIDsLocked() []string {
+	ids := make([]string, 0, len(b.repoStates))
+	seen := make(map[string]bool, len(b.repos))
+	for _, r := range b.repos {
+		ids = append(ids, r.ID)
+		seen[r.ID] = true
+	}
+	var orphans []string
+	for id := range b.repoStates {
+		if !seen[id] {
+			orphans = append(orphans, id)
+		}
+	}
+	sort.Strings(orphans)
+	return append(ids, orphans...)
 }
 
 func pushLatestPayload(ch chan protocol.GraphStreamPayload, payload protocol.GraphStreamPayload) {

@@ -28,7 +28,7 @@ func TestBroker_PublishAndSubscribe(t *testing.T) {
 	ch := b.subscribe()
 	defer b.unsubscribe(ch)
 
-	b.publish("digraph { A -> B; }")
+	b.publish("primary", "digraph { A -> B; }")
 
 	select {
 	case got := <-ch:
@@ -44,7 +44,7 @@ func TestBroker_PublishAndSubscribe(t *testing.T) {
 
 func TestBroker_NewSubscriberReceivesLatest(t *testing.T) {
 	b := newBroker()
-	b.publish("digraph { X -> Y; }")
+	b.publish("primary", "digraph { X -> Y; }")
 
 	ch := b.subscribe()
 	defer b.unsubscribe(ch)
@@ -67,7 +67,7 @@ func TestBroker_MultipleSubscribers(t *testing.T) {
 	defer b.unsubscribe(ch1)
 	defer b.unsubscribe(ch2)
 
-	b.publish("digraph { A; }")
+	b.publish("primary", "digraph { A; }")
 
 	select {
 	case got := <-ch1:
@@ -109,7 +109,7 @@ func TestHandleSSE_StreamsGraphEvent(t *testing.T) {
 	b := newBroker()
 
 	// Pre-publish so the subscriber gets data immediately on subscribe.
-	b.publish("digraph { test; }")
+	b.publish("primary", "digraph { test; }")
 
 	handler := handleSSE(b)
 	server := httptest.NewServer(handler)
@@ -133,7 +133,7 @@ func TestHandleSSE_MultiLineData(t *testing.T) {
 	b := newBroker()
 
 	multiLine := "digraph {\n  A -> B;\n}"
-	b.publish(multiLine)
+	b.publish("primary", multiLine)
 
 	handler := handleSSE(b)
 	server := httptest.NewServer(handler)
@@ -160,10 +160,10 @@ func TestBroker_PublishSkipsDuplicateSnapshots(t *testing.T) {
 	ch := b.subscribe()
 	defer b.unsubscribe(ch)
 
-	b.publish("digraph { A -> B; }")
+	b.publish("primary", "digraph { A -> B; }")
 	<-ch
 
-	b.publish("digraph { A -> B; }")
+	b.publish("primary", "digraph { A -> B; }")
 
 	select {
 	case <-ch:
@@ -178,10 +178,10 @@ func TestBroker_NewPayloadOverwritesQueuedStalePayload(t *testing.T) {
 	defer b.unsubscribe(ch)
 
 	// Queue a stale reset payload and do not consume it yet.
-	b.clearWorkingSet()
+	b.clearWorkingSet("primary")
 
 	// Publish a fresh working snapshot while the channel buffer is full.
-	b.publish("digraph { A -> B; }")
+	b.publish("primary", "digraph { A -> B; }")
 
 	select {
 	case got := <-ch:
@@ -198,10 +198,10 @@ func TestBroker_ArchiveWorkingSetClearsActiveSnapshots(t *testing.T) {
 	ch := b.subscribe()
 	defer b.unsubscribe(ch)
 
-	b.publish("digraph { A; }")
+	b.publish("primary", "digraph { A; }")
 	<-ch
 
-	b.archiveWorkingSet()
+	b.archiveWorkingSet("primary")
 
 	select {
 	case got := <-ch:
@@ -218,8 +218,8 @@ func TestBroker_ArchiveWorkingSetClearsActiveSnapshots(t *testing.T) {
 
 func TestBroker_NewSubscriberReceivesArchivedState(t *testing.T) {
 	b := newBroker()
-	b.publish("digraph { A; }")
-	b.archiveWorkingSet()
+	b.publish("primary", "digraph { A; }")
+	b.archiveWorkingSet("primary")
 
 	ch := b.subscribe()
 	defer b.unsubscribe(ch)
@@ -242,14 +242,14 @@ func TestBroker_ArchiveWorkingSetAcrossCycles(t *testing.T) {
 	ch := b.subscribe()
 	defer b.unsubscribe(ch)
 
-	b.publish("digraph { A; }")
+	b.publish("primary", "digraph { A; }")
 	<-ch
-	b.archiveWorkingSet()
+	b.archiveWorkingSet("primary")
 	<-ch
 
-	b.publish("digraph { B; }")
+	b.publish("primary", "digraph { B; }")
 	<-ch
-	b.archiveWorkingSet()
+	b.archiveWorkingSet("primary")
 
 	select {
 	case got := <-ch:
@@ -270,10 +270,10 @@ func TestBroker_ClearWorkingSetDoesNotArchive(t *testing.T) {
 	ch := b.subscribe()
 	defer b.unsubscribe(ch)
 
-	b.publish("digraph { A; }")
+	b.publish("primary", "digraph { A; }")
 	<-ch
 
-	b.clearWorkingSet()
+	b.clearWorkingSet("primary")
 
 	select {
 	case got := <-ch:
@@ -288,8 +288,8 @@ func TestBroker_ClearWorkingSetDoesNotArchive(t *testing.T) {
 
 func TestHandleSSE_StreamsJSONPayload(t *testing.T) {
 	b := newBroker()
-	b.publish("digraph { A; }")
-	b.publish("digraph { B; }")
+	b.publish("primary", "digraph { A; }")
+	b.publish("primary", "digraph { B; }")
 
 	handler := handleSSE(b)
 	server := httptest.NewServer(handler)
@@ -581,7 +581,7 @@ func TestPublishCurrentGraph_NoUncommittedChangesClearsWorkingSnapshots(t *testi
 
 	formatter, err := formatters.NewFormatter("dot")
 	require.NoError(t, err)
-	publishCurrentGraph(dir, &watchOptions{}, b, formatter)
+	publishCurrentGraph("primary", dir, &watchOptions{}, b, formatter)
 
 	select {
 	case got := <-ch:
@@ -634,7 +634,7 @@ func TestWatchAndRebuild_DetectsFileRename(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	go func() { _ = watchAndRebuild(ctx, dir, opts, b, formatter) }()
+	go func() { _ = watchAndRebuild(ctx, "primary", dir, opts, b, formatter) }()
 
 	// Give the watcher a moment to install its fsnotify watches before we
 	// mutate the tree. Then create the first uncommitted change so the watcher
@@ -696,7 +696,7 @@ func TestWatchAndRebuild_DebounceFiresOnEverySaveCycle(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	go func() { _ = watchAndRebuild(ctx, dir, opts, b, formatter) }()
+	go func() { _ = watchAndRebuild(ctx, "primary", dir, opts, b, formatter) }()
 
 	time.Sleep(100 * time.Millisecond)
 
@@ -734,10 +734,11 @@ func waitForSnapshotID(t *testing.T, b *broker, want int64, timeout time.Duratio
 func latestSnapshot(b *broker) (string, bool) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	if len(b.history) == 0 {
+	s := b.repoStates[primaryRepoID]
+	if s == nil || len(s.history) == 0 {
 		return "", false
 	}
-	return b.history[len(b.history)-1].DOT, true
+	return s.history[len(s.history)-1].DOT, true
 }
 
 func runGit(t *testing.T, dir string, args ...string) {
