@@ -15,6 +15,9 @@ export interface Snapshot {
   repoId?: string;
   timestamp: string;
   dot: string;
+  // True for the first snapshot recorded for a worktree this session — the
+  // state present when the watcher attached. Omitted (falsy) otherwise.
+  sessionStart?: boolean;
 }
 
 export interface Collection {
@@ -57,12 +60,18 @@ function normalizeSnapshot(snapshot: unknown): Snapshot | null {
     return null;
   }
 
-  return {
+  const normalized: Snapshot = {
     id: Number.isFinite(s.id) ? (s.id as number) : 0,
     repoId: typeof s.repoId === "string" ? s.repoId : "",
     timestamp: typeof s.timestamp === "string" ? s.timestamp : new Date(0).toISOString(),
     dot: s.dot,
   };
+  // Preserve the marker only when set, mirroring the backend's omitempty so
+  // unmarked snapshots stay free of the field.
+  if (s.sessionStart === true) {
+    normalized.sessionStart = true;
+  }
+  return normalized;
 }
 
 function normalizeCollection(collection: unknown): Collection | null {

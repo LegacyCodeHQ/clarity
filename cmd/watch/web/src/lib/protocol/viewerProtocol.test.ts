@@ -92,4 +92,18 @@ describe('normalizeGraphStreamPayload', () => {
     expect(normalized.repos[0].label).toBe("primary");
     expect(normalized.repos[0].isPrimary).toBe(true);
   });
+
+  it('carries the sessionStart flag through normalization', () => {
+    const normalized = normalizeGraphStreamPayload({
+      workingSnapshots: [
+        { id: 1, repoId: "primary", timestamp: TIMESTAMP, dot: "digraph {}", sessionStart: true },
+        { id: 2, repoId: "primary", timestamp: TIMESTAMP, dot: "digraph {}" },
+      ],
+      pastCollections: [],
+    });
+
+    expect(normalized.workingSnapshots[0].sessionStart).toBe(true);
+    // Absent/false flag stays falsy (omitted, matching the backend's omitempty).
+    expect(normalized.workingSnapshots[1].sessionStart).toBeFalsy();
+  });
 });

@@ -70,6 +70,40 @@ done:
 	}
 }
 
+func TestBroker_MarksSessionStartOncePerRepo(t *testing.T) {
+	b := newBroker()
+	b.registerRepo(protocol.RepoDescriptor{ID: "primary", Path: "/repo", IsPrimary: true})
+
+	// The first snapshot recorded for a repo is the session start: it captures
+	// whatever already existed in the working tree when the watcher attached.
+	b.publish("primary", "digraph { A; }")
+	// Subsequent live snapshots are not session starts.
+	b.publish("primary", "digraph { A; B; }")
+
+	ch := b.subscribe()
+	got := <-ch
+	require.Len(t, got.WorkingSnapshots, 2)
+	assert.True(t, got.WorkingSnapshots[0].SessionStart, "first snapshot should be marked session start")
+	assert.False(t, got.WorkingSnapshots[1].SessionStart, "second snapshot should not be a session start")
+	b.unsubscribe(ch)
+
+	// A commit archives the working set; the next snapshot belongs to a new
+	// cycle but is still mid-session — it must NOT be a fresh session start.
+	b.archiveWorkingSet("primary")
+	b.publish("primary", "digraph { C; }")
+
+	ch2 := b.subscribe()
+	got2 := <-ch2
+	defer b.unsubscribe(ch2)
+	require.Len(t, got2.WorkingSnapshots, 1)
+	assert.False(t, got2.WorkingSnapshots[0].SessionStart, "post-archive snapshot is mid-session, not a session start")
+	// The archived collection keeps the original session-start marker so the
+	// boundary stays visible when browsing past cycles.
+	require.Len(t, got2.PastCollections, 1)
+	require.NotEmpty(t, got2.PastCollections[0].Snapshots)
+	assert.True(t, got2.PastCollections[0].Snapshots[0].SessionStart, "archived first snapshot retains session start")
+}
+
 func TestBroker_ArchiveOnlyAffectsThatRepo(t *testing.T) {
 	b := newBroker()
 	b.registerRepo(protocol.RepoDescriptor{ID: "primary", Path: "/repo", IsPrimary: true})

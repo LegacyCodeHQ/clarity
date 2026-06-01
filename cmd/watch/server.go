@@ -25,6 +25,10 @@ type repoState struct {
 	history        []protocol.GraphSnapshot
 	archivedCycles []protocol.SnapshotCollection
 	hasState       bool
+	// sessionStarted records whether this repo's first snapshot (the
+	// watcher-attach state) has already been emitted. Set once and never reset,
+	// so the session-start marker doesn't reappear after commit/archive cycles.
+	sessionStarted bool
 }
 
 // broker manages SSE client connections and broadcasts graph snapshots.
@@ -125,11 +129,14 @@ func (b *broker) publish(repoID, dot string) {
 	}
 
 	b.nextID++
+	sessionStart := !s.sessionStarted
+	s.sessionStarted = true
 	s.history = append(s.history, protocol.GraphSnapshot{
-		ID:        b.nextID,
-		RepoID:    repoID,
-		Timestamp: time.Now().UTC(),
-		DOT:       dot,
+		ID:           b.nextID,
+		RepoID:       repoID,
+		Timestamp:    time.Now().UTC(),
+		DOT:          dot,
+		SessionStart: sessionStart,
 	})
 	if len(s.history) > maxSnapshots {
 		s.history = s.history[len(s.history)-maxSnapshots:]

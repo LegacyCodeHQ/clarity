@@ -29,6 +29,11 @@ type GraphSnapshot struct {
 	RepoID    string    `json:"repoId"`
 	Timestamp time.Time `json:"timestamp"`
 	DOT       string    `json:"dot"`
+	// SessionStart marks the first snapshot recorded for a worktree in this
+	// watch session — the state that already existed when the watcher attached.
+	// Changes made before this point are not in the timeline. Set once per repo
+	// and preserved across commit/archive cycles.
+	SessionStart bool `json:"sessionStart,omitempty"`
 }
 
 // GraphStreamPayload is the wire payload for SSE "graph" events.

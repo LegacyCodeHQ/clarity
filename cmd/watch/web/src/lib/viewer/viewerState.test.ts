@@ -163,6 +163,41 @@ describe('getViewModel', () => {
       "2 working snapshots | #1/2 | id 1 | 10:00:00"
     );
   });
+
+  it('exposes the session start index in the live working set', () => {
+    const state: ViewerState = {
+      ...baseState(),
+      workingSnapshots: [
+        { ...snapshot(1, "digraph one {}"), sessionStart: true },
+        snapshot(2, "digraph two {}"),
+      ],
+    };
+
+    const vm = getViewModel(state, () => "10:00:00");
+    expect(vm.timeline.sessionStartIndex).toBe(0);
+  });
+
+  it('reports a null session start index when no snapshot is marked', () => {
+    const state: ViewerState = {
+      ...baseState(),
+      workingSnapshots: [snapshot(1, "digraph one {}"), snapshot(2, "digraph two {}")],
+    };
+
+    const vm = getViewModel(state, () => "10:00:00");
+    expect(vm.timeline.sessionStartIndex).toBe(null);
+  });
+
+  it('exposes the session start index within a selected collection', () => {
+    const sessionSnap = { ...snapshot(1, "digraph one {}"), sessionStart: true };
+    const state: ViewerState = {
+      ...baseState(),
+      pastCollections: [collection(10, [sessionSnap, snapshot(2, "digraph two {}")])],
+      selectedCollectionID: 10,
+    };
+
+    const vm = getViewModel(state, () => "10:00:00");
+    expect(vm.timeline.sessionStartIndex).toBe(0);
+  });
 });
 
 describe('applyLiveSelection', () => {

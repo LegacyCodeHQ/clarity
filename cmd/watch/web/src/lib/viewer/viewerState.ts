@@ -46,6 +46,10 @@ export interface TimelineViewModel {
   sliderValue: string;
   liveButtonDisabled: boolean;
   metaText: string;
+  // Index of the session-start snapshot within the currently displayed list
+  // (live working set or selected collection), or null if it isn't present —
+  // e.g. after a commit archives the cycle the marker belonged to.
+  sessionStartIndex: number | null;
 }
 
 export interface ViewModel {
@@ -62,6 +66,11 @@ const DEFAULT_REPO_ID = "primary";
 
 function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(value, max));
+}
+
+function findSessionStartIndex(snapshots: Snapshot[]): number | null {
+  const index = snapshots.findIndex((snapshot) => snapshot.sessionStart === true);
+  return index === -1 ? null : index;
 }
 
 function formatTime(timestamp: string): string {
@@ -352,6 +361,7 @@ export function getViewModel(state: ViewerState, timeFormatter: TimeFormatter = 
             total,
             timeFormatter,
           )}`,
+        sessionStartIndex: findSessionStartIndex(normalized.workingSnapshots),
       },
     };
   }
@@ -379,6 +389,7 @@ export function getViewModel(state: ViewerState, timeFormatter: TimeFormatter = 
           total,
           timeFormatter,
         )}`,
+      sessionStartIndex: findSessionStartIndex(snapshots),
     },
   };
 }
