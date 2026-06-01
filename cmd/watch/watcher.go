@@ -88,6 +88,15 @@ func watchAndRebuild(ctx context.Context, repoID, repoPath string, opts *watchOp
 			fmt.Fprintf(os.Stderr, "watcher error: %v\n", err)
 
 		case <-gitStateTicker.C:
+			// Teardown backstop: if the worktree directory has vanished (its
+			// `git worktree remove` REMOVE event may have been coalesced/dropped
+			// by fsnotify during a batch removal), stop polling git against the
+			// dead path and flip the tab to a finished, closable record. This is
+			// independent of the meta-watcher, which is the primary trigger.
+			if !pathExists(repoPath) {
+				b.markRepoFinished(repoID)
+				return nil
+			}
 			stateSig, err := git.GetRepositoryStateSignature(repoPath)
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "git state read error: %v\n", err)
@@ -194,6 +203,14 @@ func addWatchDirsWithAdder(root string, add watchDirAdder) error {
 
 func isMissingPath(err error) bool {
 	return os.IsNotExist(err) || errors.Is(err, fs.ErrNotExist)
+}
+
+// pathExists reports whether a filesystem path is currently present. A watcher
+// uses it to detect that its worktree directory was removed so it can tear
+// itself down instead of polling git against a dead path.
+func pathExists(path string) bool {
+	_, err := os.Stat(path)
+	return err == nil
 }
 
 func extractHEADSignature(repositoryStateSignature string) string {

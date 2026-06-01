@@ -2,12 +2,14 @@ package watch
 
 import (
 	"context"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"testing"
 	"time"
 
 	"github.com/LegacyCodeHQ/clarity/cmd/show/formatters"
+	"github.com/LegacyCodeHQ/clarity/vcs/git"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -121,6 +123,54 @@ func TestSupervisor_DetectsLiveWorktreeAdd(t *testing.T) {
 	case <-time.After(2 * time.Second):
 		t.Fatal("supervisor did not exit after cancel")
 	}
+}
+
+// TestSupervisor_VanishedWorktreeSelfFinishes guards the teardown backstop: a
+// watcher whose working directory disappears must stop polling git and flip its
+// tab to inactive on its own, WITHOUT a meta-watcher REMOVE event. This is the
+// case that breaks when fsnotify coalesces/drops events during a batch
+// `git worktree remove`, leaving watchers polling deleted directories forever.
+func TestSupervisor_VanishedWorktreeSelfFinishes(t *testing.T) {
+	repo := initRepoWithCommit(t)
+	wt := filepath.Join(t.TempDir(), "gone")
+	runGit(t, repo, "worktree", "add", "-b", "feat/gone", wt)
+
+	b := newBroker()
+	formatter, err := formatters.NewFormatter("dot")
+	require.NoError(t, err)
+
+	sup := &supervisor{
+		b:              b,
+		opts:           &watchOptions{},
+		formatter:      formatter,
+		watchers:       make(map[string]context.CancelFunc),
+		subdirToRepoID: make(map[string]string),
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	// Spawn the watcher directly, bypassing the meta-watcher entirely.
+	desc := descriptorForLinked(git.Worktree{Path: wt, Branch: "feat/gone"})
+	sup.spawnWatcher(ctx, desc)
+
+	require.Eventually(t, func() bool {
+		b.mu.Lock()
+		defer b.mu.Unlock()
+		idx, ok := b.repoIndex[desc.ID]
+		return ok && b.repos[idx].Active
+	}, 2*time.Second, 20*time.Millisecond, "worktree tab should register active")
+
+	// Delete the working tree out from under the watcher without telling the
+	// supervisor — simulating a dropped REMOVE event.
+	require.NoError(t, os.RemoveAll(wt))
+
+	require.Eventually(t, func() bool {
+		b.mu.Lock()
+		defer b.mu.Unlock()
+		idx, ok := b.repoIndex[desc.ID]
+		return ok && !b.repos[idx].Active
+	}, 5*time.Second, 100*time.Millisecond, "watcher should self-finish when its worktree vanishes")
 }
 
 // initRepoWithCommit creates a fresh git repo with one commit so worktree-add
