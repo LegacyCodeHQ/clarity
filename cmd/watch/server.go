@@ -87,15 +87,21 @@ func (b *broker) registerRepo(desc protocol.RepoDescriptor) {
 	b.mu.Unlock()
 }
 
-// unregisterRepo removes a worktree (e.g. when `git worktree remove` runs).
-// Drops the tab and its snapshot history.
+// unregisterRepo removes a worktree and its snapshot history outright. Used on
+// shutdown; the live `git worktree remove` path goes through markRepoFinished
+// instead so the tab lingers as a closable record.
 func (b *broker) unregisterRepo(repoID string) {
 	b.mu.Lock()
-	idx, ok := b.repoIndex[repoID]
-	if !ok {
-		b.mu.Unlock()
-		return
+	if idx, ok := b.repoIndex[repoID]; ok {
+		b.unregisterLocked(idx, repoID)
+		b.broadcastLocked()
 	}
+	b.mu.Unlock()
+}
+
+// unregisterLocked drops a repo from the tab set and deletes its state. The
+// caller must hold b.mu and is responsible for broadcasting.
+func (b *broker) unregisterLocked(idx int, repoID string) {
 	b.repos = append(b.repos[:idx], b.repos[idx+1:]...)
 	delete(b.repoIndex, repoID)
 	delete(b.repoStates, repoID)
@@ -104,8 +110,46 @@ func (b *broker) unregisterRepo(repoID string) {
 			b.repoIndex[id] = i - 1
 		}
 	}
-	b.broadcastLocked()
+}
+
+// markRepoFinished flips a worktree to inactive when its git working tree is
+// removed. The tab and its snapshot history are KEPT so the user can still
+// browse the frozen final state; the UI surfaces a close affordance and the
+// teardown completes via closeRepo.
+func (b *broker) markRepoFinished(repoID string) {
+	b.mu.Lock()
+	if idx, ok := b.repoIndex[repoID]; ok && b.repos[idx].Active {
+		b.repos[idx].Active = false
+		b.broadcastLocked()
+	}
 	b.mu.Unlock()
+}
+
+// closeOutcome reports how a closeRepo request resolved, letting the HTTP layer
+// map it to a status code without leaking transport concerns into the broker.
+type closeOutcome int
+
+const (
+	closeOK closeOutcome = iota
+	closeNotFound
+	closeActive
+)
+
+// closeRepo tears down a finished tab at the user's request. Active worktrees
+// are pinned: they cannot be closed while still being watched.
+func (b *broker) closeRepo(repoID string) closeOutcome {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	idx, ok := b.repoIndex[repoID]
+	if !ok {
+		return closeNotFound
+	}
+	if b.repos[idx].Active {
+		return closeActive
+	}
+	b.unregisterLocked(idx, repoID)
+	b.broadcastLocked()
+	return closeOK
 }
 
 // stateForLocked returns the per-repo state, creating it for an unregistered
@@ -324,6 +368,9 @@ func newServer(b *broker, port int, repoPath string) *http.Server {
 	// Serve SSE endpoint (unchanged)
 	mux.HandleFunc(protocol.RouteEvents, handleSSE(b))
 
+	// Client→server: close a finished worktree tab.
+	mux.HandleFunc(protocol.RouteCloseRepo, handleCloseRepo(b))
+
 	return &http.Server{
 		Addr:    fmt.Sprintf(":%d", port),
 		Handler: mux,
@@ -383,6 +430,23 @@ func handleIndex(pageTitle string) http.HandlerFunc {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		if _, err := w.Write(rendered.Bytes()); err != nil {
 			http.Error(w, "failed to write response", http.StatusInternalServerError)
+		}
+	}
+}
+
+// handleCloseRepo tears down a finished worktree tab. Active worktrees are
+// pinned (409); unknown ids are 404. On success the broker broadcasts the
+// updated tab set, so connected clients drop the tab via the normal SSE flow.
+func handleCloseRepo(b *broker) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		repoID := r.PathValue("id")
+		switch b.closeRepo(repoID) {
+		case closeOK:
+			w.WriteHeader(http.StatusNoContent)
+		case closeActive:
+			http.Error(w, "worktree is still active", http.StatusConflict)
+		case closeNotFound:
+			http.Error(w, "unknown worktree", http.StatusNotFound)
 		}
 	}
 }

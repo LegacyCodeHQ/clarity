@@ -5,6 +5,10 @@ import "time"
 const (
 	RouteIndex  = "/"
 	RouteEvents = "/events"
+	// RouteCloseRepo tears down a finished (inactive) worktree tab. The {id}
+	// path value is the RepoDescriptor ID. This is the one client→server
+	// message in the watch protocol; everything else flows server→client.
+	RouteCloseRepo = "POST /repos/{id}/close"
 )
 
 const SSEEventGraph = "graph"
@@ -21,6 +25,11 @@ type RepoDescriptor struct {
 	Label string `json:"label"`
 	// IsPrimary marks the primary worktree of the repository.
 	IsPrimary bool `json:"isPrimary"`
+	// Active reports whether the worktree is still being watched. It flips to
+	// false when the underlying git worktree is removed: the tab stays visible
+	// as a frozen, read-only record and becomes user-closable. The primary
+	// worktree stays active for the life of the watch session.
+	Active bool `json:"active"`
 }
 
 // GraphSnapshot is the atom in the watch protocol timeline.

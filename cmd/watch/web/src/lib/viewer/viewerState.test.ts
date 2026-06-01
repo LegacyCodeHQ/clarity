@@ -221,8 +221,8 @@ describe('selectRepo', () => {
   it('switches the active tab and reprojects working snapshots', () => {
     const state = mergePayload(baseState(), {
       repos: [
-        { id: "primary", path: "/p", label: "primary", isPrimary: true },
-        { id: "wt-aaaaaaaa", path: "/wt", label: "wt", isPrimary: false },
+        { id: "primary", path: "/p", label: "primary", isPrimary: true, active: true },
+        { id: "wt-aaaaaaaa", path: "/wt", label: "wt", isPrimary: false, active: true },
       ],
       workingSnapshots: [
         snapshot(1, "digraph p {}", "primary"),
@@ -241,7 +241,7 @@ describe('selectRepo', () => {
 
   it('ignores selection for unknown repo id', () => {
     const state = mergePayload(baseState(), {
-      repos: [{ id: "primary", path: "/p", label: "primary", isPrimary: true }],
+      repos: [{ id: "primary", path: "/p", label: "primary", isPrimary: true, active: true }],
       workingSnapshots: [snapshot(1)],
       pastCollections: [],
     });
@@ -253,8 +253,8 @@ describe('selectRepo', () => {
   it('falls back to primary if the previously selected repo disappears', () => {
     let state = mergePayload(baseState(), {
       repos: [
-        { id: "primary", path: "/p", label: "primary", isPrimary: true },
-        { id: "wt-aaaaaaaa", path: "/wt", label: "wt", isPrimary: false },
+        { id: "primary", path: "/p", label: "primary", isPrimary: true, active: true },
+        { id: "wt-aaaaaaaa", path: "/wt", label: "wt", isPrimary: false, active: true },
       ],
       workingSnapshots: [
         snapshot(1, "digraph p {}", "primary"),
@@ -267,7 +267,7 @@ describe('selectRepo', () => {
 
     // Simulate the worktree being removed: payload no longer lists it.
     const next = mergePayload(state, {
-      repos: [{ id: "primary", path: "/p", label: "primary", isPrimary: true }],
+      repos: [{ id: "primary", path: "/p", label: "primary", isPrimary: true, active: true }],
       workingSnapshots: [snapshot(1, "digraph p {}", "primary")],
       pastCollections: [],
     });
@@ -278,8 +278,8 @@ describe('selectRepo', () => {
   it('resets timeline selection when switching tabs', () => {
     let state = mergePayload(baseState(), {
       repos: [
-        { id: "primary", path: "/p", label: "primary", isPrimary: true },
-        { id: "wt-aaaaaaaa", path: "/wt", label: "wt", isPrimary: false },
+        { id: "primary", path: "/p", label: "primary", isPrimary: true, active: true },
+        { id: "wt-aaaaaaaa", path: "/wt", label: "wt", isPrimary: false, active: true },
       ],
       workingSnapshots: [
         snapshot(1, "digraph p1 {}", "primary"),

@@ -77,8 +77,8 @@ describe('normalizeGraphStreamPayload', () => {
     });
 
     expect(normalized.repos).toEqual([
-      { id: "primary", path: "/repo", label: "clarity-cli", isPrimary: true },
-      { id: "wt-abc12345", path: "/tmp/feat", label: "clarity-cli (feat)", isPrimary: false },
+      { id: "primary", path: "/repo", label: "clarity-cli", isPrimary: true, active: true },
+      { id: "wt-abc12345", path: "/tmp/feat", label: "clarity-cli (feat)", isPrimary: false, active: true },
     ]);
   });
 
@@ -91,6 +91,23 @@ describe('normalizeGraphStreamPayload', () => {
 
     expect(normalized.repos[0].label).toBe("primary");
     expect(normalized.repos[0].isPrimary).toBe(true);
+  });
+
+  it('normalizes the active flag, defaulting missing to true', () => {
+    const normalized = normalizeGraphStreamPayload({
+      repos: [
+        { id: "primary", path: "/repo", label: "repo", isPrimary: true, active: true },
+        { id: "wt-finished", path: "/tmp/done", label: "done", isPrimary: false, active: false },
+        { id: "wt-legacy", path: "/tmp/old", label: "old", isPrimary: false }, // no active field
+      ],
+      workingSnapshots: [],
+      pastCollections: [],
+    });
+
+    expect(normalized.repos[0].active).toBe(true);
+    expect(normalized.repos[1].active).toBe(false);
+    // Backward tolerance: a descriptor without `active` is treated as active.
+    expect(normalized.repos[2].active).toBe(true);
   });
 
   it('carries the sessionStart flag through normalization', () => {

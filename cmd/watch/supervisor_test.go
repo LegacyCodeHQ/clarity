@@ -95,17 +95,25 @@ func TestSupervisor_DetectsLiveWorktreeAdd(t *testing.T) {
 
 	b.mu.Lock()
 	gotIDs := []string{b.repos[0].ID, b.repos[1].ID}
+	linkedID := b.repos[1].ID
+	bothActive := b.repos[0].Active && b.repos[1].Active
 	b.mu.Unlock()
 	assert.Contains(t, gotIDs, primaryRepoID)
 	assert.NotEqual(t, primaryRepoID, gotIDs[1], "second tab should be the linked worktree, not another primary")
+	assert.True(t, bothActive, "freshly watched worktrees start active")
 
-	// Removing the worktree should drop the tab.
+	// Removing the worktree keeps the tab as a frozen, inactive record — the
+	// user closes it explicitly. The tab must NOT vanish on its own.
 	runGit(t, repo, "worktree", "remove", "--force", wt)
 	require.Eventually(t, func() bool {
 		b.mu.Lock()
 		defer b.mu.Unlock()
-		return len(b.repos) == 1
-	}, 3*time.Second, 50*time.Millisecond, "supervisor should drop the tab after worktree remove")
+		if len(b.repos) != 2 {
+			return false
+		}
+		idx, ok := b.repoIndex[linkedID]
+		return ok && !b.repos[idx].Active
+	}, 3*time.Second, 50*time.Millisecond, "removed worktree should remain as an inactive tab")
 
 	cancel()
 	select {

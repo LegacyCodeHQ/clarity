@@ -8,6 +8,9 @@ export interface RepoDescriptor {
   path: string;
   label: string;
   isPrimary: boolean;
+  // False once the underlying git worktree is removed — the tab becomes a
+  // frozen, closable record. A missing flag is treated as active.
+  active: boolean;
 }
 
 export interface Snapshot {
@@ -48,6 +51,8 @@ function normalizeRepo(repo: unknown): RepoDescriptor | null {
     path: typeof r.path === "string" ? r.path : "",
     label: typeof r.label === "string" ? r.label : r.id,
     isPrimary: r.isPrimary === true,
+    // Treat a missing flag as active so older payloads keep their tabs pinned.
+    active: r.active !== false,
   };
 }
 

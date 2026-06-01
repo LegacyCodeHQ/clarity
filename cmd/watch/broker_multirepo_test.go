@@ -151,3 +151,90 @@ func TestBroker_UnregisterRepo_DropsTabAndHistory(t *testing.T) {
 		t.Fatal("timed out waiting for payload after unregister")
 	}
 }
+
+// markRepoFinished is the removal path for a worktree whose git working tree
+// was deleted: the tab must stay visible (flipped to inactive) with its
+// snapshot history intact, so the user can still browse the frozen final state
+// before closing it.
+func TestBroker_MarkRepoFinished_KeepsInactiveTabAndHistory(t *testing.T) {
+	b := newBroker()
+	b.registerRepo(protocol.RepoDescriptor{ID: "primary", Path: "/repo", IsPrimary: true, Active: true})
+	b.registerRepo(protocol.RepoDescriptor{ID: "wt-aaaaaaaa", Path: "/tmp/wt", IsPrimary: false, Active: true})
+	b.publish("primary", "digraph p {}")
+	b.publish("wt-aaaaaaaa", "digraph w {}")
+
+	b.markRepoFinished("wt-aaaaaaaa")
+
+	ch := b.subscribe()
+	defer b.unsubscribe(ch)
+
+	select {
+	case got := <-ch:
+		// Both tabs remain; the removed worktree is now inactive.
+		require.Len(t, got.Repos, 2)
+		byID := make(map[string]protocol.RepoDescriptor)
+		for _, r := range got.Repos {
+			byID[r.ID] = r
+		}
+		assert.True(t, byID["primary"].Active, "primary worktree stays active")
+		assert.False(t, byID["wt-aaaaaaaa"].Active, "removed worktree flips to inactive")
+		// Its frozen history is preserved.
+		require.Len(t, got.WorkingSnapshots, 2)
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for payload after markRepoFinished")
+	}
+}
+
+// closeRepo is the user-initiated teardown of a finished tab: only inactive
+// worktrees can be closed, and closing drops the tab and its history.
+func TestBroker_CloseRepo_RemovesFinishedTab(t *testing.T) {
+	b := newBroker()
+	b.registerRepo(protocol.RepoDescriptor{ID: "primary", Path: "/repo", IsPrimary: true, Active: true})
+	b.registerRepo(protocol.RepoDescriptor{ID: "wt-aaaaaaaa", Path: "/tmp/wt", IsPrimary: false, Active: true})
+	b.publish("primary", "digraph p {}")
+	b.publish("wt-aaaaaaaa", "digraph w {}")
+	b.markRepoFinished("wt-aaaaaaaa")
+
+	assert.Equal(t, closeOK, b.closeRepo("wt-aaaaaaaa"), "closing a finished worktree should succeed")
+
+	ch := b.subscribe()
+	defer b.unsubscribe(ch)
+
+	select {
+	case got := <-ch:
+		require.Len(t, got.Repos, 1)
+		assert.Equal(t, "primary", got.Repos[0].ID)
+		require.Len(t, got.WorkingSnapshots, 1)
+		assert.Equal(t, "primary", got.WorkingSnapshots[0].RepoID)
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for payload after closeRepo")
+	}
+}
+
+// An active worktree's tab is pinned: closeRepo must refuse it so the UI can't
+// tear down a tab that's still being watched.
+func TestBroker_CloseRepo_RefusesActiveRepo(t *testing.T) {
+	b := newBroker()
+	b.registerRepo(protocol.RepoDescriptor{ID: "primary", Path: "/repo", IsPrimary: true, Active: true})
+	b.publish("primary", "digraph p {}")
+
+	assert.Equal(t, closeActive, b.closeRepo("primary"), "closing an active worktree should be refused")
+
+	ch := b.subscribe()
+	defer b.unsubscribe(ch)
+
+	select {
+	case got := <-ch:
+		require.Len(t, got.Repos, 1, "active tab must remain after a refused close")
+		assert.Equal(t, "primary", got.Repos[0].ID)
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for payload")
+	}
+}
+
+func TestBroker_CloseRepo_UnknownRepoReturnsFalse(t *testing.T) {
+	b := newBroker()
+	b.registerRepo(protocol.RepoDescriptor{ID: "primary", Path: "/repo", IsPrimary: true, Active: true})
+
+	assert.Equal(t, closeNotFound, b.closeRepo("wt-missing"), "closing an unknown worktree should report not found")
+}

@@ -52,6 +52,7 @@ func planInitialRepos(cwd string) ([]protocol.RepoDescriptor, repoMode, error) {
 			Path:      cwdAbs,
 			Label:     repoLabel(cwdAbs, currentBranchFor(cwdAbs)),
 			IsPrimary: true,
+			Active:    true,
 		}}, modeLinked, nil
 	}
 
@@ -65,6 +66,7 @@ func planInitialRepos(cwd string) ([]protocol.RepoDescriptor, repoMode, error) {
 		Path:      cwdAbs,
 		Label:     repoLabel(cwdAbs, primaryBranch(worktrees)),
 		IsPrimary: true,
+		Active:    true,
 	}}
 	for _, w := range worktrees {
 		if w.IsPrimary {
@@ -81,6 +83,7 @@ func descriptorForLinked(w git.Worktree) protocol.RepoDescriptor {
 		Path:      w.Path,
 		Label:     repoLabel(w.Path, w.Branch),
 		IsPrimary: false,
+		Active:    true,
 	}
 }
 
@@ -196,7 +199,11 @@ func (s *supervisor) spawnWatcher(parent context.Context, desc protocol.RepoDesc
 	publishCurrentGraph(desc.ID, desc.Path, s.opts, s.b, s.formatter)
 }
 
-func (s *supervisor) stopWatcher(repoID string) {
+// finishWatcher stops monitoring a worktree whose git working tree was removed
+// but keeps its tab: the file watcher is cancelled while the broker flips the
+// tab to inactive and preserves its snapshot history. The tab survives as a
+// frozen, read-only record until the user closes it (see broker.closeRepo).
+func (s *supervisor) finishWatcher(repoID string) {
 	s.mu.Lock()
 	cancel, ok := s.watchers[repoID]
 	delete(s.watchers, repoID)
@@ -204,7 +211,7 @@ func (s *supervisor) stopWatcher(repoID string) {
 	if ok {
 		cancel()
 	}
-	s.b.unregisterRepo(repoID)
+	s.b.markRepoFinished(repoID)
 }
 
 func (s *supervisor) shutdown() {
@@ -328,7 +335,7 @@ func (s *supervisor) handleWorktreeRemove(subdirName string) {
 	if !ok {
 		return
 	}
-	s.stopWatcher(repoID)
+	s.finishWatcher(repoID)
 }
 
 // readWorktreeGitdir reads `<subdirPath>/gitdir` — a one-line file written by
