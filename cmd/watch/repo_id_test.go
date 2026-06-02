@@ -35,8 +35,8 @@ func TestRepoLabel(t *testing.T) {
 		want   string
 	}{
 		{"/Users/ragu/clarity-cli", "", "clarity-cli"},
-		{"/Users/ragu/clarity-cli", "refs/heads/main", "clarity-cli (main)"},
-		{"/tmp/foo-feat", "refs/heads/feat/foo", "foo-feat (feat/foo)"},
+		{"/Users/ragu/clarity-cli", "refs/heads/main", "clarity-cli"},
+		{"/tmp/foo-feat", "refs/heads/feat/foo", "foo-feat"},
 		{"/", "", ""},
 	}
 	for _, c := range cases {

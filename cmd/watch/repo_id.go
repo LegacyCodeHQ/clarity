@@ -4,7 +4,6 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"path/filepath"
-	"strings"
 )
 
 const primaryRepoID = "primary"
@@ -22,18 +21,10 @@ func repoIDFor(absPath string, isPrimary bool) string {
 }
 
 // repoLabel returns a human-readable tab label for a working tree.
-// Branch refs are shortened (refs/heads/foo → foo) and appended in parens.
-func repoLabel(absPath, branch string) string {
+func repoLabel(absPath, _ string) string {
 	base := filepath.Base(filepath.Clean(absPath))
 	if base == "." || base == string(filepath.Separator) {
-		base = ""
+		return ""
 	}
-	short := strings.TrimPrefix(branch, "refs/heads/")
-	if short == "" {
-		return base
-	}
-	if base == "" {
-		return short
-	}
-	return base + " (" + short + ")"
+	return base
 }

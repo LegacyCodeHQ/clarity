@@ -40,7 +40,7 @@ func TestPlanInitialRepos_PrimaryWithLinkedWorktree(t *testing.T) {
 	// The linked worktree comes after the primary, with a derived id.
 	assert.True(t, repos[1].ID != primaryRepoID, "linked worktree should not get the primary id")
 	assert.False(t, repos[1].IsPrimary)
-	assert.Contains(t, repos[1].Label, "feat/x", "label should include the branch name")
+	assert.Equal(t, "linked", repos[1].Label, "label should be the worktree directory name")
 }
 
 func TestPlanInitialRepos_LinkedModeReturnsOnlyCwd(t *testing.T) {
