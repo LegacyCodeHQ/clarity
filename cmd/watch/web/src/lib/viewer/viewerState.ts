@@ -93,6 +93,11 @@ export function getSelectedCollection(state: ViewerState): Collection | null {
   return state.pastCollections.find((collection) => collection.id === state.selectedCollectionID) || null;
 }
 
+function selectedRepoAllowsLive(state: Pick<ViewerState, "repos" | "selectedRepoID">): boolean {
+  const repo = state.repos.find((r) => r.id === state.selectedRepoID);
+  return repo ? repo.active !== false : true;
+}
+
 /**
  * Picks the next selected repo when the previous selection becomes invalid
  * (e.g., its tab was removed). Prefers the existing selection, then "primary",
@@ -163,6 +168,16 @@ export function normalizeState(state: Partial<ViewerState>): ViewerState {
   const selectedCollection = getSelectedCollection(next);
   if (next.selectedCollectionID !== null && !selectedCollection) {
     next.selectedCollectionID = null;
+    next.selectedCollectionSnapshotIndex = 0;
+  }
+
+  if (
+    next.selectedCollectionID === null
+    && !selectedRepoAllowsLive(next)
+    && next.workingSnapshots.length === 0
+    && next.pastCollections.length > 0
+  ) {
+    next.selectedCollectionID = next.pastCollections[next.pastCollections.length - 1]!.id;
     next.selectedCollectionSnapshotIndex = 0;
   }
 
@@ -293,6 +308,14 @@ export function applySourceSelection(state: ViewerState, selected: string): View
   if (selected === "live") {
     return applyLiveSelection(state);
   }
+  if (selected === "frozen") {
+    return normalizeState({
+      ...state,
+      liveSnapshotIndex: null,
+      selectedCollectionID: null,
+      selectedCollectionSnapshotIndex: 0,
+    });
+  }
   if (!selected.startsWith("collection:")) {
     return applyLiveSelection(state);
   }
@@ -310,10 +333,19 @@ export function applySourceSelection(state: ViewerState, selected: string): View
 }
 
 export function getSourceOptions(state: ViewerState, timeFormatter: TimeFormatter = formatTime): SourceOption[] {
-  const liveOption: SourceOption = {
-    value: "live",
-    text: "Current working directory (live)",
-  };
+  const allowsLive = selectedRepoAllowsLive(state);
+  const liveOptions: SourceOption[] = allowsLive
+    ? [{
+      value: "live",
+      text: "Current working directory (live)",
+    }]
+    : [];
+  const frozenOptions: SourceOption[] = !allowsLive && state.workingSnapshots.length > 0
+    ? [{
+      value: "frozen",
+      text: "Removed working directory snapshot",
+    }]
+    : [];
   const orderedCollections = [...state.pastCollections].reverse();
   const collectionOptions = orderedCollections.map((collection, index) => {
     const number = state.pastCollections.length - index;
@@ -324,13 +356,18 @@ export function getSourceOptions(state: ViewerState, timeFormatter: TimeFormatte
     };
   });
 
-  return [liveOption, ...collectionOptions];
+  return [...liveOptions, ...frozenOptions, ...collectionOptions];
 }
 
 export function getViewModel(state: ViewerState, timeFormatter: TimeFormatter = formatTime): ViewModel {
   const normalized = normalizeState(state);
+  const allowsLive = selectedRepoAllowsLive(normalized);
   const sourceValue = normalized.selectedCollectionID === null
-    ? "live"
+    ? allowsLive
+      ? "live"
+      : normalized.workingSnapshots.length > 0
+        ? "frozen"
+        : ""
     : `collection:${normalized.selectedCollectionID}`;
 
   if (normalized.selectedCollectionID === null) {
@@ -346,16 +383,18 @@ export function getViewModel(state: ViewerState, timeFormatter: TimeFormatter = 
       sourceOptions: getSourceOptions(normalized, timeFormatter),
       renderDot: total > 0 ? normalized.workingSnapshots[selectedIndex]!.dot : null,
       timeline: {
-        modeText: normalized.liveSnapshotIndex === null
+        modeText: !allowsLive
+          ? "Removed working directory snapshot"
+          : normalized.liveSnapshotIndex === null
           ? "Working directory (live)"
           : "Working directory snapshot",
         sliderDisabled: total <= 1,
         sliderMax: total > 0 ? String(total - 1) : "0",
         sliderValue: total > 0 ? String(selectedIndex) : "0",
-        liveButtonDisabled: total === 0 || normalized.liveSnapshotIndex === null,
+        liveButtonDisabled: !allowsLive || total === 0 || normalized.liveSnapshotIndex === null,
         metaText: total === 0
           ? "0 working snapshots"
-          : `${total} working snapshots | ${formatSnapshotMeta(
+          : `${total} ${allowsLive ? "working" : "frozen working"} snapshots | ${formatSnapshotMeta(
             normalized.workingSnapshots[selectedIndex]!,
             selectedIndex,
             total,
@@ -380,7 +419,7 @@ export function getViewModel(state: ViewerState, timeFormatter: TimeFormatter = 
       sliderDisabled: total <= 1,
       sliderMax: total > 0 ? String(total - 1) : "0",
       sliderValue: total > 0 ? String(normalized.selectedCollectionSnapshotIndex) : "0",
-      liveButtonDisabled: false,
+      liveButtonDisabled: !allowsLive,
       metaText: total === 0
         ? "Collection is empty"
         : `${total} snapshots | ${formatSnapshotMeta(

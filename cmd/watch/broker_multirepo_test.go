@@ -153,10 +153,9 @@ func TestBroker_UnregisterRepo_DropsTabAndHistory(t *testing.T) {
 }
 
 // markRepoFinished is the removal path for a worktree whose git working tree
-// was deleted: the tab must stay visible (flipped to inactive) with its
-// snapshot history intact, so the user can still browse the frozen final state
-// before closing it.
-func TestBroker_MarkRepoFinished_KeepsInactiveTabAndHistory(t *testing.T) {
+// was deleted: the tab must stay visible, but its final working snapshots are
+// no longer live and should be exposed as an archived collection.
+func TestBroker_MarkRepoFinished_ArchivesFinalWorkingSet(t *testing.T) {
 	b := newBroker()
 	b.registerRepo(protocol.RepoDescriptor{ID: "primary", Path: "/repo", IsPrimary: true, Active: true})
 	b.registerRepo(protocol.RepoDescriptor{ID: "wt-aaaaaaaa", Path: "/tmp/wt", IsPrimary: false, Active: true})
@@ -178,8 +177,12 @@ func TestBroker_MarkRepoFinished_KeepsInactiveTabAndHistory(t *testing.T) {
 		}
 		assert.True(t, byID["primary"].Active, "primary worktree stays active")
 		assert.False(t, byID["wt-aaaaaaaa"].Active, "removed worktree flips to inactive")
-		// Its frozen history is preserved.
-		require.Len(t, got.WorkingSnapshots, 2)
+		require.Len(t, got.WorkingSnapshots, 1)
+		assert.Equal(t, "primary", got.WorkingSnapshots[0].RepoID)
+		require.Len(t, got.PastCollections, 1)
+		assert.Equal(t, "wt-aaaaaaaa", got.PastCollections[0].RepoID)
+		require.Len(t, got.PastCollections[0].Snapshots, 1)
+		assert.Equal(t, "digraph w {}", got.PastCollections[0].Snapshots[0].DOT)
 	case <-time.After(time.Second):
 		t.Fatal("timed out waiting for payload after markRepoFinished")
 	}

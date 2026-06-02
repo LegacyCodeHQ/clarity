@@ -198,6 +198,47 @@ describe('getViewModel', () => {
     const vm = getViewModel(state, () => "10:00:00");
     expect(vm.timeline.sessionStartIndex).toBe(0);
   });
+
+  it('omits the live source option when the selected worktree is deleted', () => {
+    const state = mergePayload(baseState(), {
+      repos: [
+        { id: "primary", path: "/p", label: "primary", isPrimary: true, active: true },
+        { id: "wt-aaaaaaaa", path: "/wt", label: "wt", isPrimary: false, active: false },
+      ],
+      workingSnapshots: [snapshot(1, "digraph p {}", "primary")],
+      pastCollections: [collection(10, [snapshot(2, "digraph w {}", "wt-aaaaaaaa")], "wt-aaaaaaaa")],
+    });
+
+    const vm = getViewModel(selectRepo(state, "wt-aaaaaaaa"), () => "10:00:00");
+
+    expect(vm.sourceValue).toBe("collection:10");
+    expect(vm.sourceOptions.map((option) => option.value)).toEqual(["collection:10"]);
+    expect(vm.timeline.liveButtonDisabled).toBe(true);
+    expect(vm.renderDot).toBe("digraph w {}");
+  });
+
+  it('treats deleted worktree working snapshots as frozen instead of live', () => {
+    const state = mergePayload(baseState(), {
+      repos: [
+        { id: "primary", path: "/p", label: "primary", isPrimary: true, active: true },
+        { id: "wt-aaaaaaaa", path: "/wt", label: "wt", isPrimary: false, active: false },
+      ],
+      workingSnapshots: [
+        snapshot(1, "digraph p {}", "primary"),
+        snapshot(2, "digraph frozen {}", "wt-aaaaaaaa"),
+      ],
+      pastCollections: [],
+    });
+
+    const vm = getViewModel(selectRepo(state, "wt-aaaaaaaa"), () => "10:00:00");
+
+    expect(vm.sourceValue).toBe("frozen");
+    expect(vm.sourceOptions.map((option) => option.value)).toEqual(["frozen"]);
+    expect(vm.sourceOptions[0].text).not.toContain("live");
+    expect(vm.timeline.modeText).toBe("Removed working directory snapshot");
+    expect(vm.timeline.liveButtonDisabled).toBe(true);
+    expect(vm.renderDot).toBe("digraph frozen {}");
+  });
 });
 
 describe('applyLiveSelection', () => {

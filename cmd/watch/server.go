@@ -119,6 +119,8 @@ func (b *broker) unregisterLocked(idx int, repoID string) {
 func (b *broker) markRepoFinished(repoID string) {
 	b.mu.Lock()
 	if idx, ok := b.repoIndex[repoID]; ok && b.repos[idx].Active {
+		s := b.stateForLocked(repoID)
+		b.archiveWorkingSetLocked(repoID, s)
 		b.repos[idx].Active = false
 		b.broadcastLocked()
 	}
@@ -194,6 +196,12 @@ func (b *broker) publish(repoID, dot string) {
 func (b *broker) archiveWorkingSet(repoID string) {
 	b.mu.Lock()
 	s := b.stateForLocked(repoID)
+	b.archiveWorkingSetLocked(repoID, s)
+	b.broadcastLocked()
+	b.mu.Unlock()
+}
+
+func (b *broker) archiveWorkingSetLocked(repoID string, s *repoState) {
 	if len(s.history) > 0 {
 		archivedSnapshots := make([]protocol.GraphSnapshot, len(s.history))
 		copy(archivedSnapshots, s.history)
@@ -208,8 +216,6 @@ func (b *broker) archiveWorkingSet(repoID string) {
 
 	s.history = nil
 	s.hasState = true
-	b.broadcastLocked()
-	b.mu.Unlock()
 }
 
 func (b *broker) clearWorkingSet(repoID string) {
