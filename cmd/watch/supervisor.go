@@ -50,7 +50,7 @@ func planInitialRepos(cwd string) ([]protocol.RepoDescriptor, repoMode, error) {
 		return []protocol.RepoDescriptor{{
 			ID:        primaryRepoID,
 			Path:      cwdAbs,
-			Label:     repoLabel(cwdAbs, currentBranchFor(cwdAbs)),
+			Label:     primaryRepoLabel(cwdAbs, currentBranchFor(cwdAbs)),
 			IsPrimary: true,
 			Active:    true,
 		}}, modeLinked, nil
@@ -64,7 +64,7 @@ func planInitialRepos(cwd string) ([]protocol.RepoDescriptor, repoMode, error) {
 	repos := []protocol.RepoDescriptor{{
 		ID:        primaryRepoID,
 		Path:      cwdAbs,
-		Label:     repoLabel(cwdAbs, primaryBranch(worktrees)),
+		Label:     primaryRepoLabel(cwdAbs, primaryBranch(worktrees)),
 		IsPrimary: true,
 		Active:    true,
 	}}
@@ -81,7 +81,7 @@ func descriptorForLinked(w git.Worktree) protocol.RepoDescriptor {
 	return protocol.RepoDescriptor{
 		ID:        repoIDFor(w.Path, false),
 		Path:      w.Path,
-		Label:     repoLabel(w.Path, w.Branch),
+		Label:     linkedRepoLabel(w.Path),
 		IsPrimary: false,
 		Active:    true,
 	}

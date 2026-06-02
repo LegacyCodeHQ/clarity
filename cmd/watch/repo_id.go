@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"path/filepath"
+	"strings"
 )
 
 const primaryRepoID = "primary"
@@ -20,8 +21,19 @@ func repoIDFor(absPath string, isPrimary bool) string {
 	return "wt-" + hex.EncodeToString(sum[:])[:8]
 }
 
-// repoLabel returns a human-readable tab label for a working tree.
-func repoLabel(absPath, _ string) string {
+// primaryRepoLabel returns the tab label for the currently checked-out tree.
+// The branch is more useful than the project directory here because the first
+// tab is always the current checkout.
+func primaryRepoLabel(absPath, branch string) string {
+	short := strings.TrimPrefix(branch, "refs/heads/")
+	if short != "" {
+		return short
+	}
+	return linkedRepoLabel(absPath)
+}
+
+// linkedRepoLabel returns the tab label for an additional worktree.
+func linkedRepoLabel(absPath string) string {
 	base := filepath.Base(filepath.Clean(absPath))
 	if base == "." || base == string(filepath.Separator) {
 		return ""

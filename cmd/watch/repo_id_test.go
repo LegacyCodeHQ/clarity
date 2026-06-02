@@ -28,18 +28,30 @@ func TestRepoIDForLinkedDistinguishesPaths(t *testing.T) {
 	assert.NotEqual(t, a, b)
 }
 
-func TestRepoLabel(t *testing.T) {
+func TestPrimaryRepoLabel(t *testing.T) {
 	cases := []struct {
-		path   string
 		branch string
 		want   string
 	}{
-		{"/Users/ragu/clarity-cli", "", "clarity-cli"},
-		{"/Users/ragu/clarity-cli", "refs/heads/main", "clarity-cli"},
-		{"/tmp/foo-feat", "refs/heads/feat/foo", "foo-feat"},
-		{"/", "", ""},
+		{"", "clarity-cli"},
+		{"refs/heads/main", "main"},
+		{"refs/heads/feat/foo", "feat/foo"},
 	}
 	for _, c := range cases {
-		assert.Equal(t, c.want, repoLabel(c.path, c.branch), "path=%q branch=%q", c.path, c.branch)
+		assert.Equal(t, c.want, primaryRepoLabel("/Users/ragu/clarity-cli", c.branch), "branch=%q", c.branch)
+	}
+}
+
+func TestLinkedRepoLabel(t *testing.T) {
+	cases := []struct {
+		path string
+		want string
+	}{
+		{"/Users/ragu/clarity-cli", "clarity-cli"},
+		{"/tmp/foo-feat", "foo-feat"},
+		{"/", ""},
+	}
+	for _, c := range cases {
+		assert.Equal(t, c.want, linkedRepoLabel(c.path), "path=%q", c.path)
 	}
 }

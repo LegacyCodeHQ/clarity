@@ -23,6 +23,7 @@ func TestPlanInitialRepos_PrimaryNoWorktrees(t *testing.T) {
 	require.Len(t, repos, 1)
 	assert.Equal(t, primaryRepoID, repos[0].ID)
 	assert.True(t, repos[0].IsPrimary)
+	assert.Equal(t, "main", repos[0].Label)
 }
 
 func TestPlanInitialRepos_PrimaryWithLinkedWorktree(t *testing.T) {
@@ -37,6 +38,7 @@ func TestPlanInitialRepos_PrimaryWithLinkedWorktree(t *testing.T) {
 
 	assert.Equal(t, primaryRepoID, repos[0].ID)
 	assert.True(t, repos[0].IsPrimary)
+	assert.Equal(t, "main", repos[0].Label)
 	// The linked worktree comes after the primary, with a derived id.
 	assert.True(t, repos[1].ID != primaryRepoID, "linked worktree should not get the primary id")
 	assert.False(t, repos[1].IsPrimary)
@@ -54,6 +56,7 @@ func TestPlanInitialRepos_LinkedModeReturnsOnlyCwd(t *testing.T) {
 	require.Len(t, repos, 1)
 	assert.Equal(t, primaryRepoID, repos[0].ID, "cwd-tree gets the 'primary' id regardless of git's notion")
 	assert.True(t, repos[0].IsPrimary)
+	assert.Equal(t, "feat/x", repos[0].Label)
 }
 
 func TestPlanInitialRepos_NonRepoErrors(t *testing.T) {
