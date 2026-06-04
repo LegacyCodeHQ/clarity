@@ -19,6 +19,11 @@ type FileGraphMetadata struct {
 	Files  map[string]FileMetadata
 	Edges  map[FileEdge]EdgeMetadata
 	Cycles []FileCycle
+	// EdgeOrigins maps a collapsed edge (an edge in the rendered graph that
+	// touches a module node) to the original file→file edges it represents.
+	// It lets renderers label a collapsed edge by its underlying dependencies
+	// so labels stay stable whether or not modules are applied.
+	EdgeOrigins map[FileEdge][]FileEdge
 }
 
 // FileMetadata holds metadata for a single file node.

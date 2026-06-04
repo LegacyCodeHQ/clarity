@@ -224,16 +224,23 @@ func (f mermaidFormatter) Format(g depgraph.FileDependencyGraph, opts RenderOpti
 			depNodeKey := nodeNames[dep]
 			depID := nodeIDs[depNodeKey]
 			hasEdges = true
-			if opts.EdgeLabels {
-				// Hash the stable rendered node key (path-based), not the
-				// display name, so labels stay constant when collapsing files
-				// into a module changes how other names are disambiguated.
-				label := EdgeLabel(nodeKey(source, opts.BasePath), nodeKey(dep, opts.BasePath))
-				edgesSB.WriteString(fmt.Sprintf("    %s -->|%s| %s\n", sourceID, label, depID))
-			} else {
-				edgesSB.WriteString(fmt.Sprintf("    %s --> %s\n", sourceID, depID))
-			}
 			edgeMD := g.Meta.Edges[depgraph.FileEdge{From: source, To: dep}]
+
+			if opts.EdgeLabels {
+				// One arrow per underlying dependency, each labeled by its
+				// original endpoints, so a collapsed module edge keeps the
+				// labels it had without the module.
+				for _, label := range edgeLabels(g, source, dep, opts.BasePath) {
+					edgesSB.WriteString(fmt.Sprintf("    %s -->|%s| %s\n", sourceID, label, depID))
+					if edgeMD.InCycle {
+						cycleEdgeIndices = append(cycleEdgeIndices, edgeIndex)
+					}
+					edgeIndex++
+				}
+				continue
+			}
+
+			edgesSB.WriteString(fmt.Sprintf("    %s --> %s\n", sourceID, depID))
 			if edgeMD.InCycle {
 				cycleEdgeIndices = append(cycleEdgeIndices, edgeIndex)
 			}

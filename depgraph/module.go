@@ -13,6 +13,17 @@ type Module struct {
 	Files []string
 }
 
+// Collapse describes the result of collapsing modules into a graph.
+type Collapse struct {
+	// Members maps each created module node to the sorted member files it
+	// collapsed, for annotating the node with its file count and churn.
+	Members map[string][]string
+	// EdgeOrigins maps each collapsed edge that touches a module node to the
+	// original file→file edges it represents, so renderers can label it by the
+	// underlying dependencies instead of the collapsed endpoints.
+	EdgeOrigins map[FileEdge][]FileEdge
+}
+
 // CollapseModules contracts each module's member files into a single synthetic
 // node named after the module. It is a config-driven post-processing transform
 // applied to the built graph: edges touching a member are redirected to the
@@ -24,14 +35,13 @@ type Module struct {
 // lets cycles, edges, and stats recompute naturally against the collapsed
 // shape, so a module reads as a single opaque node in the rendered graph.
 //
-// It returns the collapsed graph and, for each module actually created (those
-// with at least one member in the graph), the sorted member file paths that
-// were collapsed into it, so the caller can annotate the module node with its
-// file count and aggregated churn.
-func CollapseModules(g DependencyGraph, modules []Module) (DependencyGraph, map[string][]string, error) {
+// It returns the collapsed graph and a Collapse describing the created module
+// nodes (their members) and the provenance of every collapsed edge, so the
+// caller can annotate module nodes and preserve edge labels.
+func CollapseModules(g DependencyGraph, modules []Module) (DependencyGraph, Collapse, error) {
 	adjacency, err := AdjacencyList(g)
 	if err != nil {
-		return nil, nil, err
+		return nil, Collapse{}, err
 	}
 
 	memberToModule := make(map[string]string)
@@ -45,7 +55,7 @@ func CollapseModules(g DependencyGraph, modules []Module) (DependencyGraph, map[
 		}
 	}
 	if len(memberToModule) == 0 {
-		return g, nil, nil
+		return g, Collapse{}, nil
 	}
 
 	resolve := func(node string) string {
@@ -61,6 +71,7 @@ func CollapseModules(g DependencyGraph, modules []Module) (DependencyGraph, map[
 			edges[node] = make(map[string]bool)
 		}
 	}
+	edgeOrigins := make(map[FileEdge][]FileEdge)
 
 	for source, deps := range adjacency {
 		from := resolve(source)
@@ -72,6 +83,12 @@ func CollapseModules(g DependencyGraph, modules []Module) (DependencyGraph, map[
 			}
 			ensure(to)
 			edges[from][to] = true
+			// Record provenance for edges that were rerouted to a module node,
+			// so renderers can label them by their original dependencies.
+			if from != source || to != dep {
+				collapsedEdge := FileEdge{From: from, To: to}
+				edgeOrigins[collapsedEdge] = append(edgeOrigins[collapsedEdge], FileEdge{From: source, To: dep})
+			}
 		}
 	}
 
@@ -88,12 +105,24 @@ func CollapseModules(g DependencyGraph, modules []Module) (DependencyGraph, map[
 	for name := range moduleMembers {
 		sort.Strings(moduleMembers[name])
 	}
+	for edge := range edgeOrigins {
+		sortFileEdges(edgeOrigins[edge])
+	}
 
 	graph, err := NewDependencyGraphFromAdjacency(collapsed)
 	if err != nil {
-		return nil, nil, err
+		return nil, Collapse{}, err
 	}
-	return graph, moduleMembers, nil
+	return graph, Collapse{Members: moduleMembers, EdgeOrigins: edgeOrigins}, nil
+}
+
+func sortFileEdges(edges []FileEdge) {
+	sort.Slice(edges, func(i, j int) bool {
+		if edges[i].From != edges[j].From {
+			return edges[i].From < edges[j].From
+		}
+		return edges[i].To < edges[j].To
+	})
 }
 
 // AnnotateModule marks a collapsed module node and records its file count and

@@ -377,6 +377,36 @@ func TestDependencyGraph_ToDOT_EdgeLabels(t *testing.T) {
 	g.Assert(t, t.Name(), []byte(output))
 }
 
+func TestDependencyGraph_ToDOT_ModuleEdgesKeepOriginalDependencyLabels(t *testing.T) {
+	// a.go depended on b.go and c.go (both collapsed into module M) and on the
+	// untouched d.go. With labels on, each original dependency must survive as
+	// its own arrow into M, labeled by its original endpoints; the untouched
+	// edge keeps its own label.
+	const base = "/p"
+	graph := testFileGraph(t, map[string][]string{
+		"/p/a.go": {"M", "/p/d.go"},
+		"/p/d.go": {},
+		"M":       {},
+	}, nil)
+
+	md := graph.Meta.Files["M"]
+	md.IsModule = true
+	graph.Meta.Files["M"] = md
+	graph.Meta.EdgeOrigins = map[depgraph.FileEdge][]depgraph.FileEdge{
+		{From: "/p/a.go", To: "M"}: {
+			{From: "/p/a.go", To: "/p/b.go"},
+			{From: "/p/a.go", To: "/p/c.go"},
+		},
+	}
+
+	output, err := (&dotFormatter{}).Format(graph, RenderOptions{BasePath: base, EdgeLabels: true})
+	require.NoError(t, err)
+
+	require.Contains(t, output, fmt.Sprintf("\"a.go\" -> \"M\" [label=%q]", EdgeLabel("a.go", "b.go")))
+	require.Contains(t, output, fmt.Sprintf("\"a.go\" -> \"M\" [label=%q]", EdgeLabel("a.go", "c.go")))
+	require.Contains(t, output, fmt.Sprintf("\"a.go\" -> \"d.go\" [label=%q]", EdgeLabel("a.go", "d.go")))
+}
+
 func TestDependencyGraph_ToDOT_EdgeLabelsStableWhenSiblingCollapsed(t *testing.T) {
 	// main.go -> app/util.go is the edge under test. A second util.go
 	// (lib/util.go) forces display-name disambiguation in the full graph but

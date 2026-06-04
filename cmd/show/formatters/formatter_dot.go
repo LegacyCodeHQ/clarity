@@ -266,19 +266,24 @@ func (f *dotFormatter) Format(g depgraph.FileDependencyGraph, opts RenderOptions
 			depNodeKey := nodeKey(dep, opts.BasePath)
 			edgeMD := g.Meta.Edges[depgraph.FileEdge{From: source, To: dep}]
 
-			var attrs []string
-			if opts.EdgeLabels {
-				// Hash the stable rendered node key (path-based), not the
-				// display name, so an edge keeps its label even when an
-				// unrelated file is collapsed into a module and disambiguation
-				// of other names changes.
-				attrs = append(attrs, fmt.Sprintf("label=%q", EdgeLabel(sourceNodeKey, depNodeKey)))
-			}
+			var cycleAttrs []string
 			if edgeMD.InCycle {
-				attrs = append(attrs, "color=red", "style=dashed")
+				cycleAttrs = []string{"color=red", "style=dashed"}
 			}
-			if len(attrs) > 0 {
-				sb.WriteString(fmt.Sprintf("  %q -> %q [%s];\n", sourceNodeKey, depNodeKey, strings.Join(attrs, ", ")))
+
+			if opts.EdgeLabels {
+				// One arrow per underlying dependency: a collapsed module edge
+				// keeps a distinct labeled arrow for each original edge it
+				// represents, so labels are unchanged by collapsing.
+				for _, label := range edgeLabels(g, source, dep, opts.BasePath) {
+					attrs := append([]string{fmt.Sprintf("label=%q", label)}, cycleAttrs...)
+					sb.WriteString(fmt.Sprintf("  %q -> %q [%s];\n", sourceNodeKey, depNodeKey, strings.Join(attrs, ", ")))
+				}
+				continue
+			}
+
+			if len(cycleAttrs) > 0 {
+				sb.WriteString(fmt.Sprintf("  %q -> %q [%s];\n", sourceNodeKey, depNodeKey, strings.Join(cycleAttrs, ", ")))
 			} else {
 				sb.WriteString(fmt.Sprintf("  %q -> %q;\n", sourceNodeKey, depNodeKey))
 			}

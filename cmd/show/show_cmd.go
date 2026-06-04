@@ -207,13 +207,13 @@ func runGraph(cmd *cobra.Command, opts *graphOptions) error {
 	// relative-path detection used to shorten node labels.
 	renderBasePath := resolveRenderBasePath(opts.repoPath, filePaths)
 
-	var moduleMembers map[string][]string
+	var collapse depgraph.Collapse
 	if len(opts.modules) > 0 {
 		modules, err := buildModules(opts.modules, pathResolver)
 		if err != nil {
 			return err
 		}
-		graph, moduleMembers, err = depgraph.CollapseModules(graph, modules)
+		graph, collapse, err = depgraph.CollapseModules(graph, modules)
 		if err != nil {
 			return err
 		}
@@ -238,9 +238,10 @@ func runGraph(cmd *cobra.Command, opts *graphOptions) error {
 		}
 	}
 
-	for moduleNode, members := range moduleMembers {
+	for moduleNode, members := range collapse.Members {
 		fileGraph.AnnotateModule(moduleNode, members, fileStats)
 	}
+	fileGraph.Meta.EdgeOrigins = collapse.EdgeOrigins
 
 	if !opts.noPhantom {
 		annotateRustPhantoms(&fileGraph, opts, contentReader, fromCommit, toCommit, isCommitRange)

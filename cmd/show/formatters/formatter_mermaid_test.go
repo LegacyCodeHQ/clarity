@@ -414,6 +414,33 @@ func TestMermaidFormatter_EdgeLabels(t *testing.T) {
 	g.Assert(t, t.Name(), []byte(output))
 }
 
+func TestMermaidFormatter_ModuleEdgesKeepOriginalDependencyLabels(t *testing.T) {
+	// a.go depended on b.go and c.go (collapsed into module M). With labels on,
+	// both dependencies survive as their own arrow into M, labeled by the
+	// original endpoints.
+	const base = "/p"
+	graph := testFileGraphMermaid(t, map[string][]string{
+		"/p/a.go": {"M"},
+		"M":       {},
+	}, nil)
+
+	md := graph.Meta.Files["M"]
+	md.IsModule = true
+	graph.Meta.Files["M"] = md
+	graph.Meta.EdgeOrigins = map[depgraph.FileEdge][]depgraph.FileEdge{
+		{From: "/p/a.go", To: "M"}: {
+			{From: "/p/a.go", To: "/p/b.go"},
+			{From: "/p/a.go", To: "/p/c.go"},
+		},
+	}
+
+	output, err := mermaidFormatter{}.Format(graph, RenderOptions{BasePath: base, EdgeLabels: true})
+	require.NoError(t, err)
+
+	require.Contains(t, output, "|"+EdgeLabel("a.go", "b.go")+"|")
+	require.Contains(t, output, "|"+EdgeLabel("a.go", "c.go")+"|")
+}
+
 func TestMermaidFormatter_EdgeLabelsStableWhenSiblingCollapsed(t *testing.T) {
 	// The main.go -> app/util.go edge label must not change when an unrelated
 	// sibling (lib/util.go) is collapsed into a module, even though doing so

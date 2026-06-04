@@ -17,14 +17,20 @@ func TestCollapseModules_MergesMembersIntoSingleNode(t *testing.T) {
 		"/project/other.go": {"/project/main.go"},
 	})
 
-	collapsed, moduleMembers, err := depgraph.CollapseModules(graph, []depgraph.Module{
+	collapsed, result, err := depgraph.CollapseModules(graph, []depgraph.Module{
 		{Name: "X", Files: []string{"/project/main.go", "/project/mod.go"}},
 	})
 	require.NoError(t, err)
 
 	assert.Equal(t, map[string][]string{
 		"X": {"/project/main.go", "/project/mod.go"},
-	}, moduleMembers)
+	}, result.Members)
+
+	// other.go -> main.go is rerouted to other.go -> X; its provenance records
+	// the original dependency so the edge can keep its label.
+	assert.Equal(t, []depgraph.FileEdge{
+		{From: "/project/other.go", To: "/project/main.go"},
+	}, result.EdgeOrigins[depgraph.FileEdge{From: "/project/other.go", To: "X"}])
 
 	adjacency, err := depgraph.AdjacencyList(collapsed)
 	require.NoError(t, err)
@@ -49,12 +55,12 @@ func TestCollapseModules_NoMembersInGraphIsNoop(t *testing.T) {
 		"/project/main.go": {},
 	})
 
-	collapsed, moduleMembers, err := depgraph.CollapseModules(graph, []depgraph.Module{
+	collapsed, result, err := depgraph.CollapseModules(graph, []depgraph.Module{
 		{Name: "X", Files: []string{"/project/absent.go"}},
 	})
 	require.NoError(t, err)
 
-	assert.Empty(t, moduleMembers)
+	assert.Empty(t, result.Members)
 
 	adjacency, err := depgraph.AdjacencyList(collapsed)
 	require.NoError(t, err)
