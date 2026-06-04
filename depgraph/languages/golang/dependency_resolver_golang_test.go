@@ -142,6 +142,77 @@ func Version() string {
 	assert.Contains(t, mainDeps, sharedPath)
 }
 
+func TestBuildDependencyGraph_GoTypeReachesItsMethodProviders(t *testing.T) {
+	// Go splits a type and (some of) its methods across files. The factory
+	// in formatter.go constructs &dotFormatter{}; the dotFormatter behaviour
+	// lives in formatter_dot.go as methods on that type. A method file defines
+	// no package-level symbol anyone references, so nothing edges *into* it —
+	// the only edge runs method -> type (the receiver reference). Without a
+	// type -> method edge, reaching the type (e.g. via the constructor) never
+	// reaches its behaviour, and formatter_dot.go silently drops out of the
+	// graph. Assert the type's file reaches the files that add methods to it.
+	goModPath := filepath.Clean("/virtual/go.mod")
+	typePath := filepath.Clean("/virtual/formatters/formatter.go")
+	methodPath := filepath.Clean("/virtual/formatters/formatter_dot.go")
+
+	reader := mapContentReader(map[string]string{
+		goModPath: "module fmtmod\n\ngo 1.25\n",
+		typePath: `package formatters
+
+type dotFormatter struct{}
+
+func NewFormatter() *dotFormatter {
+	return &dotFormatter{}
+}
+`,
+		methodPath: `package formatters
+
+func (f *dotFormatter) Format() string {
+	return "dot"
+}
+`,
+	})
+
+	files := []string{typePath, methodPath}
+	graph, err := depgraph.BuildDependencyGraph(files, reader)
+	require.NoError(t, err)
+
+	adj := mustAdjacency(t, graph)
+	assert.Contains(t, adj[typePath], methodPath,
+		"the file defining a type should reach the files that add methods to that type")
+}
+
+func TestBuildDependencyGraph_GoMethodOwnershipNeverEdgesToTestFile(t *testing.T) {
+	// A _test.go in the production package may add methods to a production
+	// type. Method-ownership must not turn that into a production -> test edge:
+	// production code never depends on tests.
+	goModPath := filepath.Clean("/virtual/go.mod")
+	typePath := filepath.Clean("/virtual/widget/widget.go")
+	testMethodPath := filepath.Clean("/virtual/widget/widget_test.go")
+
+	reader := mapContentReader(map[string]string{
+		goModPath: "module widgetmod\n\ngo 1.25\n",
+		typePath: `package widget
+
+type Widget struct{}
+`,
+		testMethodPath: `package widget
+
+func (w *Widget) testOnlyHelper() string {
+	return "test"
+}
+`,
+	})
+
+	files := []string{typePath, testMethodPath}
+	graph, err := depgraph.BuildDependencyGraph(files, reader)
+	require.NoError(t, err)
+
+	adj := mustAdjacency(t, graph)
+	assert.NotContains(t, adj[typePath], testMethodPath,
+		"a production type file must never gain an edge to a test method file")
+}
+
 func TestBuildDependencyGraph_GoDotImportResolvesUsedSymbolsOnly(t *testing.T) {
 	tmpDir := t.TempDir()
 

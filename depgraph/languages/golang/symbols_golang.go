@@ -14,10 +14,11 @@ import (
 
 // GoSymbolInfo tracks symbols defined and referenced in a Go file
 type GoSymbolInfo struct {
-	FilePath   string
-	Package    string
-	Defined    map[string]bool // Symbols defined in this file
-	Referenced map[string]bool // Symbols referenced in this file
+	FilePath        string
+	Package         string
+	Defined         map[string]bool // Symbols defined in this file
+	Referenced      map[string]bool // Symbols referenced in this file
+	MethodReceivers map[string]bool // Receiver type names of methods defined here
 }
 
 // GoExportInfo tracks exported symbols and import usage in a Go file
@@ -122,26 +123,60 @@ func ExtractGoSymbolsFromContent(filePath string, content []byte) (*GoSymbolInfo
 	return extractSymbolsFromAST(filePath, node)
 }
 
+// receiverTypeName returns the bare type name of a method receiver,
+// unwrapping a pointer receiver and dropping generic type parameters:
+//
+//	(f *dotFormatter)  -> "dotFormatter"
+//	(f dotFormatter)   -> "dotFormatter"
+//	(s *Stack[T])      -> "Stack"
+//
+// Returns "" if the receiver shape isn't a plain (possibly generic) type name.
+func receiverTypeName(recv *ast.FieldList) string {
+	if recv == nil || len(recv.List) == 0 {
+		return ""
+	}
+	expr := recv.List[0].Type
+	if star, ok := expr.(*ast.StarExpr); ok {
+		expr = star.X
+	}
+	switch e := expr.(type) {
+	case *ast.IndexExpr:
+		expr = e.X
+	case *ast.IndexListExpr:
+		expr = e.X
+	}
+	if ident, ok := expr.(*ast.Ident); ok {
+		return ident.Name
+	}
+	return ""
+}
+
 // extractSymbolsFromAST extracts symbols from a parsed AST
 func extractSymbolsFromAST(filePath string, node *ast.File) (*GoSymbolInfo, error) {
 
 	info := &GoSymbolInfo{
-		FilePath:   filePath,
-		Package:    node.Name.Name,
-		Defined:    make(map[string]bool),
-		Referenced: make(map[string]bool),
+		FilePath:        filePath,
+		Package:         node.Name.Name,
+		Defined:         make(map[string]bool),
+		Referenced:      make(map[string]bool),
+		MethodReceivers: make(map[string]bool),
 	}
 
 	// Extract defined symbols (top-level declarations)
 	for _, decl := range node.Decls {
 		switch d := decl.(type) {
 		case *ast.FuncDecl:
-			// Only track top-level functions, not methods
+			// Only track top-level functions, not methods, as defined symbols.
 			// Methods are scoped to their receiver type and don't create
-			// package-level dependencies (e.g., DOTFormatter.Format is different
-			// from JSONFormatter.Format, even though both are named "Format")
+			// package-level symbol dependencies (e.g., DOTFormatter.Format is
+			// different from JSONFormatter.Format, even though both are named
+			// "Format"). We still record the receiver type name, so the file
+			// that defines the type can be linked to the files that add methods
+			// to it (see method-ownership edges in buildPackageDependencies).
 			if d.Recv == nil {
 				info.Defined[d.Name.Name] = true
+			} else if recv := receiverTypeName(d.Recv); recv != "" {
+				info.MethodReceivers[recv] = true
 			}
 		case *ast.GenDecl:
 			// Type, const, var, or import
@@ -528,36 +563,59 @@ func buildPackageDependencies(
 		}
 	}
 
-	dependencies := make(map[string][]string)
-
-	// For non-test files, only allow dependencies on other non-test files.
+	// Accumulate each file's dependency set, then flatten once at the end, so
+	// reference edges and method-ownership edges can both contribute.
+	depSets := make(map[string]map[string]bool)
 	for _, info := range nonTestFiles {
-		deps := make(map[string]bool)
-		for symbol := range info.Referenced {
-			if definingFiles, ok := nonTestSymbolToFiles[symbol]; ok {
-				for _, defFile := range definingFiles {
-					if defFile != info.FilePath {
-						deps[defFile] = true
-					}
-				}
-			}
-		}
-		dependencies[info.FilePath] = dependencySetToSlice(deps)
+		depSets[info.FilePath] = make(map[string]bool)
+	}
+	for _, info := range testFiles {
+		depSets[info.FilePath] = make(map[string]bool)
 	}
 
-	// For test files, allow dependencies on all files (test and non-test).
-	for _, info := range testFiles {
-		deps := make(map[string]bool)
+	// Reference edges. Non-test files may only depend on other non-test files;
+	// test files may depend on any file (test or non-test).
+	addReferenceEdges := func(info *GoSymbolInfo, symbolToFiles map[string][]string) {
+		deps := depSets[info.FilePath]
 		for symbol := range info.Referenced {
-			if definingFiles, ok := allSymbolToFiles[symbol]; ok {
-				for _, defFile := range definingFiles {
-					if defFile != info.FilePath {
-						deps[defFile] = true
-					}
+			for _, defFile := range symbolToFiles[symbol] {
+				if defFile != info.FilePath {
+					deps[defFile] = true
 				}
 			}
 		}
-		dependencies[info.FilePath] = dependencySetToSlice(deps)
+	}
+	for _, info := range nonTestFiles {
+		addReferenceEdges(info, nonTestSymbolToFiles)
+	}
+	for _, info := range testFiles {
+		addReferenceEdges(info, allSymbolToFiles)
+	}
+
+	// Method-ownership edges. A type and its methods may live in different
+	// files of the same package. A method file defines no package-level symbol
+	// that anyone references, so the reference pass never edges into it — its
+	// only edge runs method -> type (the receiver reference). Add the reverse,
+	// type -> method, so reaching the type reaches the behaviour attached to
+	// it. Without this, a constructor-reached type drops all of its
+	// out-of-file methods (and their private helpers) from the graph.
+	// Only non-test method files, linked to non-test type files: a test file
+	// may define methods on a production type, but production must never gain
+	// an edge to a test file. (Test files already get their method -> type
+	// reference edge from the reference pass above.)
+	for _, info := range nonTestFiles {
+		for recvType := range info.MethodReceivers {
+			for _, typeFile := range nonTestSymbolToFiles[recvType] {
+				if typeFile != info.FilePath {
+					depSets[typeFile][info.FilePath] = true
+				}
+			}
+		}
+	}
+
+	dependencies := make(map[string][]string, len(depSets))
+	for file, deps := range depSets {
+		dependencies[file] = dependencySetToSlice(deps)
 	}
 
 	return dependencies
