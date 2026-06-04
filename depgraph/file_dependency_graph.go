@@ -26,6 +26,7 @@ type FileMetadata struct {
 	Stats     *vcs.FileStats
 	IsTest    bool
 	IsPruned  bool
+	IsModule  bool
 	Extension string
 	Phantom   *PhantomMetadata
 }

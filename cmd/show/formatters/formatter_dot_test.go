@@ -36,6 +36,27 @@ func TestDependencyGraph_ToDOT(t *testing.T) {
 	g.Assert(t, t.Name(), []byte(output))
 }
 
+func TestDependencyGraph_ToDOT_ModuleNodeUsesComponentShape(t *testing.T) {
+	graph := testFileGraph(t, map[string][]string{
+		"X":                   {"/project/util.dart"},
+		"/project/util.dart":  {},
+		"/project/other.dart": {"X"},
+	}, nil)
+
+	moduleMeta := graph.Meta.Files["X"]
+	moduleMeta.IsModule = true
+	graph.Meta.Files["X"] = moduleMeta
+
+	formatter := dotFormatter{}
+	output, err := formatter.Format(graph, RenderOptions{})
+	require.NoError(t, err)
+
+	require.Contains(t, output, "\"X\" [label=\"X\", shape=component, style=filled, fillcolor=lightyellow];")
+
+	g := testhelpers.DotGoldie(t)
+	g.Assert(t, t.Name(), []byte(output))
+}
+
 func TestDependencyGraph_ToDOT_CustomDirection(t *testing.T) {
 	graph := testFileGraph(t, map[string][]string{
 		"/project/main.dart": {"/project/utils.dart"},

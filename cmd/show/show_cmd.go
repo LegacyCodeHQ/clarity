@@ -39,6 +39,7 @@ type graphOptions struct {
 	scope        string
 	pruneFiles   []string
 	alsoPatterns []string
+	modules      []string
 	edgeLabels   bool
 	noStats      bool
 	noPhantom    bool
@@ -109,6 +110,7 @@ func NewCommand() *cobra.Command {
 	cmd.Flags().StringVar(&opts.scope, "scope", opts.scope, "Dependency scope for --file (downstream only)")
 	cmd.Flags().StringSliceVar(&opts.pruneFiles, "prune", nil, "Show node but skip its subtree (requires --file; shown with dashed border)")
 	cmd.Flags().StringSliceVar(&opts.alsoPatterns, "also", nil, "Include files matching glob patterns that connect to --file graph (requires --file)")
+	cmd.Flags().StringArrayVar(&opts.modules, "module", nil, "Group files into a named module rendered as a cluster (format: name=file1,file2; repeatable)")
 	cmd.Flags().BoolVar(&opts.edgeLabels, "label", false, "Add deterministic short labels to edges")
 	cmd.Flags().BoolVar(&opts.noStats, "no-stats", false, "Skip file addition/deletion statistics for faster rendering")
 	cmd.Flags().BoolVar(&opts.noPhantom, "no-phantom", false, "Suppress phantom test nodes (Rust files with #[cfg(test)] regions are rendered as a single node)")
@@ -200,6 +202,24 @@ func runGraph(cmd *cobra.Command, opts *graphOptions) error {
 		return err
 	}
 
+	// Derive the render base path from real files before any collapse, so a
+	// synthetic module node (not rooted under the repo) cannot defeat the
+	// relative-path detection used to shorten node labels.
+	renderBasePath := resolveRenderBasePath(opts.repoPath, filePaths)
+
+	var moduleNodes []string
+	if len(opts.modules) > 0 {
+		modules, err := buildModules(opts.modules, pathResolver)
+		if err != nil {
+			return err
+		}
+		graph, moduleNodes, err = depgraph.CollapseModules(graph, modules)
+		if err != nil {
+			return err
+		}
+		filePaths = graphFiles(graph)
+	}
+
 	format, ok := formatters.ParseOutputFormat(opts.outputFormat)
 	if !ok {
 		return fmt.Errorf("unknown format: %s (valid options: %s)", opts.outputFormat, formatters.SupportedFormats())
@@ -218,6 +238,13 @@ func runGraph(cmd *cobra.Command, opts *graphOptions) error {
 		}
 	}
 
+	for _, node := range moduleNodes {
+		if md, ok := fileGraph.Meta.Files[node]; ok {
+			md.IsModule = true
+			fileGraph.Meta.Files[node] = md
+		}
+	}
+
 	if !opts.noPhantom {
 		annotateRustPhantoms(&fileGraph, opts, contentReader, fromCommit, toCommit, isCommitRange)
 	}
@@ -231,7 +258,7 @@ func runGraph(cmd *cobra.Command, opts *graphOptions) error {
 	renderOpts := formatters.RenderOptions{
 		Label:      label,
 		Direction:  direction,
-		BasePath:   resolveRenderBasePath(opts.repoPath, filePaths),
+		BasePath:   renderBasePath,
 		EdgeLabels: opts.edgeLabels,
 	}
 
@@ -774,6 +801,39 @@ func matchAlsoPattern(pattern, relPath string) bool {
 	}
 	matched, _ := filepath.Match(pattern, filepath.Base(relPath))
 	return matched
+}
+
+// buildModules parses --module specs (name=file1,file2) and resolves each
+// file to an absolute graph-node path. Files need not exist in the graph;
+// AssignModules drops any that are absent post-construction.
+func buildModules(specs []string, pathResolver PathResolver) ([]depgraph.Module, error) {
+	modules := make([]depgraph.Module, 0, len(specs))
+	for _, spec := range specs {
+		name, rawFiles, ok := strings.Cut(spec, "=")
+		name = strings.TrimSpace(name)
+		if !ok || name == "" {
+			return nil, fmt.Errorf("invalid --module %q: expected format name=file1,file2", spec)
+		}
+
+		var files []string
+		for _, raw := range strings.Split(rawFiles, ",") {
+			raw = strings.TrimSpace(raw)
+			if raw == "" {
+				continue
+			}
+			resolved, err := pathResolver.Resolve(RawPath(raw))
+			if err != nil {
+				return nil, fmt.Errorf("failed to resolve module file %q: %w", raw, err)
+			}
+			files = append(files, resolved.String())
+		}
+
+		if len(files) == 0 {
+			return nil, fmt.Errorf("invalid --module %q: no files specified", spec)
+		}
+		modules = append(modules, depgraph.Module{Name: name, Files: files})
+	}
+	return modules, nil
 }
 
 func applyBetweenFilter(opts *graphOptions, pathResolver PathResolver, graph depgraph.DependencyGraph, filePaths []string) (depgraph.DependencyGraph, []string, error) {

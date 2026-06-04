@@ -150,6 +150,13 @@ func (f *dotFormatter) Format(g depgraph.FileDependencyGraph, opts RenderOptions
 				color = "white"
 			}
 
+			// Module nodes are synthetic (a collapsed set of files), so give
+			// them a fixed fill rather than an extension-derived one.
+			isModule := hasFileMetadata && fileMetadata.IsModule
+			if isModule {
+				color = "lightyellow"
+			}
+
 			// Build node label with file stats if available
 			nodeLabel := nodeNames[source]
 			if hasFileMetadata && fileMetadata.Stats != nil {
@@ -183,6 +190,14 @@ func (f *dotFormatter) Format(g depgraph.FileDependencyGraph, opts RenderOptions
 				!fileMetadata.Phantom.ProdChanged
 
 			switch {
+			case isModule:
+				// A module renders as a single component-shaped node; keep the
+				// red cycle border when the collapsed node participates in one.
+				moduleBorder := ""
+				if cycleNodes[source] {
+					moduleBorder = ", color=red"
+				}
+				sb.WriteString(fmt.Sprintf("  %q [label=%q, shape=component, style=filled, fillcolor=%s%s];\n", sourceNodeKey, nodeLabel, color, moduleBorder))
 			case hasFileMetadata && fileMetadata.IsPruned && cycleNodes[source]:
 				sb.WriteString(fmt.Sprintf("  %q [label=%q, style=\"filled,dashed\", fillcolor=%s, color=red];\n", sourceNodeKey, nodeLabel, color))
 			case hasFileMetadata && fileMetadata.IsPruned:
