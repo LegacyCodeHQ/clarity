@@ -1,6 +1,10 @@
 package depgraph
 
-import "sort"
+import (
+	"sort"
+
+	"github.com/LegacyCodeHQ/clarity/vcs"
+)
 
 // Module is a user-named set of files projected onto the dependency graph.
 // Files holds graph node keys (the same absolute paths used as graph vertices).
@@ -20,22 +24,23 @@ type Module struct {
 // lets cycles, edges, and stats recompute naturally against the collapsed
 // shape, so a module reads as a single opaque node in the rendered graph.
 //
-// It returns the collapsed graph and the sorted node keys of the modules that
-// were actually created (those with at least one member in the graph), so the
-// caller can mark them as module nodes for rendering.
-func CollapseModules(g DependencyGraph, modules []Module) (DependencyGraph, []string, error) {
+// It returns the collapsed graph and, for each module actually created (those
+// with at least one member in the graph), the sorted member file paths that
+// were collapsed into it, so the caller can annotate the module node with its
+// file count and aggregated churn.
+func CollapseModules(g DependencyGraph, modules []Module) (DependencyGraph, map[string][]string, error) {
 	adjacency, err := AdjacencyList(g)
 	if err != nil {
 		return nil, nil, err
 	}
 
 	memberToModule := make(map[string]string)
-	moduleNodeSet := make(map[string]bool)
+	moduleMembers := make(map[string][]string)
 	for _, module := range modules {
 		for _, file := range module.Files {
 			if _, ok := adjacency[file]; ok {
 				memberToModule[file] = module.Name
-				moduleNodeSet[module.Name] = true
+				moduleMembers[module.Name] = append(moduleMembers[module.Name], file)
 			}
 		}
 	}
@@ -80,15 +85,37 @@ func CollapseModules(g DependencyGraph, modules []Module) (DependencyGraph, []st
 		collapsed[node] = deps
 	}
 
-	moduleNodes := make([]string, 0, len(moduleNodeSet))
-	for name := range moduleNodeSet {
-		moduleNodes = append(moduleNodes, name)
+	for name := range moduleMembers {
+		sort.Strings(moduleMembers[name])
 	}
-	sort.Strings(moduleNodes)
 
 	graph, err := NewDependencyGraphFromAdjacency(collapsed)
 	if err != nil {
 		return nil, nil, err
 	}
-	return graph, moduleNodes, nil
+	return graph, moduleMembers, nil
+}
+
+// AnnotateModule marks a collapsed module node and records its file count and
+// aggregated churn, summed from the per-file stats of its members. Members
+// without a stats entry (unchanged files) still count toward the file total.
+func (fg *FileDependencyGraph) AnnotateModule(moduleNode string, members []string, fileStats map[string]vcs.FileStats) {
+	md, ok := fg.Meta.Files[moduleNode]
+	if !ok {
+		return
+	}
+
+	md.IsModule = true
+	md.ModuleFileCount = len(members)
+
+	var additions, deletions int
+	for _, member := range members {
+		if stats, ok := fileStats[member]; ok {
+			additions += stats.Additions
+			deletions += stats.Deletions
+		}
+	}
+	md.Stats = &vcs.FileStats{Additions: additions, Deletions: deletions}
+
+	fg.Meta.Files[moduleNode] = md
 }

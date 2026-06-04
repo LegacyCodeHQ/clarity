@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/LegacyCodeHQ/clarity/depgraph"
+	"github.com/LegacyCodeHQ/clarity/vcs"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -16,12 +17,14 @@ func TestCollapseModules_MergesMembersIntoSingleNode(t *testing.T) {
 		"/project/other.go": {"/project/main.go"},
 	})
 
-	collapsed, moduleNodes, err := depgraph.CollapseModules(graph, []depgraph.Module{
+	collapsed, moduleMembers, err := depgraph.CollapseModules(graph, []depgraph.Module{
 		{Name: "X", Files: []string{"/project/main.go", "/project/mod.go"}},
 	})
 	require.NoError(t, err)
 
-	assert.Equal(t, []string{"X"}, moduleNodes)
+	assert.Equal(t, map[string][]string{
+		"X": {"/project/main.go", "/project/mod.go"},
+	}, moduleMembers)
 
 	adjacency, err := depgraph.AdjacencyList(collapsed)
 	require.NoError(t, err)
@@ -46,16 +49,37 @@ func TestCollapseModules_NoMembersInGraphIsNoop(t *testing.T) {
 		"/project/main.go": {},
 	})
 
-	collapsed, moduleNodes, err := depgraph.CollapseModules(graph, []depgraph.Module{
+	collapsed, moduleMembers, err := depgraph.CollapseModules(graph, []depgraph.Module{
 		{Name: "X", Files: []string{"/project/absent.go"}},
 	})
 	require.NoError(t, err)
 
-	assert.Empty(t, moduleNodes)
+	assert.Empty(t, moduleMembers)
 
 	adjacency, err := depgraph.AdjacencyList(collapsed)
 	require.NoError(t, err)
 
 	require.Contains(t, adjacency, "/project/main.go")
 	assert.NotContains(t, adjacency, "X")
+}
+
+func TestAnnotateModule_AggregatesMemberChurn(t *testing.T) {
+	fileGraph, err := depgraph.NewFileDependencyGraph(depgraph.MustDependencyGraph(map[string][]string{
+		"X":                {"/project/util.go"},
+		"/project/util.go": {},
+	}), nil, nil)
+	require.NoError(t, err)
+
+	fileGraph.AnnotateModule("X", []string{"/project/a.go", "/project/b.go", "/project/c.go"}, map[string]vcs.FileStats{
+		"/project/a.go": {Additions: 30, Deletions: 5},
+		"/project/b.go": {Additions: 20, Deletions: 5},
+		// c.go has no stats entry (unchanged file); it still counts toward the total.
+	})
+
+	md := fileGraph.Meta.Files["X"]
+	assert.True(t, md.IsModule)
+	assert.Equal(t, 3, md.ModuleFileCount)
+	require.NotNil(t, md.Stats)
+	assert.Equal(t, 50, md.Stats.Additions)
+	assert.Equal(t, 10, md.Stats.Deletions)
 }

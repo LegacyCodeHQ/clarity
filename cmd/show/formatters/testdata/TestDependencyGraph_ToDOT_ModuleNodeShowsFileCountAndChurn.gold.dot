@@ -1,0 +1,9 @@
+digraph dependencies {
+  rankdir=LR;
+  node [shape=box];
+
+  "/project/util.dart" [label="util.dart", style=filled, fillcolor=white];
+  "X" [label="X\n3 files\n+50 -10", shape=component, style=filled, fillcolor=lightyellow];
+
+  "X" -> "/project/util.dart";
+}

@@ -23,12 +23,13 @@ type FileGraphMetadata struct {
 
 // FileMetadata holds metadata for a single file node.
 type FileMetadata struct {
-	Stats     *vcs.FileStats
-	IsTest    bool
-	IsPruned  bool
-	IsModule  bool
-	Extension string
-	Phantom   *PhantomMetadata
+	Stats           *vcs.FileStats
+	IsTest          bool
+	IsPruned        bool
+	IsModule        bool
+	ModuleFileCount int
+	Extension       string
+	Phantom         *PhantomMetadata
 }
 
 // PhantomMetadata describes a sibling "phantom" node attached to a file to
