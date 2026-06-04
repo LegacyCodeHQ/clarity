@@ -49,7 +49,7 @@ func buildDOTGraph(repoPath string, opts *watchOptions, formatter formatters.For
 
 	if !opts.noPhantom {
 		if diffs, diffErr := git.GetUncommittedFileDiffs(repoPath); diffErr == nil {
-			fileGraph.AnnotateRustPhantomsWatch(diffs, git.GitCommitContentReader(repoPath, "HEAD"), contentReader)
+			depgraph.AnnotateRustPhantomsWatch(&fileGraph, diffs, git.GitCommitContentReader(repoPath, "HEAD"), contentReader)
 		}
 	}
 

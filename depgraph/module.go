@@ -128,7 +128,11 @@ func sortFileEdges(edges []FileEdge) {
 // AnnotateModule marks a collapsed module node and records its file count and
 // aggregated churn, summed from the per-file stats of its members. Members
 // without a stats entry (unchanged files) still count toward the file total.
-func (fg *FileDependencyGraph) AnnotateModule(moduleNode string, members []string, fileStats map[string]vcs.FileStats) {
+//
+// It is a free function rather than a method so the core FileDependencyGraph
+// type does not gain module-specific API from this file (which would couple
+// the core graph back to the module feature).
+func AnnotateModule(fg *FileDependencyGraph, moduleNode string, members []string, fileStats map[string]vcs.FileStats) {
 	md, ok := fg.Meta.Files[moduleNode]
 	if !ok {
 		return

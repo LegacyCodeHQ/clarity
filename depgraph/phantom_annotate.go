@@ -11,7 +11,10 @@ import (
 // graph whose contents include a `#[cfg(test)]` region. Intended for
 // `clarity show` (point-in-time) usage where the presence of an in-file test
 // region is enough to render the phantom node.
-func (g *FileDependencyGraph) AnnotateRustPhantomsShow(contentReader vcs.ContentReader) {
+//
+// A free function rather than a method, so the core FileDependencyGraph type
+// does not accrete phantom-specific API from this file.
+func AnnotateRustPhantomsShow(g *FileDependencyGraph, contentReader vcs.ContentReader) {
 	if contentReader == nil {
 		return
 	}
@@ -36,7 +39,8 @@ func (g *FileDependencyGraph) AnnotateRustPhantomsShow(contentReader vcs.Content
 // graph using watch-mode rules: the phantom is added only when the file's
 // test region has additions or deletions in the supplied diff. The file's
 // own Stats are also rewritten to reflect the prod-side split.
-func (g *FileDependencyGraph) AnnotateRustPhantomsWatch(
+func AnnotateRustPhantomsWatch(
+	g *FileDependencyGraph,
 	diffs map[string]vcs.FileDiff,
 	oldContent vcs.ContentReader,
 	newContent vcs.ContentReader,

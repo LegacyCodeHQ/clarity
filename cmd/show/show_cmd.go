@@ -239,7 +239,7 @@ func runGraph(cmd *cobra.Command, opts *graphOptions) error {
 	}
 
 	for moduleNode, members := range collapse.Members {
-		fileGraph.AnnotateModule(moduleNode, members, fileStats)
+		depgraph.AnnotateModule(&fileGraph, moduleNode, members, fileStats)
 	}
 	fileGraph.Meta.EdgeOrigins = collapse.EdgeOrigins
 
@@ -641,7 +641,7 @@ func annotateRustPhantoms(
 	isCommitRange bool,
 ) {
 	if opts.commitID == "" || toCommit == "" {
-		fg.AnnotateRustPhantomsShow(newContent)
+		depgraph.AnnotateRustPhantomsShow(fg, newContent)
 		return
 	}
 
@@ -659,10 +659,10 @@ func annotateRustPhantoms(
 	}
 
 	if err != nil {
-		fg.AnnotateRustPhantomsShow(newContent)
+		depgraph.AnnotateRustPhantomsShow(fg, newContent)
 		return
 	}
-	fg.AnnotateRustPhantomsWatch(diffs, oldContent, newContent)
+	depgraph.AnnotateRustPhantomsWatch(fg, diffs, oldContent, newContent)
 }
 
 func applyTargetFileFilter(opts *graphOptions, pathResolver PathResolver, graph depgraph.DependencyGraph, filePaths []string) (depgraph.DependencyGraph, []string, map[string]bool, error) {

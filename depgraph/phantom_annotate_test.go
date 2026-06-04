@@ -51,7 +51,7 @@ func TestAnnotateRustPhantomsShow(t *testing.T) {
 	fg, err := depgraph.NewFileDependencyGraph(graph, nil, contentReader)
 	require.NoError(t, err)
 
-	fg.AnnotateRustPhantomsShow(contentReader)
+	depgraph.AnnotateRustPhantomsShow(&fg, contentReader)
 
 	libMeta, ok := fg.Meta.Files["/project/src/lib.rs"]
 	require.True(t, ok)
@@ -83,7 +83,7 @@ func TestAnnotateRustPhantomsShow_SkipsTestFiles(t *testing.T) {
 	// must not get a phantom of its own.
 	require.True(t, fg.Meta.Files["/project/tests/integ.rs"].IsTest)
 
-	fg.AnnotateRustPhantomsShow(contentReader)
+	depgraph.AnnotateRustPhantomsShow(&fg, contentReader)
 
 	assert.Nil(t, fg.Meta.Files["/project/tests/integ.rs"].Phantom, "test-classified files get no phantom")
 	assert.NotNil(t, fg.Meta.Files["/project/src/lib.rs"].Phantom, "regular .rs file with test region gets phantom")
@@ -96,7 +96,7 @@ func TestAnnotateRustPhantomsShow_NilContentReader(t *testing.T) {
 	fg, err := depgraph.NewFileDependencyGraph(graph, nil, nil)
 	require.NoError(t, err)
 
-	fg.AnnotateRustPhantomsShow(nil)
+	depgraph.AnnotateRustPhantomsShow(&fg, nil)
 
 	libMeta := fg.Meta.Files["/project/src/lib.rs"]
 	assert.Nil(t, libMeta.Phantom)
@@ -116,7 +116,7 @@ func TestAnnotateRustPhantomsWatch_TestOnly(t *testing.T) {
 		return []byte(rustWithTests), nil
 	}
 
-	fg.AnnotateRustPhantomsWatch(diffs, reader, reader)
+	depgraph.AnnotateRustPhantomsWatch(&fg, diffs, reader, reader)
 
 	meta := fg.Meta.Files["/project/src/lib.rs"]
 	require.NotNil(t, meta.Stats, "prod stats are reset even when prod has no changes")
@@ -143,7 +143,7 @@ func TestAnnotateRustPhantomsWatch_ProdOnly(t *testing.T) {
 		return []byte(rustWithTests), nil
 	}
 
-	fg.AnnotateRustPhantomsWatch(diffs, reader, reader)
+	depgraph.AnnotateRustPhantomsWatch(&fg, diffs, reader, reader)
 
 	meta := fg.Meta.Files["/project/src/lib.rs"]
 	require.NotNil(t, meta.Stats)
@@ -165,7 +165,7 @@ func TestAnnotateRustPhantomsWatch_BothChanged(t *testing.T) {
 		return []byte(rustWithTests), nil
 	}
 
-	fg.AnnotateRustPhantomsWatch(diffs, reader, reader)
+	depgraph.AnnotateRustPhantomsWatch(&fg, diffs, reader, reader)
 
 	meta := fg.Meta.Files["/project/src/lib.rs"]
 	require.NotNil(t, meta.Stats)
@@ -192,7 +192,7 @@ func TestAnnotateRustPhantomsWatch_NewFile(t *testing.T) {
 	emptyOld := func(path string) ([]byte, error) { return nil, errors.New("does not exist") }
 	newReader := func(path string) ([]byte, error) { return []byte(rustWithTests), nil }
 
-	fg.AnnotateRustPhantomsWatch(diffs, emptyOld, newReader)
+	depgraph.AnnotateRustPhantomsWatch(&fg, diffs, emptyOld, newReader)
 
 	meta := fg.Meta.Files["/project/src/lib.rs"]
 	require.NotNil(t, meta.Stats)

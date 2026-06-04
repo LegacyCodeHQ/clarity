@@ -76,7 +76,7 @@ func TestAnnotateModule_AggregatesMemberChurn(t *testing.T) {
 	}), nil, nil)
 	require.NoError(t, err)
 
-	fileGraph.AnnotateModule("X", []string{"/project/a.go", "/project/b.go", "/project/c.go"}, map[string]vcs.FileStats{
+	depgraph.AnnotateModule(&fileGraph, "X", []string{"/project/a.go", "/project/b.go", "/project/c.go"}, map[string]vcs.FileStats{
 		"/project/a.go": {Additions: 30, Deletions: 5},
 		"/project/b.go": {Additions: 20, Deletions: 5},
 		// c.go has no stats entry (unchanged file); it still counts toward the total.
