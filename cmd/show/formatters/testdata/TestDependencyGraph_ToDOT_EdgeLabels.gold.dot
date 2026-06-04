@@ -6,7 +6,7 @@ digraph dependencies {
   "/project/b.go" [label="b.go", style=filled, fillcolor=white];
   "/project/c.go" [label="c.go", style=filled, fillcolor=white];
 
-  "/project/a.go" -> "/project/b.go" [label="ckw"];
-  "/project/a.go" -> "/project/c.go" [label="hrj"];
-  "/project/b.go" -> "/project/c.go" [label="gec"];
+  "/project/a.go" -> "/project/b.go" [label="wki"];
+  "/project/a.go" -> "/project/c.go" [label="lcj"];
+  "/project/b.go" -> "/project/c.go" [label="bow"];
 }

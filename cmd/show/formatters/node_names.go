@@ -1,8 +1,11 @@
 package formatters
 
 import (
+	"fmt"
 	"path/filepath"
 	"strings"
+
+	"github.com/LegacyCodeHQ/clarity/depgraph"
 )
 
 // BuildNodeNames returns stable, distinct display names for file paths.
@@ -59,4 +62,49 @@ func pathSuffix(path string, depth int) string {
 		depth = len(parts)
 	}
 	return strings.Join(parts[len(parts)-depth:], "/")
+}
+
+// nodeKey returns the stable identifier used for a node in rendered output:
+// the path relative to basePath when it sits within it, otherwise the path
+// unchanged. Shared by all formatters, so it is also the stable basis for
+// deterministic edge labels.
+func nodeKey(path, basePath string) string {
+	if basePath == "" {
+		return path
+	}
+	rel, err := filepath.Rel(basePath, path)
+	if err != nil {
+		return path
+	}
+	if rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) || filepath.IsAbs(rel) {
+		return path
+	}
+	return rel
+}
+
+// moduleNodeLabel builds the label for a collapsed module node: the module
+// name, the number of files it contains, and the aggregated churn. Lines are
+// joined with sep ("\n" for DOT, "<br/>" for Mermaid).
+func moduleNodeLabel(name string, md depgraph.FileMetadata, sep string) string {
+	label := name
+	if md.ModuleFileCount > 0 {
+		unit := "files"
+		if md.ModuleFileCount == 1 {
+			unit = "file"
+		}
+		label += fmt.Sprintf("%s%d %s", sep, md.ModuleFileCount, unit)
+	}
+	if md.Stats != nil {
+		var parts []string
+		if md.Stats.Additions > 0 {
+			parts = append(parts, fmt.Sprintf("+%d", md.Stats.Additions))
+		}
+		if md.Stats.Deletions > 0 {
+			parts = append(parts, fmt.Sprintf("-%d", md.Stats.Deletions))
+		}
+		if len(parts) > 0 {
+			label += sep + strings.Join(parts, " ")
+		}
+	}
+	return label
 }

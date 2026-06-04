@@ -225,7 +225,10 @@ func (f mermaidFormatter) Format(g depgraph.FileDependencyGraph, opts RenderOpti
 			depID := nodeIDs[depNodeKey]
 			hasEdges = true
 			if opts.EdgeLabels {
-				label := EdgeLabel(sourceNodeKey, depNodeKey)
+				// Hash the stable rendered node key (path-based), not the
+				// display name, so labels stay constant when collapsing files
+				// into a module changes how other names are disambiguated.
+				label := EdgeLabel(nodeKey(source, opts.BasePath), nodeKey(dep, opts.BasePath))
 				edgesSB.WriteString(fmt.Sprintf("    %s -->|%s| %s\n", sourceID, label, depID))
 			} else {
 				edgesSB.WriteString(fmt.Sprintf("    %s --> %s\n", sourceID, depID))

@@ -2,6 +2,7 @@ package formatters
 
 import (
 	"fmt"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -374,6 +375,41 @@ func TestDependencyGraph_ToDOT_EdgeLabels(t *testing.T) {
 
 	g := testhelpers.DotGoldie(t)
 	g.Assert(t, t.Name(), []byte(output))
+}
+
+func TestDependencyGraph_ToDOT_EdgeLabelsStableWhenSiblingCollapsed(t *testing.T) {
+	// main.go -> app/util.go is the edge under test. A second util.go
+	// (lib/util.go) forces display-name disambiguation in the full graph but
+	// vanishes once collapsed into a module. The edge label for the unchanged
+	// main.go -> app/util.go dependency must not change as a result.
+	const base = "/project"
+	adjacency := map[string][]string{
+		"/project/main.go":     {"/project/app/util.go"},
+		"/project/app/util.go": {},
+		"/project/lib/util.go": {"/project/main.go"},
+	}
+
+	full := testFileGraph(t, adjacency, nil)
+	fullOut, err := (&dotFormatter{}).Format(full, RenderOptions{BasePath: base, EdgeLabels: true})
+	require.NoError(t, err)
+
+	collapsedGraph, _, err := depgraph.CollapseModules(testGraph(adjacency), []depgraph.Module{
+		{Name: "M", Files: []string{"/project/lib/util.go"}},
+	})
+	require.NoError(t, err)
+	collapsed, err := depgraph.NewFileDependencyGraph(collapsedGraph, nil, nil)
+	require.NoError(t, err)
+	collapsedOut, err := (&dotFormatter{}).Format(collapsed, RenderOptions{BasePath: base, EdgeLabels: true})
+	require.NoError(t, err)
+
+	labelRE := regexp.MustCompile(`"main\.go" -> "app/util\.go" \[label="([a-z]{3})"\]`)
+	fullMatch := labelRE.FindStringSubmatch(fullOut)
+	collapsedMatch := labelRE.FindStringSubmatch(collapsedOut)
+	require.NotNil(t, fullMatch, "edge not found in full graph output:\n%s", fullOut)
+	require.NotNil(t, collapsedMatch, "edge not found in collapsed graph output:\n%s", collapsedOut)
+
+	require.Equal(t, fullMatch[1], collapsedMatch[1],
+		"edge label for main.go -> app/util.go changed after collapsing an unrelated sibling")
 }
 
 func TestDependencyGraph_ToDOT_DuplicateBaseNamesStayDistinct(t *testing.T) {

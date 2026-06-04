@@ -414,6 +414,35 @@ func TestMermaidFormatter_EdgeLabels(t *testing.T) {
 	g.Assert(t, t.Name(), []byte(output))
 }
 
+func TestMermaidFormatter_EdgeLabelsStableWhenSiblingCollapsed(t *testing.T) {
+	// The main.go -> app/util.go edge label must not change when an unrelated
+	// sibling (lib/util.go) is collapsed into a module, even though doing so
+	// changes how util.go is disambiguated.
+	const base = "/project"
+	adjacency := map[string][]string{
+		"/project/main.go":     {"/project/app/util.go"},
+		"/project/app/util.go": {},
+		"/project/lib/util.go": {"/project/main.go"},
+	}
+
+	full := testFileGraphMermaid(t, adjacency, nil)
+	fullOut, err := mermaidFormatter{}.Format(full, RenderOptions{BasePath: base, EdgeLabels: true})
+	require.NoError(t, err)
+
+	collapsedGraph, _, err := depgraph.CollapseModules(testGraphMermaid(adjacency), []depgraph.Module{
+		{Name: "M", Files: []string{"/project/lib/util.go"}},
+	})
+	require.NoError(t, err)
+	collapsed, err := depgraph.NewFileDependencyGraph(collapsedGraph, nil, nil)
+	require.NoError(t, err)
+	collapsedOut, err := mermaidFormatter{}.Format(collapsed, RenderOptions{BasePath: base, EdgeLabels: true})
+	require.NoError(t, err)
+
+	want := EdgeLabel("main.go", "app/util.go")
+	require.Contains(t, fullOut, "|"+want+"|")
+	require.Contains(t, collapsedOut, "|"+want+"|")
+}
+
 func TestMermaidFormatter_DuplicateBaseNamesStayDistinct(t *testing.T) {
 	graph := testFileGraphMermaid(t, map[string][]string{
 		"/project/test/res.send.js":      {"/project/test/support/utils.js"},

@@ -129,7 +129,7 @@ func (f *dotFormatter) Format(g depgraph.FileDependencyGraph, opts RenderOptions
 	// First, define node styles based on file extensions
 	for _, source := range filePaths {
 		sourceBase := filepath.Base(source)
-		sourceNodeKey := dotNodeKey(source, opts.BasePath)
+		sourceNodeKey := nodeKey(source, opts.BasePath)
 
 		if !styledNodes[sourceNodeKey] {
 			var color string
@@ -219,7 +219,7 @@ func (f *dotFormatter) Format(g depgraph.FileDependencyGraph, opts RenderOptions
 		if !ok || meta.Phantom == nil {
 			continue
 		}
-		sourceKey := dotNodeKey(source, opts.BasePath)
+		sourceKey := nodeKey(source, opts.BasePath)
 		phantomKey := sourceKey + "::tests"
 		phantomLabel := nodeNames[source]
 		if meta.Phantom.Stats != nil {
@@ -261,14 +261,18 @@ func (f *dotFormatter) Format(g depgraph.FileDependencyGraph, opts RenderOptions
 		copy(sortedDeps, deps)
 		sort.Strings(sortedDeps)
 
-		sourceNodeKey := dotNodeKey(source, opts.BasePath)
+		sourceNodeKey := nodeKey(source, opts.BasePath)
 		for _, dep := range sortedDeps {
-			depNodeKey := dotNodeKey(dep, opts.BasePath)
+			depNodeKey := nodeKey(dep, opts.BasePath)
 			edgeMD := g.Meta.Edges[depgraph.FileEdge{From: source, To: dep}]
 
 			var attrs []string
 			if opts.EdgeLabels {
-				attrs = append(attrs, fmt.Sprintf("label=%q", EdgeLabel(nodeNames[source], nodeNames[dep])))
+				// Hash the stable rendered node key (path-based), not the
+				// display name, so an edge keeps its label even when an
+				// unrelated file is collapsed into a module and disambiguation
+				// of other names changes.
+				attrs = append(attrs, fmt.Sprintf("label=%q", EdgeLabel(sourceNodeKey, depNodeKey)))
 			}
 			if edgeMD.InCycle {
 				attrs = append(attrs, "color=red", "style=dashed")
@@ -324,45 +328,4 @@ func (f *dotFormatter) assignExtensionColors(filePaths []string) map[string]stri
 		currentExtensions[ext] = f.extensionColors[ext]
 	}
 	return currentExtensions
-}
-
-// moduleNodeLabel builds the label for a collapsed module node: the module
-// name, the number of files it contains, and the aggregated churn. Lines are
-// joined with sep ("\n" for DOT, "<br/>" for Mermaid).
-func moduleNodeLabel(name string, md depgraph.FileMetadata, sep string) string {
-	label := name
-	if md.ModuleFileCount > 0 {
-		unit := "files"
-		if md.ModuleFileCount == 1 {
-			unit = "file"
-		}
-		label += fmt.Sprintf("%s%d %s", sep, md.ModuleFileCount, unit)
-	}
-	if md.Stats != nil {
-		var parts []string
-		if md.Stats.Additions > 0 {
-			parts = append(parts, fmt.Sprintf("+%d", md.Stats.Additions))
-		}
-		if md.Stats.Deletions > 0 {
-			parts = append(parts, fmt.Sprintf("-%d", md.Stats.Deletions))
-		}
-		if len(parts) > 0 {
-			label += sep + strings.Join(parts, " ")
-		}
-	}
-	return label
-}
-
-func dotNodeKey(path, basePath string) string {
-	if basePath == "" {
-		return path
-	}
-	rel, err := filepath.Rel(basePath, path)
-	if err != nil {
-		return path
-	}
-	if rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) || filepath.IsAbs(rel) {
-		return path
-	}
-	return rel
 }
