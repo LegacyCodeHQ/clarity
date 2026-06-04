@@ -1,0 +1,12 @@
+flowchart LR
+    n0["other.dart"]
+    n1["util.dart"]
+    n2[["X<br/>3 files<br/>+50 -10"]]
+
+    n0 --> n2
+    n2 --> n1
+
+    classDef majorityExtension fill:#FFFFFF,stroke:#999999,color:#000000
+    class n0,n1 majorityExtension
+    classDef moduleNode fill:#FFFFE0,stroke:#999999,color:#000000
+    class n2 moduleNode

@@ -122,9 +122,14 @@ func (f mermaidFormatter) Format(g depgraph.FileDependencyGraph, opts RenderOpti
 		nodeID := nodeIDs[sourceNodeKey]
 
 		if !definedNodes[sourceNodeKey] {
+			fileMetadata, hasFileMetadata := g.Meta.Files[source]
+			isModule := hasFileMetadata && fileMetadata.IsModule
+
 			// Build node label with file stats if available
 			nodeLabel := nodeNames[source]
-			if fileMetadata, ok := g.Meta.Files[source]; ok && fileMetadata.Stats != nil {
+			if isModule {
+				nodeLabel = moduleNodeLabel(nodeNames[source], fileMetadata, "<br/>")
+			} else if hasFileMetadata && fileMetadata.Stats != nil {
 				stats := *fileMetadata.Stats
 				labelPrefix := nodeLabel
 				if stats.IsNew {
@@ -152,7 +157,13 @@ func (f mermaidFormatter) Format(g depgraph.FileDependencyGraph, opts RenderOpti
 			// Escape quotes in labels
 			nodeLabel = strings.ReplaceAll(nodeLabel, "\"", "#quot;")
 
-			sb.WriteString(fmt.Sprintf("    %s[\"%s\"]\n", nodeID, nodeLabel))
+			// Module nodes use the subroutine shape ([[ ]]) to read as a
+			// collapsed container, distinct from plain file nodes.
+			if isModule {
+				sb.WriteString(fmt.Sprintf("    %s[[\"%s\"]]\n", nodeID, nodeLabel))
+			} else {
+				sb.WriteString(fmt.Sprintf("    %s[\"%s\"]\n", nodeID, nodeLabel))
+			}
 			definedNodes[sourceNodeKey] = true
 		}
 	}
@@ -244,6 +255,7 @@ func (f mermaidFormatter) Format(g depgraph.FileDependencyGraph, opts RenderOpti
 	var testNodes []string
 	var majorityExtensionNodes []string
 	var prunedNodes []string
+	var moduleNodes []string
 
 	// Count unique file extensions to determine if majority styling is meaningful.
 	uniqueExtensions := make(map[string]bool)
@@ -261,14 +273,16 @@ func (f mermaidFormatter) Format(g depgraph.FileDependencyGraph, opts RenderOpti
 		if hasFileMetadata && fileMetadata.IsPruned {
 			prunedNodes = append(prunedNodes, nodeID)
 		}
-		if hasFileMetadata && fileMetadata.IsTest {
+		if hasFileMetadata && fileMetadata.IsModule {
+			moduleNodes = append(moduleNodes, nodeID)
+		} else if hasFileMetadata && fileMetadata.IsTest {
 			testNodes = append(testNodes, nodeID)
 		} else if hasMultipleExtensions && filesWithMajorityExtension[source] {
 			majorityExtensionNodes = append(majorityExtensionNodes, nodeID)
 		}
 	}
 
-	hasStyles := len(testNodes) > 0 || len(majorityExtensionNodes) > 0 || len(cycleNodes) > 0 || len(cycleEdgeIndices) > 0 || len(prunedNodes) > 0 || len(phantomNodes) > 0 || len(prodContextNodes) > 0
+	hasStyles := len(testNodes) > 0 || len(majorityExtensionNodes) > 0 || len(cycleNodes) > 0 || len(cycleEdgeIndices) > 0 || len(prunedNodes) > 0 || len(phantomNodes) > 0 || len(prodContextNodes) > 0 || len(moduleNodes) > 0
 	var stylesSB strings.Builder
 
 	// Define style classes
@@ -285,6 +299,10 @@ func (f mermaidFormatter) Format(g depgraph.FileDependencyGraph, opts RenderOpti
 	}
 	if len(majorityExtensionNodes) > 0 {
 		stylesSB.WriteString(fmt.Sprintf("    class %s majorityExtension\n", strings.Join(majorityExtensionNodes, ",")))
+	}
+	if len(moduleNodes) > 0 {
+		stylesSB.WriteString("    classDef moduleNode fill:#FFFFE0,stroke:#999999,color:#000000\n")
+		stylesSB.WriteString(fmt.Sprintf("    class %s moduleNode\n", strings.Join(moduleNodes, ",")))
 	}
 	if len(prunedNodes) > 0 {
 		stylesSB.WriteString("    classDef prunedFile fill:#FFFFFF,stroke:#999999,stroke-dasharray: 5 5\n")

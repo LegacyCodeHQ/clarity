@@ -34,6 +34,30 @@ func TestMermaidFormatter_BasicFlowchart(t *testing.T) {
 	g.Assert(t, t.Name(), []byte(output))
 }
 
+func TestMermaidFormatter_ModuleNodeUsesSubroutineShapeWithFileCountAndChurn(t *testing.T) {
+	graph := testFileGraphMermaid(t, map[string][]string{
+		"X":                   {"/project/util.dart"},
+		"/project/util.dart":  {},
+		"/project/other.dart": {"X"},
+	}, nil)
+
+	moduleMeta := graph.Meta.Files["X"]
+	moduleMeta.IsModule = true
+	moduleMeta.ModuleFileCount = 3
+	moduleMeta.Stats = &vcs.FileStats{Additions: 50, Deletions: 10}
+	graph.Meta.Files["X"] = moduleMeta
+
+	formatter := mermaidFormatter{}
+	output, err := formatter.Format(graph, RenderOptions{})
+	require.NoError(t, err)
+
+	require.Contains(t, output, "[[\"X<br/>3 files<br/>+50 -10\"]]")
+	require.Contains(t, output, "classDef moduleNode")
+
+	g := testhelpers.MermaidGoldie(t)
+	g.Assert(t, t.Name(), []byte(output))
+}
+
 func TestMermaidFormatter_CustomDirection(t *testing.T) {
 	graph := testFileGraphMermaid(t, map[string][]string{
 		"/project/main.dart": {"/project/utils.dart"},

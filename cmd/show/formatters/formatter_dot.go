@@ -160,7 +160,7 @@ func (f *dotFormatter) Format(g depgraph.FileDependencyGraph, opts RenderOptions
 			// Build node label with file stats if available
 			nodeLabel := nodeNames[source]
 			if isModule {
-				nodeLabel = moduleNodeLabel(nodeLabel, fileMetadata)
+				nodeLabel = moduleNodeLabel(nodeLabel, fileMetadata, "\n")
 			} else if hasFileMetadata && fileMetadata.Stats != nil {
 				stats := *fileMetadata.Stats
 				labelPrefix := nodeLabel
@@ -327,15 +327,16 @@ func (f *dotFormatter) assignExtensionColors(filePaths []string) map[string]stri
 }
 
 // moduleNodeLabel builds the label for a collapsed module node: the module
-// name, the number of files it contains, and the aggregated churn.
-func moduleNodeLabel(name string, md depgraph.FileMetadata) string {
+// name, the number of files it contains, and the aggregated churn. Lines are
+// joined with sep ("\n" for DOT, "<br/>" for Mermaid).
+func moduleNodeLabel(name string, md depgraph.FileMetadata, sep string) string {
 	label := name
 	if md.ModuleFileCount > 0 {
 		unit := "files"
 		if md.ModuleFileCount == 1 {
 			unit = "file"
 		}
-		label += fmt.Sprintf("\n%d %s", md.ModuleFileCount, unit)
+		label += fmt.Sprintf("%s%d %s", sep, md.ModuleFileCount, unit)
 	}
 	if md.Stats != nil {
 		var parts []string
@@ -346,7 +347,7 @@ func moduleNodeLabel(name string, md depgraph.FileMetadata) string {
 			parts = append(parts, fmt.Sprintf("-%d", md.Stats.Deletions))
 		}
 		if len(parts) > 0 {
-			label += "\n" + strings.Join(parts, " ")
+			label += sep + strings.Join(parts, " ")
 		}
 	}
 	return label
