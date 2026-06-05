@@ -316,6 +316,7 @@ func ExtractTypeIdentifiers(sourceCode []byte) []string {
 const javaTypeIdentifierQuery = `
 ((type_identifier) @type.name)
 ((scoped_type_identifier) @type.name)
+((field_access object: (identifier) @type.name))
 `
 
 func parseJava(sourceCode []byte) (*sitter.Tree, error) {

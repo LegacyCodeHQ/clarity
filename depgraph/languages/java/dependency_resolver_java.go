@@ -3,6 +3,7 @@ package java
 import (
 	"fmt"
 	"path/filepath"
+	"strings"
 
 	"github.com/LegacyCodeHQ/clarity/vcs"
 )
@@ -119,7 +120,7 @@ func ResolveJavaProjectImports(
 func resolveJavaImportPath(
 	sourceFile string,
 	imp InternalImport,
-	packageIndex map[string][]string,
+	_ map[string][]string,
 	packageTypeIndex map[string]map[string][]string,
 	suppliedFiles map[string]bool,
 	typeReferences []string,
@@ -163,12 +164,42 @@ func resolveJavaImportPath(
 	}
 
 	if len(resolved) == 0 {
-		for _, file := range packageIndex[pkg] {
+		for _, file := range resolveJavaEnclosingTypeImport(imp.Path(), packageTypeIndex) {
 			addFile(file)
 		}
 	}
 
 	return resolved
+}
+
+func resolveJavaEnclosingTypeImport(
+	importPath string,
+	packageTypeIndex map[string]map[string][]string,
+) []string {
+	parts := strings.Split(strings.TrimSuffix(importPath, ".*"), ".")
+	for len(parts) > 1 {
+		parts = parts[:len(parts)-1]
+		typeName := parts[len(parts)-1]
+		if !startsWithUppercase(typeName) {
+			continue
+		}
+		pkg := strings.Join(parts[:len(parts)-1], ".")
+		if typeMap, ok := packageTypeIndex[pkg]; ok {
+			if files := typeMap[typeName]; len(files) > 0 {
+				return files
+			}
+		}
+	}
+
+	return nil
+}
+
+func startsWithUppercase(name string) bool {
+	if name == "" {
+		return false
+	}
+	first := name[0]
+	return first >= 'A' && first <= 'Z'
 }
 
 func resolveJavaSamePackageDependencies(
