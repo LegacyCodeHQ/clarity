@@ -313,6 +313,47 @@ func ExtractTypeIdentifiers(sourceCode []byte) []string {
 	return result
 }
 
+// ExtractQualifiedTypeReferences returns dotted Java references that may point at project types.
+func ExtractQualifiedTypeReferences(sourceCode []byte) []string {
+	tree, err := parseJava(sourceCode)
+	if err != nil {
+		return []string{}
+	}
+	defer tree.Close()
+
+	seen := make(map[string]bool)
+	result := []string{}
+	for _, nodeType := range []string{"scoped_type_identifier", "scoped_identifier"} {
+		for _, node := range findNodesOfType(tree.RootNode(), nodeType) {
+			name := strings.TrimSpace(node.Content(sourceCode))
+			if !strings.Contains(name, ".") || !hasUppercaseSegment(name) || seen[name] {
+				continue
+			}
+			seen[name] = true
+			result = append(result, name)
+		}
+	}
+
+	return result
+}
+
+func hasUppercaseSegment(name string) bool {
+	for _, part := range strings.Split(name, ".") {
+		if startsWithASCIIUppercase(part) {
+			return true
+		}
+	}
+	return false
+}
+
+func startsWithASCIIUppercase(name string) bool {
+	if name == "" {
+		return false
+	}
+	first := name[0]
+	return first >= 'A' && first <= 'Z'
+}
+
 const javaTypeIdentifierQuery = `
 ((type_identifier) @type.name)
 ((scoped_type_identifier) @type.name)

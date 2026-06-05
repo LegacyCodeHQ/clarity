@@ -114,7 +114,31 @@ func ResolveJavaProjectImports(
 		suppliedFiles)
 	projectImports = append(projectImports, samePackageDeps...)
 
-	return projectImports, nil
+	qualifiedDeps := resolveJavaQualifiedTypeDependencies(
+		absPath,
+		content,
+		javaPackageIndex,
+		javaPackageTypes,
+		suppliedFiles)
+	projectImports = append(projectImports, qualifiedDeps...)
+
+	return dedupeJavaDependencies(projectImports), nil
+}
+
+func dedupeJavaDependencies(paths []string) []string {
+	if len(paths) < 2 {
+		return paths
+	}
+	seen := make(map[string]bool, len(paths))
+	result := make([]string, 0, len(paths))
+	for _, path := range paths {
+		if seen[path] {
+			continue
+		}
+		seen[path] = true
+		result = append(result, path)
+	}
+	return result
 }
 
 func resolveJavaImportPath(
@@ -195,11 +219,36 @@ func resolveJavaEnclosingTypeImport(
 }
 
 func startsWithUppercase(name string) bool {
-	if name == "" {
-		return false
+	return startsWithASCIIUppercase(name)
+}
+
+func resolveJavaQualifiedTypeDependencies(
+	sourceFile string,
+	sourceContent []byte,
+	packageIndex map[string][]string,
+	packageTypeIndex map[string]map[string][]string,
+	suppliedFiles map[string]bool,
+) []string {
+	seen := make(map[string]bool)
+	deps := []string{}
+	for _, ref := range ExtractQualifiedTypeReferences(sourceContent) {
+		for _, depFile := range resolveJavaImportPath(
+			sourceFile,
+			InternalImport{path: ref},
+			packageIndex,
+			packageTypeIndex,
+			suppliedFiles,
+			nil,
+			nil) {
+			if seen[depFile] {
+				continue
+			}
+			seen[depFile] = true
+			deps = append(deps, depFile)
+		}
 	}
-	first := name[0]
-	return first >= 'A' && first <= 'Z'
+
+	return deps
 }
 
 func resolveJavaSamePackageDependencies(

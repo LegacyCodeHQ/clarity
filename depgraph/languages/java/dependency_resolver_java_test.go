@@ -264,3 +264,51 @@ public interface Function<F, T> {
 	require.NoError(t, err)
 	assert.Contains(t, imports, annotationPath)
 }
+
+func TestResolveJavaProjectImports_FullyQualifiedTypeReference(t *testing.T) {
+	tmpDir := t.TempDir()
+	srcDir := filepath.Join(tmpDir, "src", "main", "java", "com", "example")
+	collectDir := filepath.Join(srcDir, "collect")
+	baseDir := filepath.Join(srcDir, "base")
+	require.NoError(t, os.MkdirAll(collectDir, 0o755))
+	require.NoError(t, os.MkdirAll(baseDir, 0o755))
+
+	streamsPath := filepath.Join(collectDir, "Streams.java")
+	require.NoError(t, os.WriteFile(streamsPath, []byte(`package com.example.collect;
+
+public final class Streams {
+    public static <T> Object stream(com.example.base.Optional<T> optional) {
+        return optional.get();
+    }
+}
+`), 0o644))
+
+	optionalPath := filepath.Join(baseDir, "Optional.java")
+	require.NoError(t, os.WriteFile(optionalPath, []byte(`package com.example.base;
+
+public final class Optional<T> {
+    public T get() {
+        return null;
+    }
+}
+`), 0o644))
+
+	reader := vcs.FilesystemContentReader()
+	files := []string{streamsPath, optionalPath}
+	pkgIndex, typeIndex, filePackages := BuildJavaIndices(files, reader)
+	supplied := map[string]bool{
+		streamsPath:  true,
+		optionalPath: true,
+	}
+
+	imports, err := ResolveJavaProjectImports(
+		streamsPath,
+		streamsPath,
+		pkgIndex,
+		typeIndex,
+		filePackages,
+		supplied,
+		reader)
+	require.NoError(t, err)
+	assert.Contains(t, imports, optionalPath)
+}
