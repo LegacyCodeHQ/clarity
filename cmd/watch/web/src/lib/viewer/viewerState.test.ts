@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   applyLiveSelection,
   applySliderInput,
+  applyTimelineStep,
   applySourceSelection,
   formatSnapshotMeta,
   getViewModel,
@@ -136,6 +137,49 @@ describe('applySliderInput', () => {
 
     const low = applySliderInput(state, "-1");
     expect(low.selectedCollectionSnapshotIndex).toBe(0);
+  });
+});
+
+describe('applyTimelineStep', () => {
+  it('steps through live snapshots and maps the latest index back to live mode', () => {
+    const state: ViewerState = {
+      ...baseState(),
+      workingSnapshots: [snapshot(1), snapshot(2), snapshot(3)],
+    };
+
+    const older = applyTimelineStep(state, -1);
+    expect(older.liveSnapshotIndex).toBe(1);
+
+    const oldest = applyTimelineStep(older, -1);
+    expect(oldest.liveSnapshotIndex).toBe(0);
+
+    const clamped = applyTimelineStep(oldest, -1);
+    expect(clamped.liveSnapshotIndex).toBe(0);
+
+    const newer = applyTimelineStep(oldest, 1);
+    expect(newer.liveSnapshotIndex).toBe(1);
+
+    const latest = applyTimelineStep(newer, 1);
+    expect(latest.liveSnapshotIndex).toBe(null);
+  });
+
+  it('steps within selected collections without leaving collection mode', () => {
+    const state: ViewerState = {
+      ...baseState(),
+      selectedCollectionID: 9,
+      selectedCollectionSnapshotIndex: 1,
+      pastCollections: [collection(9, [snapshot(1), snapshot(2), snapshot(3)])],
+    };
+
+    const older = applyTimelineStep(state, -1);
+    expect(older.selectedCollectionID).toBe(9);
+    expect(older.selectedCollectionSnapshotIndex).toBe(0);
+
+    const clamped = applyTimelineStep(older, -1);
+    expect(clamped.selectedCollectionSnapshotIndex).toBe(0);
+
+    const newer = applyTimelineStep(older, 1);
+    expect(newer.selectedCollectionSnapshotIndex).toBe(1);
   });
 });
 

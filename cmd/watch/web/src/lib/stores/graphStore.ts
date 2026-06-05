@@ -8,6 +8,7 @@ import {
   normalizeState,
   mergePayload,
   applySliderInput,
+  applyTimelineStep,
   applyLiveSelection,
   applySourceSelection,
   selectRepo,
@@ -40,6 +41,10 @@ function createGraphStore() {
 
     onSliderInput: (rawValue: string) => {
       update(state => applySliderInput(state, rawValue));
+    },
+
+    onTimelineStep: (delta: number) => {
+      update(state => applyTimelineStep(state, delta));
     },
 
     onJumpToLatest: () => {

@@ -295,6 +295,29 @@ export function applySliderInput(state: ViewerState, rawValue: string): ViewerSt
   return normalizeState(next);
 }
 
+export function applyTimelineStep(state: ViewerState, delta: number): ViewerState {
+  const next = normalizeState(state);
+  if (!Number.isFinite(delta) || delta === 0) {
+    return next;
+  }
+
+  if (next.selectedCollectionID === null) {
+    const total = next.workingSnapshots.length;
+    if (total <= 1) {
+      return next;
+    }
+    const currentIndex = next.liveSnapshotIndex === null ? total - 1 : next.liveSnapshotIndex;
+    return applySliderInput(next, String(currentIndex + delta));
+  }
+
+  const collection = getSelectedCollection(next);
+  const snapshots = collection ? collection.snapshots || [] : [];
+  if (snapshots.length <= 1) {
+    return next;
+  }
+  return applySliderInput(next, String(next.selectedCollectionSnapshotIndex + delta));
+}
+
 export function applyLiveSelection(state: ViewerState): ViewerState {
   return normalizeState({
     ...state,
