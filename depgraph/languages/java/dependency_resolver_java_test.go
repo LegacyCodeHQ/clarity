@@ -224,3 +224,43 @@ final class JsonScope {
 	require.NoError(t, err)
 	assert.Contains(t, imports, scopePath)
 }
+
+func TestResolveJavaProjectImports_SamePackageAnnotationInference(t *testing.T) {
+	tmpDir := t.TempDir()
+	srcDir := filepath.Join(tmpDir, "src", "main", "java", "com", "example", "base")
+	require.NoError(t, os.MkdirAll(srcDir, 0o755))
+
+	functionPath := filepath.Join(srcDir, "Function.java")
+	require.NoError(t, os.WriteFile(functionPath, []byte(`package com.example.base;
+
+public interface Function<F, T> {
+    @ParametricNullness
+    T apply(@ParametricNullness F input);
+}
+`), 0o644))
+
+	annotationPath := filepath.Join(srcDir, "ParametricNullness.java")
+	require.NoError(t, os.WriteFile(annotationPath, []byte(`package com.example.base;
+
+@interface ParametricNullness {}
+`), 0o644))
+
+	reader := vcs.FilesystemContentReader()
+	files := []string{functionPath, annotationPath}
+	pkgIndex, typeIndex, filePackages := BuildJavaIndices(files, reader)
+	supplied := map[string]bool{
+		functionPath:   true,
+		annotationPath: true,
+	}
+
+	imports, err := ResolveJavaProjectImports(
+		functionPath,
+		functionPath,
+		pkgIndex,
+		typeIndex,
+		filePackages,
+		supplied,
+		reader)
+	require.NoError(t, err)
+	assert.Contains(t, imports, annotationPath)
+}
