@@ -6,6 +6,7 @@ import (
 	"runtime/pprof"
 	"strconv"
 
+	cyclescmd "github.com/LegacyCodeHQ/clarity/cmd/cycles"
 	diffcmd "github.com/LegacyCodeHQ/clarity/cmd/diff"
 	extensionscmd "github.com/LegacyCodeHQ/clarity/cmd/extensions"
 	"github.com/LegacyCodeHQ/clarity/cmd/languages"
@@ -94,6 +95,7 @@ func Execute() {
 func init() {
 	// Register subcommands
 	rootCmd.AddCommand(show.Cmd)
+	rootCmd.AddCommand(cyclescmd.Cmd)
 	rootCmd.AddCommand(workspacecmd.Cmd)
 	rootCmd.AddCommand(languages.Cmd)
 	rootCmd.AddCommand(extensionscmd.Cmd)
