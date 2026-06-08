@@ -375,7 +375,7 @@ export function getSourceOptions(state: ViewerState, timeFormatter: TimeFormatte
     const snapshots = collection.snapshots || [];
     return {
       value: `collection:${collection.id}`,
-      text: `Collection ${number} (${snapshots.length} snapshots, ${timeFormatter(collection.timestamp)})`,
+      text: `Session ${number} (${snapshots.length} snapshots, ${timeFormatter(collection.timestamp)})`,
     };
   });
 
@@ -438,13 +438,13 @@ export function getViewModel(state: ViewerState, timeFormatter: TimeFormatter = 
     sourceOptions: getSourceOptions(normalized, timeFormatter),
     renderDot: total > 0 ? snapshots[normalized.selectedCollectionSnapshotIndex]!.dot : null,
     timeline: {
-      modeText: "Snapshot collection",
+      modeText: "Session snapshots",
       sliderDisabled: total <= 1,
       sliderMax: total > 0 ? String(total - 1) : "0",
       sliderValue: total > 0 ? String(normalized.selectedCollectionSnapshotIndex) : "0",
       liveButtonDisabled: !allowsLive,
       metaText: total === 0
-        ? "Collection is empty"
+        ? "Session is empty"
         : `${total} snapshots | ${formatSnapshotMeta(
           snapshots[normalized.selectedCollectionSnapshotIndex]!,
           normalized.selectedCollectionSnapshotIndex,

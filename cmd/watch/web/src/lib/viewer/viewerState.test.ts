@@ -244,6 +244,18 @@ describe('getViewModel', () => {
     expect(vm.timeline.sessionStartIndex).toBe(0);
   });
 
+  it('labels archived source options as sessions', () => {
+    const state: ViewerState = {
+      ...baseState(),
+      pastCollections: [collection(10, [snapshot(1), snapshot(2)])],
+    };
+
+    const vm = getViewModel(state, () => "10:00:00");
+    expect(vm.sourceOptions.find((option) => option.value === "collection:10")?.text).toBe(
+      "Session 1 (2 snapshots, 10:00:00)"
+    );
+  });
+
   it('omits the live source option when the selected worktree is deleted', () => {
     const state = mergePayload(baseState(), {
       repos: [

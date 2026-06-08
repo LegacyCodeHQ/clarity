@@ -47,13 +47,13 @@ Notes:
 
 Field rules:
 - `workingSnapshots` is the active timeline for current uncommitted changes.
-- `pastCollections` is an archive of previously completed working sets.
+- `pastCollections` is the wire field for archived sessions: previously completed working sets.
 - `dot` is Graphviz DOT source rendered by the viewer.
 - `latestWorkingId` and `latestPastCollectionId` are monotonic markers for newest IDs in each lane.
 
 ## Compatibility Expectations
 
-- The viewer must tolerate malformed payloads and ignore invalid snapshots/collections.
+- The viewer must tolerate malformed payloads and ignore invalid snapshots/session entries.
 - Missing arrays should be treated as empty arrays.
 - Unknown fields should be ignored by both sides.
 

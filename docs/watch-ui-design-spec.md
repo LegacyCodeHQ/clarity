@@ -45,7 +45,7 @@ Today it is a flat four-row vertical stack (`App.svelte`):
 | Element | What it shows | Notes |
 |---|---|---|
 | **Page title** | Server-injected project/repo name | `text-sm` semibold, left-aligned |
-| **Source selector** ▾ | `Current working directory (live)` + one row per archived "Collection N (X snapshots, timestamp)" | The switch between *live* and *history* lives here |
+| **Source selector** ▾ | `Current working directory (live)` + one row per archived "Session N (X snapshots, timestamp)" | The switch between *live* and *history* lives here |
 | **Connection dot** | 2px dot — green w/ glow = Connected, red = Reconnecting… | Status text appears only on hover (`title`) |
 
 ### B. Repo / worktree tabs — `RepoTabs.svelte`
@@ -103,9 +103,9 @@ as color/border/emoji with **zero legend**.
    phantom tests) is invisible knowledge. This is the #1 gap.
 2. **The temporal model is never explained.** The core concept — *live working
    dir → snapshots accumulate as you edit → a commit archives them into a
-   "collection"* — is split across two disconnected controls (source dropdown in
+   "session"* — is split across two disconnected controls (source dropdown in
    the header, scrubber in the footer) and never stated.
-3. **Two competing time controls.** "Live vs Collection" (header) and "scrub
+3. **Two competing time controls.** "Live vs Session" (header) and "scrub
    within source" (footer) operate on the same axis but sit at opposite ends of
    the screen.
 4. **Meta text is debug-oriented.** `#3/12 | id 47 | 2:14:09 PM` reads like a log
@@ -262,7 +262,7 @@ state-aware worktree region.
 - **Always-available legend** (collapsible chip-strip docked on the canvas) so the
   color language stops being tribal knowledge.
 - **Unify the two time controls into one timeline.** Make "Live" the right anchor
-  of a single continuous track; mark **session start** and **commit / collection
+  of a single continuous track; mark **session start** and **commit / session
   boundaries** as labeled ticks on that same track. The header source-dropdown
   collapses into picking a point on the timeline. Replace `#3/12 | id 47` with
   human labels ("now · live", "2 min ago", "at last commit").
