@@ -103,6 +103,22 @@ func zigImportNodePath(node *sitter.Node, sourceCode []byte) (string, bool) {
 	return path, true
 }
 
+func zigImportPathInNode(node *sitter.Node, sourceCode []byte) (string, bool) {
+	if path, ok := zigImportNodePath(node, sourceCode); ok {
+		return path, true
+	}
+	if node == nil {
+		return "", false
+	}
+
+	for i := 0; i < int(node.NamedChildCount()); i++ {
+		if path, ok := zigImportPathInNode(node.NamedChild(i), sourceCode); ok {
+			return path, true
+		}
+	}
+	return "", false
+}
+
 func dedupeImports(imports []Import) []Import {
 	seen := make(map[string]bool, len(imports))
 	deduped := make([]Import, 0, len(imports))

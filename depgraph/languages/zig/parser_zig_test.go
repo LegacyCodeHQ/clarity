@@ -251,6 +251,68 @@ pub fn targetTriple(target: *const std.Target) void {
 	assert.ElementsMatch(t, []string{targetPath}, imports)
 }
 
+func TestResolveZigProjectImportsThroughPackageRootReexports(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	bunRootPath := filepath.Join(tmpDir, "src", "bun.zig")
+	outputPath := filepath.Join(tmpDir, "src", "bun_core", "output.zig")
+	sourceMapPath := filepath.Join(tmpDir, "src", "sourcemap", "sourcemap.zig")
+	internalSourceMapPath := filepath.Join(tmpDir, "src", "sourcemap", "InternalSourceMap.zig")
+	consumerPath := filepath.Join(tmpDir, "src", "sourcemap_jsc", "internal_jsc.zig")
+
+	writeFile(t, bunRootPath, `
+pub const Output = @import("./bun_core/output.zig");
+pub const SourceMap = @import("./sourcemap/sourcemap.zig");
+`)
+	writeFile(t, outputPath, `pub const prettyFmt = struct {};`)
+	writeFile(t, sourceMapPath, `pub const InternalSourceMap = @import("./InternalSourceMap.zig").InternalSourceMap;`)
+	writeFile(t, internalSourceMapPath, `pub const InternalSourceMap = struct {};`)
+	writeFile(t, consumerPath, `
+const bun = @import("bun");
+const Output = bun.Output;
+const InternalSourceMap = bun.SourceMap.InternalSourceMap;
+`)
+
+	suppliedFiles := map[string]bool{
+		bunRootPath:           true,
+		outputPath:            true,
+		sourceMapPath:         true,
+		internalSourceMapPath: true,
+		consumerPath:          true,
+	}
+
+	imports, err := ResolveZigProjectImports(consumerPath, consumerPath, ".zig", suppliedFiles, vcs.FilesystemContentReader())
+	require.NoError(t, err)
+
+	assert.ElementsMatch(t, []string{bunRootPath, outputPath, internalSourceMapPath}, imports)
+}
+
+func TestResolveZigProjectImportsIndexesMemberReexports(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	uwsPath := filepath.Join(tmpDir, "src", "uws", "uws.zig")
+	socketPath := filepath.Join(tmpDir, "src", "uws_sys", "socket.zig")
+	consumerPath := filepath.Join(tmpDir, "src", "runtime", "socket", "socket.zig")
+
+	writeFile(t, uwsPath, `pub const SocketTLS = @import("../uws_sys/socket.zig").SocketTLS;`)
+	writeFile(t, socketPath, `pub const SocketTLS = struct {};`)
+	writeFile(t, consumerPath, `
+const uws = @import("../../uws/uws.zig");
+const SocketTLS = uws.SocketTLS;
+`)
+
+	suppliedFiles := map[string]bool{
+		uwsPath:      true,
+		socketPath:   true,
+		consumerPath: true,
+	}
+
+	imports, err := ResolveZigProjectImports(consumerPath, consumerPath, ".zig", suppliedFiles, vcs.FilesystemContentReader())
+	require.NoError(t, err)
+
+	assert.ElementsMatch(t, []string{uwsPath, socketPath}, imports)
+}
+
 func writeFile(t *testing.T, path string, content string) {
 	t.Helper()
 	require.NoError(t, os.MkdirAll(filepath.Dir(path), 0755))
