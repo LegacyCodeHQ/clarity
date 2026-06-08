@@ -23,11 +23,21 @@ export interface Snapshot {
   sessionStart?: boolean;
 }
 
+export interface CommitSummary {
+  hash: string;
+  shortHash: string;
+  subject: string;
+  author: string;
+  email: string;
+  timestamp: string;
+}
+
 export interface Collection {
   id: number;
   repoId?: string;
   timestamp: string;
   snapshots: Snapshot[];
+  commitHistory: CommitSummary[];
 }
 
 export interface GraphStreamPayload {
@@ -79,6 +89,24 @@ function normalizeSnapshot(snapshot: unknown): Snapshot | null {
   return normalized;
 }
 
+function normalizeCommitSummary(commit: unknown): CommitSummary | null {
+  if (!commit || typeof commit !== "object") {
+    return null;
+  }
+  const c = commit as Record<string, unknown>;
+  if (typeof c.hash !== "string" || c.hash === "") {
+    return null;
+  }
+  return {
+    hash: c.hash,
+    shortHash: typeof c.shortHash === "string" ? c.shortHash : c.hash.slice(0, 7),
+    subject: typeof c.subject === "string" ? c.subject : "",
+    author: typeof c.author === "string" ? c.author : "",
+    email: typeof c.email === "string" ? c.email : "",
+    timestamp: typeof c.timestamp === "string" ? c.timestamp : new Date(0).toISOString(),
+  };
+}
+
 function normalizeCollection(collection: unknown): Collection | null {
   if (!collection || typeof collection !== "object") {
     return null;
@@ -95,6 +123,9 @@ function normalizeCollection(collection: unknown): Collection | null {
     snapshots: c.snapshots
       .map(normalizeSnapshot)
       .filter((snapshot): snapshot is Snapshot => snapshot !== null),
+    commitHistory: Array.isArray(c.commitHistory)
+      ? c.commitHistory.map(normalizeCommitSummary).filter((commit): commit is CommitSummary => commit !== null)
+      : [],
   };
 }
 

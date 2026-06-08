@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { normalizeGraphStreamPayload, type Snapshot, type Collection } from './viewerProtocol';
+import { normalizeGraphStreamPayload, type Snapshot, type Collection, type CommitSummary } from './viewerProtocol';
 
 const TIMESTAMP = "2026-02-12T10:00:00Z";
 
@@ -7,12 +7,18 @@ function snapshot(id: number, repoId = "primary", dot = `digraph ${id} {}`): Sna
   return { id, repoId, timestamp: TIMESTAMP, dot };
 }
 
-function collection(id: number, snapshots: Snapshot[], repoId = "primary"): Collection {
+function collection(
+  id: number,
+  snapshots: Snapshot[],
+  repoId = "primary",
+  commitHistory: CommitSummary[] = []
+): Collection {
   return {
     id,
     repoId,
     timestamp: TIMESTAMP,
     snapshots,
+    commitHistory,
   };
 }
 
@@ -122,5 +128,29 @@ describe('normalizeGraphStreamPayload', () => {
     expect(normalized.workingSnapshots[0].sessionStart).toBe(true);
     // Absent/false flag stays falsy (omitted, matching the backend's omitempty).
     expect(normalized.workingSnapshots[1].sessionStart).toBeFalsy();
+  });
+
+  it('carries commit history through archived collection normalization', () => {
+    const commit = {
+      hash: "1234567890abcdef",
+      shortHash: "1234567",
+      subject: "add timeline shortcut",
+      author: "Test User",
+      email: "test@example.com",
+      timestamp: TIMESTAMP,
+    };
+
+    const normalized = normalizeGraphStreamPayload({
+      workingSnapshots: [],
+      pastCollections: [{
+        id: 5,
+        repoId: "primary",
+        timestamp: TIMESTAMP,
+        snapshots: [snapshot(1)],
+        commitHistory: [commit, { subject: "missing hash" }],
+      }],
+    });
+
+    expect(normalized.pastCollections).toEqual([collection(5, [snapshot(1)], "primary", [commit])]);
   });
 });

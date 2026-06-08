@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/LegacyCodeHQ/clarity/cmd/watch/protocol"
+	"github.com/LegacyCodeHQ/clarity/vcs"
 )
 
 const maxSnapshots = 250
@@ -120,7 +121,7 @@ func (b *broker) markRepoFinished(repoID string) {
 	b.mu.Lock()
 	if idx, ok := b.repoIndex[repoID]; ok && b.repos[idx].Active {
 		s := b.stateForLocked(repoID)
-		b.archiveWorkingSetLocked(repoID, s)
+		b.archiveWorkingSetLocked(repoID, s, nil)
 		b.repos[idx].Active = false
 		b.broadcastLocked()
 	}
@@ -196,21 +197,30 @@ func (b *broker) publish(repoID, dot string) {
 func (b *broker) archiveWorkingSet(repoID string) {
 	b.mu.Lock()
 	s := b.stateForLocked(repoID)
-	b.archiveWorkingSetLocked(repoID, s)
+	b.archiveWorkingSetLocked(repoID, s, nil)
 	b.broadcastLocked()
 	b.mu.Unlock()
 }
 
-func (b *broker) archiveWorkingSetLocked(repoID string, s *repoState) {
+func (b *broker) archiveWorkingSetWithCommitHistory(repoID string, commitHistory []vcs.CommitSummary) {
+	b.mu.Lock()
+	s := b.stateForLocked(repoID)
+	b.archiveWorkingSetLocked(repoID, s, commitHistory)
+	b.broadcastLocked()
+	b.mu.Unlock()
+}
+
+func (b *broker) archiveWorkingSetLocked(repoID string, s *repoState, commitHistory []vcs.CommitSummary) {
 	if len(s.history) > 0 {
 		archivedSnapshots := make([]protocol.GraphSnapshot, len(s.history))
 		copy(archivedSnapshots, s.history)
 		b.nextCycleID++
 		s.archivedCycles = append(s.archivedCycles, protocol.SnapshotCollection{
-			ID:        b.nextCycleID,
-			RepoID:    repoID,
-			Timestamp: time.Now().UTC(),
-			Snapshots: archivedSnapshots,
+			ID:            b.nextCycleID,
+			RepoID:        repoID,
+			Timestamp:     time.Now().UTC(),
+			Snapshots:     archivedSnapshots,
+			CommitHistory: toProtocolCommitHistory(commitHistory),
 		})
 	}
 
@@ -310,14 +320,42 @@ func (b *broker) collectPastLocked() []protocol.SnapshotCollection {
 			snapshots := make([]protocol.GraphSnapshot, len(cycle.Snapshots))
 			copy(snapshots, cycle.Snapshots)
 			past = append(past, protocol.SnapshotCollection{
-				ID:        cycle.ID,
-				RepoID:    cycle.RepoID,
-				Timestamp: cycle.Timestamp,
-				Snapshots: snapshots,
+				ID:            cycle.ID,
+				RepoID:        cycle.RepoID,
+				Timestamp:     cycle.Timestamp,
+				Snapshots:     snapshots,
+				CommitHistory: copyCommitHistory(cycle.CommitHistory),
 			})
 		}
 	}
 	return past
+}
+
+func toProtocolCommitHistory(commits []vcs.CommitSummary) []protocol.CommitSummary {
+	if len(commits) == 0 {
+		return nil
+	}
+	history := make([]protocol.CommitSummary, 0, len(commits))
+	for _, commit := range commits {
+		history = append(history, protocol.CommitSummary{
+			Hash:      commit.Hash,
+			ShortHash: commit.ShortHash,
+			Subject:   commit.Subject,
+			Author:    commit.Author,
+			Email:     commit.Email,
+			Timestamp: commit.Timestamp,
+		})
+	}
+	return history
+}
+
+func copyCommitHistory(commits []protocol.CommitSummary) []protocol.CommitSummary {
+	if len(commits) == 0 {
+		return nil
+	}
+	copied := make([]protocol.CommitSummary, len(commits))
+	copy(copied, commits)
+	return copied
 }
 
 // orderedRepoIDsLocked returns repo IDs in registration order, then any

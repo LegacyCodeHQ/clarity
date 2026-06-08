@@ -17,6 +17,7 @@ import (
 
 	"github.com/LegacyCodeHQ/clarity/cmd/show/formatters"
 	"github.com/LegacyCodeHQ/clarity/cmd/watch/protocol"
+	"github.com/LegacyCodeHQ/clarity/vcs"
 
 	"github.com/fsnotify/fsnotify"
 	"github.com/stretchr/testify/assert"
@@ -211,6 +212,42 @@ func TestBroker_ArchiveWorkingSetClearsActiveSnapshots(t *testing.T) {
 		assert.Equal(t, "digraph { A; }", got.PastCollections[0].Snapshots[0].DOT)
 		assert.Zero(t, got.LatestWorkingID)
 		assert.Equal(t, got.PastCollections[0].ID, got.LatestPastCollectionID)
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for archive payload")
+	}
+}
+
+func TestBroker_ArchiveWorkingSetCarriesCommitHistory(t *testing.T) {
+	b := newBroker()
+	ch := b.subscribe()
+	defer b.unsubscribe(ch)
+
+	b.publish("primary", "digraph { A; }")
+	<-ch
+
+	commitTime := time.Date(2026, 6, 8, 10, 0, 0, 0, time.UTC)
+	history := []vcs.CommitSummary{{
+		Hash:      "1234567890abcdef",
+		ShortHash: "1234567",
+		Subject:   "capture timeline state",
+		Author:    "Test User",
+		Email:     "test@example.com",
+		Timestamp: commitTime,
+	}}
+	b.archiveWorkingSetWithCommitHistory("primary", history)
+
+	select {
+	case got := <-ch:
+		require.Len(t, got.PastCollections, 1)
+		require.Len(t, got.PastCollections[0].CommitHistory, 1)
+		assert.Equal(t, protocol.CommitSummary{
+			Hash:      "1234567890abcdef",
+			ShortHash: "1234567",
+			Subject:   "capture timeline state",
+			Author:    "Test User",
+			Email:     "test@example.com",
+			Timestamp: commitTime,
+		}, got.PastCollections[0].CommitHistory[0])
 	case <-time.After(time.Second):
 		t.Fatal("timed out waiting for archive payload")
 	}

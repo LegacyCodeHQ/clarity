@@ -106,12 +106,17 @@ func watchAndRebuild(ctx context.Context, repoID, repoPath string, opts *watchOp
 				continue
 			}
 
+			previousHeadSig := lastHeadSig
 			headSig := extractHEADSignature(stateSig)
 			headChanged := headSig != "" && headSig != lastHeadSig
 			lastGitStateSig = stateSig
 			lastHeadSig = headSig
 			if headChanged {
-				b.archiveWorkingSet(repoID)
+				commitHistory, err := git.GetCommitHistory(repoPath, previousHeadSig, headSig)
+				if err != nil {
+					fmt.Fprintf(os.Stderr, "git commit history read error: %v\n", err)
+				}
+				b.archiveWorkingSetWithCommitHistory(repoID, commitHistory)
 			}
 			publishCurrentGraph(repoID, repoPath, opts, b, formatter)
 

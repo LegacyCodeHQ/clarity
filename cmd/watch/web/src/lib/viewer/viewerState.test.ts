@@ -24,6 +24,7 @@ function collection(id: number, snapshots: Snapshot[], repoId = "primary"): Coll
     repoId,
     timestamp: TIMESTAMP,
     snapshots,
+    commitHistory: [],
   };
 }
 

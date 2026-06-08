@@ -45,6 +45,17 @@ type GraphSnapshot struct {
 	SessionStart bool `json:"sessionStart,omitempty"`
 }
 
+// CommitSummary describes a commit that caused a working snapshot cycle to
+// freeze into an archived collection.
+type CommitSummary struct {
+	Hash      string    `json:"hash"`
+	ShortHash string    `json:"shortHash"`
+	Subject   string    `json:"subject"`
+	Author    string    `json:"author"`
+	Email     string    `json:"email"`
+	Timestamp time.Time `json:"timestamp"`
+}
+
 // GraphStreamPayload is the wire payload for SSE "graph" events.
 type GraphStreamPayload struct {
 	Repos                  []RepoDescriptor     `json:"repos"`
@@ -56,8 +67,9 @@ type GraphStreamPayload struct {
 
 // SnapshotCollection represents an archived batch of working snapshots.
 type SnapshotCollection struct {
-	ID        int64           `json:"id"`
-	RepoID    string          `json:"repoId"`
-	Timestamp time.Time       `json:"timestamp"`
-	Snapshots []GraphSnapshot `json:"snapshots"`
+	ID            int64           `json:"id"`
+	RepoID        string          `json:"repoId"`
+	Timestamp     time.Time       `json:"timestamp"`
+	Snapshots     []GraphSnapshot `json:"snapshots"`
+	CommitHistory []CommitSummary `json:"commitHistory,omitempty"`
 }
