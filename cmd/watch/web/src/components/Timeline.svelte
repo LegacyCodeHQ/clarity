@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { viewModel, graphStore } from '../lib/stores/graphStore';
+  import { shouldHandleTimelineKeydown } from '../lib/viewer/timelineKeyboard';
   import Button from '../lib/components/ui/button.svelte';
 
   function handleSliderInput(event: Event) {
@@ -12,28 +13,8 @@
     graphStore.onJumpToLatest();
   }
 
-  function isEditableTarget(target: EventTarget | null): boolean {
-    if (!(target instanceof HTMLElement)) {
-      return false;
-    }
-    return target.isContentEditable
-      || target.tagName === 'INPUT'
-      || target.tagName === 'SELECT'
-      || target.tagName === 'TEXTAREA';
-  }
-
   function handleTimelineKeydown(event: KeyboardEvent) {
-    if (
-      event.defaultPrevented
-      || event.altKey
-      || event.ctrlKey
-      || event.metaKey
-      || event.shiftKey
-      || isEditableTarget(event.target)
-    ) {
-      return;
-    }
-    if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') {
+    if (!shouldHandleTimelineKeydown(event)) {
       return;
     }
     if ($viewModel.timeline.sliderDisabled) {
