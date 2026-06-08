@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 
 	"github.com/LegacyCodeHQ/clarity/depgraph/languages/javascript"
+	"github.com/LegacyCodeHQ/clarity/depgraph/languages/typescript"
 	"github.com/LegacyCodeHQ/clarity/vcs"
 )
 
@@ -36,9 +37,25 @@ func ResolveSvelteProjectImports(
 }
 
 // ResolveSvelteImportPath resolves a Svelte import path to possible file paths.
-// It tries JS/JSX extensions first (via the JavaScript resolver), then .svelte.
+// Svelte scripts can be JavaScript or TypeScript, so extensionless imports need
+// both JS/JSX and TS/TSX candidates before falling back to .svelte.
 func ResolveSvelteImportPath(sourceFile, importPath string, suppliedFiles map[string]bool) []string {
-	resolved := javascript.ResolveJavaScriptImportPath(sourceFile, importPath, suppliedFiles)
+	var resolved []string
+	seen := make(map[string]bool)
+	add := func(path string) {
+		if seen[path] {
+			return
+		}
+		seen[path] = true
+		resolved = append(resolved, path)
+	}
+
+	for _, path := range typescript.ResolveTypeScriptImportPath(sourceFile, importPath, suppliedFiles) {
+		add(path)
+	}
+	for _, path := range javascript.ResolveJavaScriptImportPath(sourceFile, importPath, suppliedFiles) {
+		add(path)
+	}
 
 	sourceDir := filepath.Dir(sourceFile)
 	basePath := filepath.Join(sourceDir, importPath)
@@ -47,19 +64,19 @@ func ResolveSvelteImportPath(sourceFile, importPath string, suppliedFiles map[st
 	// Try .svelte extension
 	candidate := basePath + ".svelte"
 	if suppliedFiles[candidate] {
-		resolved = append(resolved, candidate)
+		add(candidate)
 	}
 
 	// Try index.svelte for directory imports
 	indexCandidate := filepath.Join(basePath, "index.svelte")
 	if suppliedFiles[indexCandidate] {
-		resolved = append(resolved, indexCandidate)
+		add(indexCandidate)
 	}
 
 	// If import already ends with .svelte, try exact path
 	if filepath.Ext(importPath) == ".svelte" {
 		if suppliedFiles[basePath] {
-			resolved = append(resolved, basePath)
+			add(basePath)
 		}
 	}
 

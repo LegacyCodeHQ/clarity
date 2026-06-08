@@ -1,6 +1,7 @@
 package svelte
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/LegacyCodeHQ/clarity/depgraph/languages/javascript"
@@ -110,6 +111,32 @@ func TestResolveSvelteImportPath_ExplicitExtension(t *testing.T) {
 
 	resolved := ResolveSvelteImportPath(sourceFile, "./Header.svelte", suppliedFiles)
 	assert.Contains(t, resolved, "/project/src/Header.svelte")
+}
+
+func TestResolveSvelteProjectImports_ExtensionlessTypeScriptImport(t *testing.T) {
+	sourceFile := "/project/src/components/Timeline.svelte"
+	targetFile := "/project/src/lib/viewer/timelineKeyboard.ts"
+	suppliedFiles := map[string]bool{
+		sourceFile: true,
+		targetFile: true,
+	}
+	contentByPath := map[string][]byte{
+		sourceFile: []byte(`<script lang="ts">
+	import { shouldHandleTimelineKeydown } from '../lib/viewer/timelineKeyboard';
+</script>`),
+		targetFile: []byte(`export function shouldHandleTimelineKeydown() { return true; }`),
+	}
+
+	resolved, err := ResolveSvelteProjectImports(sourceFile, sourceFile, suppliedFiles, func(path string) ([]byte, error) {
+		content, ok := contentByPath[path]
+		if !ok {
+			return nil, fmt.Errorf("missing fixture content for %s", path)
+		}
+		return content, nil
+	})
+
+	require.NoError(t, err)
+	assert.Contains(t, resolved, targetFile)
 }
 
 // Helper functions
