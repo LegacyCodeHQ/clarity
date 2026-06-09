@@ -1,29 +1,29 @@
-package typescript
+package c
 
 import (
 	"github.com/LegacyCodeHQ/clarity/depgraph/moduleapi"
 	"github.com/LegacyCodeHQ/clarity/vcs"
 )
 
-type Module struct{}
+type Provider struct{}
 
-func (Module) Name() string {
-	return "TypeScript"
+func (Provider) Name() string {
+	return "C"
 }
 
-func (Module) Extensions() []string {
-	return []string{".ts", ".tsx"}
+func (Provider) Extensions() []string {
+	return []string{".c", ".h"}
 }
 
-func (Module) Maturity() moduleapi.MaturityLevel {
+func (Provider) Maturity() moduleapi.MaturityLevel {
 	return moduleapi.MaturityBasicTests
 }
 
-func (Module) NewResolver(ctx *moduleapi.Context, contentReader vcs.ContentReader) moduleapi.Resolver {
+func (Provider) NewResolver(ctx *moduleapi.Context, contentReader vcs.ContentReader) moduleapi.Resolver {
 	return resolver{ctx: ctx, contentReader: contentReader}
 }
 
-func (Module) IsTestFile(filePath string, _ vcs.ContentReader) bool {
+func (Provider) IsTestFile(filePath string, _ vcs.ContentReader) bool {
 	return IsTestFile(filePath)
 }
 
@@ -33,7 +33,7 @@ type resolver struct {
 }
 
 func (r resolver) ResolveProjectImports(absPath, filePath, ext string) ([]string, error) {
-	return ResolveTypeScriptProjectImports(absPath, filePath, ext, r.ctx.SuppliedFiles, r.contentReader)
+	return ResolveCProjectIncludes(absPath, filePath, r.ctx.SuppliedFiles, r.contentReader)
 }
 
 func (resolver) FinalizeGraph(_ moduleapi.Graph) error {

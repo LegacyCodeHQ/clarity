@@ -2,8 +2,8 @@ package moduleapi
 
 import "github.com/LegacyCodeHQ/clarity/vcs"
 
-// Module describes pluggable language support.
-type Module interface {
+// Provider describes pluggable language support.
+type Provider interface {
 	Name() string
 	Extensions() []string
 	Maturity() MaturityLevel

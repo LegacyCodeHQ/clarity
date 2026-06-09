@@ -24,15 +24,15 @@ func NewDefaultDependencyResolver(ctx *dependencyGraphContext, contentReader vcs
 		extensionResolvers: make(map[string]moduleapi.Resolver),
 	}
 
-	for _, module := range registry.Modules() {
-		moduleResolver := module.NewResolver(ctx, contentReader)
-		if moduleResolver == nil {
+	for _, provider := range registry.Providers() {
+		providerResolver := provider.NewResolver(ctx, contentReader)
+		if providerResolver == nil {
 			continue
 		}
 
-		resolver.resolvers = append(resolver.resolvers, moduleResolver)
-		for _, ext := range module.Extensions() {
-			resolver.extensionResolvers[ext] = moduleResolver
+		resolver.resolvers = append(resolver.resolvers, providerResolver)
+		for _, ext := range provider.Extensions() {
+			resolver.extensionResolvers[ext] = providerResolver
 		}
 	}
 

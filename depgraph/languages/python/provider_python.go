@@ -1,29 +1,29 @@
-package ruby
+package python
 
 import (
 	"github.com/LegacyCodeHQ/clarity/depgraph/moduleapi"
 	"github.com/LegacyCodeHQ/clarity/vcs"
 )
 
-type Module struct{}
+type Provider struct{}
 
-func (Module) Name() string {
-	return "Ruby"
+func (Provider) Name() string {
+	return "Python"
 }
 
-func (Module) Extensions() []string {
-	return []string{".rb"}
+func (Provider) Extensions() []string {
+	return []string{".py"}
 }
 
-func (Module) Maturity() moduleapi.MaturityLevel {
+func (Provider) Maturity() moduleapi.MaturityLevel {
 	return moduleapi.MaturityBasicTests
 }
 
-func (Module) NewResolver(ctx *moduleapi.Context, contentReader vcs.ContentReader) moduleapi.Resolver {
+func (Provider) NewResolver(ctx *moduleapi.Context, contentReader vcs.ContentReader) moduleapi.Resolver {
 	return resolver{ctx: ctx, contentReader: contentReader}
 }
 
-func (Module) IsTestFile(filePath string, _ vcs.ContentReader) bool {
+func (Provider) IsTestFile(filePath string, _ vcs.ContentReader) bool {
 	return IsTestFile(filePath)
 }
 
@@ -33,7 +33,7 @@ type resolver struct {
 }
 
 func (r resolver) ResolveProjectImports(absPath, filePath, ext string) ([]string, error) {
-	return ResolveRubyProjectImports(absPath, filePath, r.ctx.SuppliedFiles, r.contentReader)
+	return ResolvePythonProjectImports(absPath, filePath, ext, r.ctx.SuppliedFiles, r.contentReader)
 }
 
 func (resolver) FinalizeGraph(_ moduleapi.Graph) error {

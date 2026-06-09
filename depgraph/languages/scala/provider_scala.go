@@ -1,26 +1,35 @@
-package kotlin
+package scala
 
 import (
+	"path/filepath"
+
 	"github.com/LegacyCodeHQ/clarity/depgraph/moduleapi"
 	"github.com/LegacyCodeHQ/clarity/vcs"
 )
 
-type Module struct{}
+type Provider struct{}
 
-func (Module) Name() string {
-	return "Kotlin"
+func (Provider) Name() string {
+	return "Scala"
 }
 
-func (Module) Extensions() []string {
-	return []string{".kt", ".kts"}
+func (Provider) Extensions() []string {
+	return []string{".scala"}
 }
 
-func (Module) Maturity() moduleapi.MaturityLevel {
+func (Provider) Maturity() moduleapi.MaturityLevel {
 	return moduleapi.MaturityBasicTests
 }
 
-func (Module) NewResolver(ctx *moduleapi.Context, contentReader vcs.ContentReader) moduleapi.Resolver {
-	packageIndex, packageTypes, filePackages := BuildKotlinIndices(ctx.KotlinFiles, contentReader)
+func (Provider) NewResolver(ctx *moduleapi.Context, contentReader vcs.ContentReader) moduleapi.Resolver {
+	scalaFiles := make([]string, 0, len(ctx.SuppliedFiles))
+	for filePath := range ctx.SuppliedFiles {
+		if filepath.Ext(filePath) == ".scala" {
+			scalaFiles = append(scalaFiles, filePath)
+		}
+	}
+
+	packageIndex, packageTypes, filePackages := BuildScalaIndices(scalaFiles, contentReader)
 	return resolver{
 		ctx:           ctx,
 		contentReader: contentReader,
@@ -30,7 +39,7 @@ func (Module) NewResolver(ctx *moduleapi.Context, contentReader vcs.ContentReade
 	}
 }
 
-func (Module) IsTestFile(filePath string, _ vcs.ContentReader) bool {
+func (Provider) IsTestFile(filePath string, _ vcs.ContentReader) bool {
 	return IsTestFile(filePath)
 }
 
@@ -43,7 +52,7 @@ type resolver struct {
 }
 
 func (r resolver) ResolveProjectImports(absPath, filePath, _ string) ([]string, error) {
-	return ResolveKotlinProjectImports(
+	return ResolveScalaProjectImports(
 		absPath,
 		filePath,
 		r.packageIndex,

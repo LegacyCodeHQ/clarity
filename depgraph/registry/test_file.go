@@ -11,10 +11,10 @@ import (
 func IsTestFile(filePath string, contentReader vcs.ContentReader) bool {
 	ext := filepath.Ext(filepath.Base(filePath))
 
-	module, ok := ModuleForExtension(ext)
+	provider, ok := ProviderForExtension(ext)
 	if !ok {
 		return false
 	}
 
-	return module.IsTestFile(filePath, contentReader)
+	return provider.IsTestFile(filePath, contentReader)
 }

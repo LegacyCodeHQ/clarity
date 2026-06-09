@@ -21,37 +21,37 @@ import (
 	"github.com/LegacyCodeHQ/clarity/depgraph/moduleapi"
 )
 
-var modules = []moduleapi.Module{
-	c.Module{},
-	cpp.Module{},
-	csharp.Module{},
-	dart.Module{},
-	golang.Module{},
-	javascript.Module{},
-	java.Module{},
-	kotlin.Module{},
-	markdown.Module{},
-	python.Module{},
-	ruby.Module{},
-	rust.Module{},
-	scala.Module{},
-	svelte.Module{},
-	swift.Module{},
-	typescript.Module{},
-	zig.Module{},
+var providers = []moduleapi.Provider{
+	c.Provider{},
+	cpp.Provider{},
+	csharp.Provider{},
+	dart.Provider{},
+	golang.Provider{},
+	javascript.Provider{},
+	java.Provider{},
+	kotlin.Provider{},
+	markdown.Provider{},
+	python.Provider{},
+	ruby.Provider{},
+	rust.Provider{},
+	scala.Provider{},
+	svelte.Provider{},
+	swift.Provider{},
+	typescript.Provider{},
+	zig.Provider{},
 }
 
-// Modules returns supported language modules in deterministic order.
-func Modules() []moduleapi.Module {
-	return append([]moduleapi.Module(nil), modules...)
+// Providers returns supported language providers in deterministic order.
+func Providers() []moduleapi.Provider {
+	return append([]moduleapi.Provider(nil), providers...)
 }
 
-// ModuleForExtension returns the module registered for the provided extension.
-func ModuleForExtension(ext string) (moduleapi.Module, bool) {
-	for _, module := range modules {
-		for _, moduleExt := range module.Extensions() {
-			if moduleExt == ext {
-				return module, true
+// ProviderForExtension returns the provider registered for the provided extension.
+func ProviderForExtension(ext string) (moduleapi.Provider, bool) {
+	for _, provider := range providers {
+		for _, providerExt := range provider.Extensions() {
+			if providerExt == ext {
+				return provider, true
 			}
 		}
 	}

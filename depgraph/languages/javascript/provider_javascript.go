@@ -5,25 +5,25 @@ import (
 	"github.com/LegacyCodeHQ/clarity/vcs"
 )
 
-type Module struct{}
+type Provider struct{}
 
-func (Module) Name() string {
+func (Provider) Name() string {
 	return "JavaScript"
 }
 
-func (Module) Extensions() []string {
+func (Provider) Extensions() []string {
 	return []string{".js", ".jsx", ".mjs", ".cjs"}
 }
 
-func (Module) Maturity() moduleapi.MaturityLevel {
+func (Provider) Maturity() moduleapi.MaturityLevel {
 	return moduleapi.MaturityBasicTests
 }
 
-func (Module) NewResolver(ctx *moduleapi.Context, contentReader vcs.ContentReader) moduleapi.Resolver {
+func (Provider) NewResolver(ctx *moduleapi.Context, contentReader vcs.ContentReader) moduleapi.Resolver {
 	return resolver{ctx: ctx, contentReader: contentReader}
 }
 
-func (Module) IsTestFile(filePath string, _ vcs.ContentReader) bool {
+func (Provider) IsTestFile(filePath string, _ vcs.ContentReader) bool {
 	return IsTestFile(filePath)
 }
 
