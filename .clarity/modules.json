@@ -53,6 +53,12 @@
       "files": [
         "depgraph/languages/golang/*.go"
       ]
+    },
+    {
+      "name": "java support",
+      "files": [
+        "depgraph/languages/java/*.go"
+      ]
     }
   ]
 }
