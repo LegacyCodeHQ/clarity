@@ -90,6 +90,35 @@ func ResolveCSharpProjectImports(
 	importedTypeNames := make(map[string]bool)
 	resolvedTypes := make(map[string]bool)
 	scope := fileToScope[absPath]
+
+	// A type name declared in multiple files of one namespace is, in valid C#, a
+	// partial type split across files (e.g. Foo.cs / Foo.Async.cs) — link them
+	// all. Non-partial duplicate names stay ambiguous. linkable returns the files
+	// to depend on for a name within a single namespace.
+	partialCache := make(map[string]map[string]bool)
+	isPartial := func(file, typeName string) bool {
+		set, ok := partialCache[file]
+		if !ok {
+			set = make(map[string]bool)
+			if content, err := contentReader(file); err == nil {
+				set = ParseCSharpPartialTypeNames(string(content))
+			}
+			partialCache[file] = set
+		}
+		return set[typeName]
+	}
+	linkable := func(files []string, ref string) []string {
+		if len(files) <= 1 {
+			return files
+		}
+		for _, f := range files {
+			if !isPartial(f, ref) {
+				return nil // genuine duplicate type name, ambiguous
+			}
+		}
+		return files
+	}
+
 	for _, imp := range imports {
 		path := imp.Path
 		if path == "" {
@@ -102,12 +131,10 @@ func ResolveCSharpProjectImports(
 				if declaredTypes[ref] {
 					continue
 				}
-				files := typeMap[ref]
-				if len(files) != 1 {
-					continue
+				for _, f := range linkable(typeMap[ref], ref) {
+					addDep(f)
+					resolvedTypes[ref] = true
 				}
-				addDep(files[0])
-				resolvedTypes[ref] = true
 			}
 			continue
 		}
@@ -123,13 +150,10 @@ func ResolveCSharpProjectImports(
 		if !containsString(referencedTypes, typeName) {
 			continue
 		}
-		typeMap := namespaceToTypes[scopeKey(scope, pkg)]
-		files := typeMap[typeName]
-		if len(files) != 1 {
-			continue
+		for _, f := range linkable(namespaceToTypes[scopeKey(scope, pkg)][typeName], typeName) {
+			addDep(f)
+			resolvedTypes[typeName] = true
 		}
-		addDep(files[0])
-		resolvedTypes[typeName] = true
 	}
 
 	// Same-namespace references do not require using directives in C#.
@@ -139,34 +163,43 @@ func ResolveCSharpProjectImports(
 				if declaredTypes[ref] || importedTypeNames[ref] {
 					continue
 				}
-				files := typeMap[ref]
-				if len(files) != 1 {
-					continue
+				for _, f := range linkable(typeMap[ref], ref) {
+					addDep(f)
+					resolvedTypes[ref] = true
 				}
-				addDep(files[0])
-				resolvedTypes[ref] = true
 			}
 		}
 	}
 
-	// Cross-scope fallback: if a referenced type resolves to exactly one changed file
-	// across all scopes, link it. This captures project-reference/global-using flows
-	// while still avoiding fan-out from duplicate type names (e.g. start vs finished).
-	globalTypeMatches := make(map[string][]string)
-	for _, typeMap := range namespaceToTypes {
-		for typeName, files := range typeMap {
-			globalTypeMatches[typeName] = append(globalTypeMatches[typeName], files...)
+	// Cross-scope fallback: a referenced type that resolves within exactly one
+	// namespace is linked (capturing project-reference / global-using flows and
+	// enclosing-namespace references), while a name spread across multiple
+	// namespaces stays ambiguous. Partial types in that one namespace link all
+	// their files via linkable.
+	typeToNamespaces := make(map[string]map[string]bool)
+	for ns, typeMap := range namespaceToTypes {
+		for typeName := range typeMap {
+			if typeToNamespaces[typeName] == nil {
+				typeToNamespaces[typeName] = make(map[string]bool)
+			}
+			typeToNamespaces[typeName][ns] = true
 		}
 	}
 	for _, ref := range referencedTypes {
 		if declaredTypes[ref] || importedTypeNames[ref] || resolvedTypes[ref] {
 			continue
 		}
-		files := uniqueStrings(globalTypeMatches[ref])
-		if len(files) != 1 {
+		namespaces := typeToNamespaces[ref]
+		if len(namespaces) != 1 {
 			continue
 		}
-		addDep(files[0])
+		var onlyNs string
+		for ns := range namespaces {
+			onlyNs = ns
+		}
+		for _, f := range linkable(namespaceToTypes[onlyNs][ref], ref) {
+			addDep(f)
+		}
 	}
 
 	_ = namespaceToFiles // retained for future namespace-wide heuristics.
@@ -199,22 +232,6 @@ func inferCSharpFileScope(filePath string) string {
 
 func scopeKey(scope, namespace string) string {
 	return scope + "::" + namespace
-}
-
-func uniqueStrings(values []string) []string {
-	if len(values) <= 1 {
-		return values
-	}
-	seen := make(map[string]bool, len(values))
-	out := make([]string, 0, len(values))
-	for _, value := range values {
-		if seen[value] {
-			continue
-		}
-		seen[value] = true
-		out = append(out, value)
-	}
-	return out
 }
 
 func containsString(values []string, target string) bool {

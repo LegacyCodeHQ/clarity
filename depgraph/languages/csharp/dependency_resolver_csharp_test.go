@@ -10,6 +10,36 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestResolveCSharpProjectImports_LinksPartialClassAcrossFiles(t *testing.T) {
+	tmpDir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "Test.csproj"), []byte(`<Project Sdk="Microsoft.NET.Sdk"></Project>`), 0o644))
+
+	consumer := filepath.Join(tmpDir, "Consumer.cs")
+	require.NoError(t, os.WriteFile(consumer, []byte(`namespace App;
+public class Consumer { private Reader r; }
+`), 0o644))
+	// Reader is a partial class split across two files in the same namespace
+	// (the common Foo.cs / Foo.Async.cs pattern). Both files are the same type,
+	// so a reference to Reader depends on both.
+	readerA := filepath.Join(tmpDir, "Reader.cs")
+	require.NoError(t, os.WriteFile(readerA, []byte(`namespace App;
+public partial class Reader { public void A() {} }
+`), 0o644))
+	readerB := filepath.Join(tmpDir, "Reader.Async.cs")
+	require.NoError(t, os.WriteFile(readerB, []byte(`namespace App;
+public partial class Reader { public void B() {} }
+`), 0o644))
+
+	supplied := map[string]bool{consumer: true, readerA: true, readerB: true}
+	reader := vcs.FilesystemContentReader()
+	nf, nt, fn, fs := BuildCSharpIndices(supplied, reader)
+
+	deps, err := ResolveCSharpProjectImports(consumer, consumer, nf, nt, fn, fs, supplied, reader)
+	require.NoError(t, err)
+	assert.Contains(t, deps, readerA)
+	assert.Contains(t, deps, readerB)
+}
+
 func TestResolveCSharpProjectImports(t *testing.T) {
 	tmpDir := t.TempDir()
 	require.NoError(t, os.MkdirAll(filepath.Join(tmpDir, "App"), 0o755))

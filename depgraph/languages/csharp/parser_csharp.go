@@ -163,6 +163,24 @@ func ParseCSharpNamespace(source string) string {
 	return ""
 }
 
+var csharpPartialTypePattern = regexp.MustCompile(`\bpartial\s+(?:class|struct|interface|record)\s+([A-Za-z_][A-Za-z0-9_]*)`)
+
+// ParseCSharpPartialTypeNames returns the set of type names declared with the
+// `partial` modifier. In valid C# the same type name may appear in multiple
+// files of one namespace only as a partial type, so this lets the resolver link
+// every file of a partial class (the common Foo.cs / Foo.Async.cs split) while
+// still treating non-partial duplicate names as ambiguous.
+func ParseCSharpPartialTypeNames(source string) map[string]bool {
+	stripped := stripCSharpComments(source)
+	result := make(map[string]bool)
+	for _, m := range csharpPartialTypePattern.FindAllStringSubmatch(stripped, -1) {
+		if len(m) >= 2 && m[1] != "" {
+			result[m[1]] = true
+		}
+	}
+	return result
+}
+
 // ParseTopLevelCSharpTypeNames extracts top-level type names declared in a file.
 func ParseTopLevelCSharpTypeNames(source string) []string {
 	sourceCode := []byte(source)
