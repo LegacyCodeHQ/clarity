@@ -608,6 +608,27 @@ func TestBuildDOTGraph_IncludesFileStats(t *testing.T) {
 	assert.Contains(t, dot, "main.go")
 }
 
+func TestBuildDOTGraph_IncludesDeletedFiles(t *testing.T) {
+	dir := t.TempDir()
+	initGitRepo(t, dir)
+
+	deletedPath := filepath.Join(dir, "obsolete.go")
+	err := os.WriteFile(deletedPath, []byte("package main\n\nfunc obsolete() {}\n"), 0o644)
+	require.NoError(t, err)
+	runGit(t, dir, "add", "obsolete.go")
+	runGit(t, dir, "commit", "-m", "add obsolete file")
+
+	require.NoError(t, os.Remove(deletedPath))
+
+	opts := &watchOptions{}
+	formatter, err := formatters.NewFormatter("dot")
+	require.NoError(t, err)
+	dot, err := buildDOTGraph(dir, opts, formatter)
+	require.NoError(t, err)
+
+	assert.Contains(t, dot, "obsolete.go")
+}
+
 func TestPublishCurrentGraph_NoUncommittedChangesClearsWorkingSnapshots(t *testing.T) {
 	dir := t.TempDir()
 	initGitRepo(t, dir)
