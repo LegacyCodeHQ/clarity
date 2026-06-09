@@ -1,6 +1,22 @@
 {
   "modules": [
     {
+      "name": "git",
+      "files": [
+        "vcs/git/git_commit_history.go",
+        "vcs/git/git_commit_content_reader.go",
+        "vcs/git/git_diff.go",
+        "vcs/git/git_diff_lines.go",
+        "vcs/git/git.go",
+        "vcs/git/git_ls_files.go",
+        "vcs/git/git_runner.go",
+        "vcs/git/git_state.go",
+        "vcs/git/git_stats.go",
+        "vcs/git/git_tree.go",
+        "vcs/git/git_worktree.go"
+      ]
+    },
+    {
       "name": "python support",
       "files": [
         "depgraph/languages/python/*.go"
