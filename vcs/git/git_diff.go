@@ -3,6 +3,8 @@ package git
 import (
 	"fmt"
 	"os"
+	"path/filepath"
+	"sort"
 	"strings"
 )
 
@@ -35,6 +37,40 @@ func GetUncommittedFiles(repoPath string) ([]string, error) {
 	absolutePaths := toAbsolutePaths(repoRoot, uncommittedFiles)
 
 	return absolutePaths, nil
+}
+
+// GetUncommittedDeletedFiles returns absolute paths for tracked files deleted
+// from the current working tree or index.
+func GetUncommittedDeletedFiles(repoPath string) ([]string, error) {
+	if _, err := os.Stat(repoPath); os.IsNotExist(err) {
+		return nil, fmt.Errorf("repository path does not exist: %s", repoPath)
+	}
+	if !isGitRepository(repoPath) {
+		return nil, fmt.Errorf("%s is not a git repository (use 'git init' to initialize)", repoPath)
+	}
+
+	repoRoot, err := GetRepositoryRoot(repoPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get repository root: %w", err)
+	}
+
+	statusMap, err := getUncommittedFileStatuses(repoPath)
+	if err != nil {
+		return nil, err
+	}
+
+	var deleted []string
+	for relPath, status := range statusMap {
+		if len(status) < 2 {
+			continue
+		}
+		if status[0] == 'D' || status[1] == 'D' {
+			deleted = append(deleted, filepath.Join(repoRoot, relPath))
+		}
+	}
+	sort.Strings(deleted)
+
+	return deleted, nil
 }
 
 // getUncommittedFiles returns a list of all uncommitted files (relative to repo root)

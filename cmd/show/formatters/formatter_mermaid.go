@@ -153,6 +153,9 @@ func (f mermaidFormatter) Format(g depgraph.FileDependencyGraph, opts RenderOpti
 					nodeLabel = labelPrefix
 				}
 			}
+			if hasFileMetadata && fileMetadata.State == depgraph.FileStateDeleted {
+				nodeLabel = fmt.Sprintf("%s<br/>(deleted)", nodeLabel)
+			}
 
 			// Escape quotes in labels
 			nodeLabel = strings.ReplaceAll(nodeLabel, "\"", "#quot;")
@@ -211,6 +214,7 @@ func (f mermaidFormatter) Format(g depgraph.FileDependencyGraph, opts RenderOpti
 	hasEdges := false
 	edgeIndex := 0
 	var cycleEdgeIndices []int
+	var deletedEdgeIndices []int
 	var phantomEdgeIndices []int
 	for _, source := range filePaths {
 		deps := adjacency[source]
@@ -232,6 +236,9 @@ func (f mermaidFormatter) Format(g depgraph.FileDependencyGraph, opts RenderOpti
 				// labels it had without the module.
 				for _, label := range edgeLabels(g, source, dep, opts.BasePath) {
 					edgesSB.WriteString(fmt.Sprintf("    %s -->|%s| %s\n", sourceID, label, depID))
+					if edgeMD.State == depgraph.EdgeStateDeleted {
+						deletedEdgeIndices = append(deletedEdgeIndices, edgeIndex)
+					}
 					if edgeMD.InCycle {
 						cycleEdgeIndices = append(cycleEdgeIndices, edgeIndex)
 					}
@@ -241,6 +248,9 @@ func (f mermaidFormatter) Format(g depgraph.FileDependencyGraph, opts RenderOpti
 			}
 
 			edgesSB.WriteString(fmt.Sprintf("    %s --> %s\n", sourceID, depID))
+			if edgeMD.State == depgraph.EdgeStateDeleted {
+				deletedEdgeIndices = append(deletedEdgeIndices, edgeIndex)
+			}
 			if edgeMD.InCycle {
 				cycleEdgeIndices = append(cycleEdgeIndices, edgeIndex)
 			}
@@ -266,6 +276,7 @@ func (f mermaidFormatter) Format(g depgraph.FileDependencyGraph, opts RenderOpti
 	var majorityExtensionNodes []string
 	var prunedNodes []string
 	var moduleNodes []string
+	var deletedNodes []string
 
 	// Count unique file extensions to determine if majority styling is meaningful.
 	uniqueExtensions := make(map[string]bool)
@@ -280,6 +291,9 @@ func (f mermaidFormatter) Format(g depgraph.FileDependencyGraph, opts RenderOpti
 		nodeID := nodeIDs[sourceNodeKey]
 
 		fileMetadata, hasFileMetadata := g.Meta.Files[source]
+		if hasFileMetadata && fileMetadata.State == depgraph.FileStateDeleted {
+			deletedNodes = append(deletedNodes, nodeID)
+		}
 		if hasFileMetadata && fileMetadata.IsPruned {
 			prunedNodes = append(prunedNodes, nodeID)
 		}
@@ -292,7 +306,7 @@ func (f mermaidFormatter) Format(g depgraph.FileDependencyGraph, opts RenderOpti
 		}
 	}
 
-	hasStyles := len(testNodes) > 0 || len(majorityExtensionNodes) > 0 || len(cycleNodes) > 0 || len(cycleEdgeIndices) > 0 || len(prunedNodes) > 0 || len(phantomNodes) > 0 || len(prodContextNodes) > 0 || len(moduleNodes) > 0
+	hasStyles := len(testNodes) > 0 || len(majorityExtensionNodes) > 0 || len(cycleNodes) > 0 || len(cycleEdgeIndices) > 0 || len(deletedEdgeIndices) > 0 || len(prunedNodes) > 0 || len(phantomNodes) > 0 || len(prodContextNodes) > 0 || len(moduleNodes) > 0 || len(deletedNodes) > 0
 	var stylesSB strings.Builder
 
 	// Define style classes
@@ -314,6 +328,10 @@ func (f mermaidFormatter) Format(g depgraph.FileDependencyGraph, opts RenderOpti
 		stylesSB.WriteString("    classDef moduleNode fill:#FFFFE0,stroke:#999999,color:#000000\n")
 		stylesSB.WriteString(fmt.Sprintf("    class %s moduleNode\n", strings.Join(moduleNodes, ",")))
 	}
+	if len(deletedNodes) > 0 {
+		stylesSB.WriteString("    classDef deletedFile fill:#FFE6E6,stroke:#CC3333,stroke-dasharray: 5 5,color:#7A0000\n")
+		stylesSB.WriteString(fmt.Sprintf("    class %s deletedFile\n", strings.Join(deletedNodes, ",")))
+	}
 	if len(prunedNodes) > 0 {
 		stylesSB.WriteString("    classDef prunedFile fill:#FFFFFF,stroke:#999999,stroke-dasharray: 5 5\n")
 		stylesSB.WriteString(fmt.Sprintf("    class %s prunedFile\n", strings.Join(prunedNodes, ",")))
@@ -327,6 +345,9 @@ func (f mermaidFormatter) Format(g depgraph.FileDependencyGraph, opts RenderOpti
 	}
 	for _, idx := range cycleEdgeIndices {
 		stylesSB.WriteString(fmt.Sprintf("    linkStyle %d stroke:#d62728,stroke-width:3px,stroke-dasharray: 5 5\n", idx))
+	}
+	for _, idx := range deletedEdgeIndices {
+		stylesSB.WriteString(fmt.Sprintf("    linkStyle %d stroke:#CC3333,stroke-width:2px,stroke-dasharray: 5 5\n", idx))
 	}
 	if len(phantomNodes) > 0 {
 		stylesSB.WriteString("    classDef phantomTest fill:#90EE90,stroke:#228B22,stroke-dasharray: 1 4,color:#000000\n")

@@ -26,9 +26,19 @@ type FileGraphMetadata struct {
 	EdgeOrigins map[FileEdge][]FileEdge
 }
 
+// FileState describes whether a rendered file node exists in the current tree
+// or is historical context for a deleted file.
+type FileState string
+
+const (
+	FileStatePresent FileState = "present"
+	FileStateDeleted FileState = "deleted"
+)
+
 // FileMetadata holds metadata for a single file node.
 type FileMetadata struct {
 	Stats           *vcs.FileStats
+	State           FileState
 	IsTest          bool
 	IsPruned        bool
 	IsModule        bool
@@ -54,9 +64,19 @@ type FileEdge struct {
 	To   string
 }
 
+// EdgeState describes whether a rendered dependency exists in the current tree
+// or is shown as historical context for a deleted node.
+type EdgeState string
+
+const (
+	EdgeStatePresent EdgeState = "present"
+	EdgeStateDeleted EdgeState = "deleted"
+)
+
 // EdgeMetadata holds metadata for a graph edge.
 type EdgeMetadata struct {
 	InCycle bool
+	State   EdgeState
 }
 
 // FileCycle describes a representative cycle path for a cyclic SCC.
@@ -83,6 +103,7 @@ func NewFileDependencyGraph(g DependencyGraph, fileStats map[string]vcs.FileStat
 
 	for _, node := range nodes {
 		md := FileMetadata{
+			State:     FileStatePresent,
 			IsTest:    registry.IsTestFile(node, contentReader),
 			Extension: filepath.Ext(filepath.Base(node)),
 		}
@@ -97,7 +118,7 @@ func NewFileDependencyGraph(g DependencyGraph, fileStats map[string]vcs.FileStat
 		files[node] = md
 
 		for _, dep := range adjacency[node] {
-			edges[FileEdge{From: node, To: dep}] = EdgeMetadata{}
+			edges[FileEdge{From: node, To: dep}] = EdgeMetadata{State: EdgeStatePresent}
 		}
 	}
 
@@ -116,6 +137,27 @@ func NewFileDependencyGraph(g DependencyGraph, fileStats map[string]vcs.FileStat
 			Cycles: cycles,
 		},
 	}, nil
+}
+
+// MarkDeletedFiles marks file nodes and any incident edges as deleted context.
+func MarkDeletedFiles(fg *FileDependencyGraph, deletedFiles []string) {
+	deleted := make(map[string]bool, len(deletedFiles))
+	for _, file := range deletedFiles {
+		deleted[file] = true
+		md := fg.Meta.Files[file]
+		md.State = FileStateDeleted
+		if md.Extension == "" {
+			md.Extension = filepath.Ext(filepath.Base(file))
+		}
+		fg.Meta.Files[file] = md
+	}
+
+	for edge, md := range fg.Meta.Edges {
+		if deleted[edge.From] || deleted[edge.To] {
+			md.State = EdgeStateDeleted
+			fg.Meta.Edges[edge] = md
+		}
+	}
 }
 
 func findCyclesAndCycleEdges(adjacency map[string][]string) ([]FileCycle, map[FileEdge]bool) {

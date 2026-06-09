@@ -185,6 +185,10 @@ func (f *dotFormatter) Format(g depgraph.FileDependencyGraph, opts RenderOptions
 					nodeLabel = labelPrefix
 				}
 			}
+			isDeleted := hasFileMetadata && fileMetadata.State == depgraph.FileStateDeleted
+			if isDeleted {
+				nodeLabel = fmt.Sprintf("%s\n(deleted)", nodeLabel)
+			}
 
 			prodIsContext := hasFileMetadata &&
 				fileMetadata.Phantom != nil &&
@@ -192,6 +196,8 @@ func (f *dotFormatter) Format(g depgraph.FileDependencyGraph, opts RenderOptions
 				!fileMetadata.Phantom.ProdChanged
 
 			switch {
+			case isDeleted:
+				sb.WriteString(fmt.Sprintf("  %q [label=%q, style=\"filled,dashed\", fillcolor=\"#ffe6e6\", color=\"#cc3333\", fontcolor=\"#7a0000\"];\n", sourceNodeKey, nodeLabel))
 			case isModule:
 				// A module renders as a single component-shaped node; keep the
 				// red cycle border when the collapsed node participates in one.
@@ -266,9 +272,12 @@ func (f *dotFormatter) Format(g depgraph.FileDependencyGraph, opts RenderOptions
 			depNodeKey := nodeKey(dep, opts.BasePath)
 			edgeMD := g.Meta.Edges[depgraph.FileEdge{From: source, To: dep}]
 
-			var cycleAttrs []string
+			var edgeAttrs []string
+			if edgeMD.State == depgraph.EdgeStateDeleted {
+				edgeAttrs = append(edgeAttrs, "color=\"#cc3333\"", "style=dashed", "fontcolor=\"#7a0000\"")
+			}
 			if edgeMD.InCycle {
-				cycleAttrs = []string{"color=red", "style=dashed"}
+				edgeAttrs = append(edgeAttrs, "color=red", "style=dashed")
 			}
 
 			if opts.EdgeLabels {
@@ -276,14 +285,14 @@ func (f *dotFormatter) Format(g depgraph.FileDependencyGraph, opts RenderOptions
 				// keeps a distinct labeled arrow for each original edge it
 				// represents, so labels are unchanged by collapsing.
 				for _, label := range edgeLabels(g, source, dep, opts.BasePath) {
-					attrs := append([]string{fmt.Sprintf("label=%q", label)}, cycleAttrs...)
+					attrs := append([]string{fmt.Sprintf("label=%q", label)}, edgeAttrs...)
 					sb.WriteString(fmt.Sprintf("  %q -> %q [%s];\n", sourceNodeKey, depNodeKey, strings.Join(attrs, ", ")))
 				}
 				continue
 			}
 
-			if len(cycleAttrs) > 0 {
-				sb.WriteString(fmt.Sprintf("  %q -> %q [%s];\n", sourceNodeKey, depNodeKey, strings.Join(cycleAttrs, ", ")))
+			if len(edgeAttrs) > 0 {
+				sb.WriteString(fmt.Sprintf("  %q -> %q [%s];\n", sourceNodeKey, depNodeKey, strings.Join(edgeAttrs, ", ")))
 			} else {
 				sb.WriteString(fmt.Sprintf("  %q -> %q;\n", sourceNodeKey, depNodeKey))
 			}

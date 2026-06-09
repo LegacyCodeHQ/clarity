@@ -608,17 +608,22 @@ func TestBuildDOTGraph_IncludesFileStats(t *testing.T) {
 	assert.Contains(t, dot, "main.go")
 }
 
-func TestBuildDOTGraph_IncludesDeletedFiles(t *testing.T) {
+func TestBuildDOTGraph_IncludesDeletedSubtree(t *testing.T) {
 	dir := t.TempDir()
 	initGitRepo(t, dir)
 
-	deletedPath := filepath.Join(dir, "obsolete.go")
-	err := os.WriteFile(deletedPath, []byte("package main\n\nfunc obsolete() {}\n"), 0o644)
+	deletedDir := filepath.Join(dir, "dead")
+	require.NoError(t, os.MkdirAll(deletedDir, 0o755))
+	obsoletePath := filepath.Join(deletedDir, "obsolete.ts")
+	childPath := filepath.Join(deletedDir, "child.ts")
+	err := os.WriteFile(obsoletePath, []byte("import { child } from './child';\n\nexport const obsolete = child;\n"), 0o644)
 	require.NoError(t, err)
-	runGit(t, dir, "add", "obsolete.go")
-	runGit(t, dir, "commit", "-m", "add obsolete file")
+	err = os.WriteFile(childPath, []byte("export const child = 1;\n"), 0o644)
+	require.NoError(t, err)
+	runGit(t, dir, "add", "dead")
+	runGit(t, dir, "commit", "-m", "add obsolete subtree")
 
-	require.NoError(t, os.Remove(deletedPath))
+	require.NoError(t, os.RemoveAll(deletedDir))
 
 	opts := &watchOptions{}
 	formatter, err := formatters.NewFormatter("dot")
@@ -626,7 +631,11 @@ func TestBuildDOTGraph_IncludesDeletedFiles(t *testing.T) {
 	dot, err := buildDOTGraph(dir, opts, formatter)
 	require.NoError(t, err)
 
-	assert.Contains(t, dot, "obsolete.go")
+	assert.Contains(t, dot, "obsolete.ts")
+	assert.Contains(t, dot, "child.ts")
+	assert.Contains(t, dot, "(deleted)")
+	assert.Contains(t, dot, `"dead/obsolete.ts" -> "dead/child.ts"`)
+	assert.Contains(t, dot, `color="#cc3333"`)
 }
 
 func TestPublishCurrentGraph_NoUncommittedChangesClearsWorkingSnapshots(t *testing.T) {

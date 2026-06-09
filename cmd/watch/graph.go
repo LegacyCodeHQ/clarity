@@ -2,6 +2,7 @@ package watch
 
 import (
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 
@@ -16,6 +17,15 @@ func buildDOTGraph(repoPath string, opts *watchOptions, formatter formatters.For
 	if err != nil {
 		return "", fmt.Errorf("failed to get uncommitted files: %w", err)
 	}
+	deletedFiles, err := git.GetUncommittedDeletedFiles(repoPath)
+	if err != nil {
+		return "", fmt.Errorf("failed to get deleted uncommitted files: %w", err)
+	}
+	deletedContent, err := loadDeletedFileContent(repoPath, deletedFiles)
+	if err != nil {
+		return "", err
+	}
+	filePaths = append(filePaths, deletedFiles...)
 
 	if len(filePaths) == 0 {
 		return "", errNoUncommittedChanges
@@ -33,7 +43,7 @@ func buildDOTGraph(repoPath string, opts *watchOptions, formatter formatters.For
 		}
 	}
 
-	contentReader := vcs.FilesystemContentReader()
+	contentReader := deletedAwareContentReader(deletedContent)
 
 	graph, err := depgraph.BuildDependencyGraph(filePaths, contentReader)
 	if err != nil {
@@ -46,6 +56,7 @@ func buildDOTGraph(repoPath string, opts *watchOptions, formatter formatters.For
 	if err != nil {
 		return "", fmt.Errorf("failed to build file graph metadata: %w", err)
 	}
+	depgraph.MarkDeletedFiles(&fileGraph, deletedFiles)
 
 	if !opts.noPhantom {
 		if diffs, diffErr := git.GetUncommittedFileDiffs(repoPath); diffErr == nil {
@@ -66,6 +77,51 @@ func buildDOTGraph(repoPath string, opts *watchOptions, formatter formatters.For
 }
 
 var errNoUncommittedChanges = fmt.Errorf("no uncommitted changes")
+
+func loadDeletedFileContent(repoPath string, deletedFiles []string) (map[string][]byte, error) {
+	if len(deletedFiles) == 0 {
+		return nil, nil
+	}
+
+	repoRoot, err := git.GetRepositoryRoot(repoPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get repository root: %w", err)
+	}
+
+	content := make(map[string][]byte, len(deletedFiles))
+	for _, absPath := range deletedFiles {
+		relPath, err := filepath.Rel(repoRoot, absPath)
+		if err != nil {
+			return nil, fmt.Errorf("failed to resolve deleted file %s relative to repository root: %w", absPath, err)
+		}
+		bytes, err := git.GetFileContentFromCommit(repoPath, "HEAD", relPath)
+		if err != nil {
+			return nil, fmt.Errorf("failed to read deleted file %s from HEAD: %w", relPath, err)
+		}
+		content[absPath] = bytes
+	}
+
+	return content, nil
+}
+
+func deletedAwareContentReader(deletedContent map[string][]byte) vcs.ContentReader {
+	filesystemReader := vcs.FilesystemContentReader()
+	return func(absPath string) ([]byte, error) {
+		if content, ok := deletedContent[absPath]; ok {
+			return content, nil
+		}
+		content, err := filesystemReader(absPath)
+		if err == nil || !os.IsNotExist(err) {
+			return content, err
+		}
+		if resolved, resolveErr := filepath.EvalSymlinks(absPath); resolveErr == nil {
+			if content, ok := deletedContent[resolved]; ok {
+				return content, nil
+			}
+		}
+		return content, err
+	}
+}
 
 func applyWatchExtensionFilters(opts *watchOptions, filePaths []string) ([]string, error) {
 	if opts.includeExt != "" {
