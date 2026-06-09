@@ -356,6 +356,25 @@ func TestResolveTypeScriptImportPath_NotFound(t *testing.T) {
 	assert.Empty(t, resolved)
 }
 
+func TestResolveTypeScriptImportPath_BareSpecifierDoesNotResolveToSibling(t *testing.T) {
+	// A bare specifier names an npm package, not a local file. It must never be
+	// joined against the source directory: `import 'mermaid'` from mermaid.ts
+	// would otherwise resolve to mermaid.ts itself (a phantom self-reference),
+	// and from a different file to a same-named sibling.
+	suppliedFiles := map[string]bool{
+		"/project/src/mermaid.ts": true,
+		"/project/src/app.ts":     true,
+	}
+
+	// Self case: mermaid.ts importing the "mermaid" package must not edge to itself.
+	resolved := ResolveTypeScriptImportPath("/project/src/mermaid.ts", "mermaid", suppliedFiles)
+	assert.NotContains(t, resolved, "/project/src/mermaid.ts")
+
+	// Cross-file case: a bare package import must not resolve to a same-named sibling.
+	resolved = ResolveTypeScriptImportPath("/project/src/app.ts", "mermaid", suppliedFiles)
+	assert.NotContains(t, resolved, "/project/src/mermaid.ts")
+}
+
 func TestResolveTypeScriptImportPath_JSImportResolvesToTypeScriptSource(t *testing.T) {
 	suppliedFiles := map[string]bool{
 		"/project/src/utils/cache.ts": true,

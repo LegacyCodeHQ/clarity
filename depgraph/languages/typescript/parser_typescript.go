@@ -445,6 +445,11 @@ func ResolveTypeScriptImportPath(sourceFile, importPath string, suppliedFiles ma
 	var resolvedPaths []string
 	seen := make(map[string]bool)
 	add := func(p string) {
+		// A file is never its own dependency; reject self-edges regardless of how
+		// resolution arrived at the source file.
+		if p == sourceFile {
+			return
+		}
 		if suppliedFiles[p] && !seen[p] {
 			seen[p] = true
 			resolvedPaths = append(resolvedPaths, p)
@@ -516,11 +521,10 @@ func resolveTypeScriptBasePaths(sourceFile, importPath string) []string {
 		if cfg := loadTsConfigFor(sourceFile); cfg != nil && cfg.baseURL != "" {
 			bases = append(bases, filepath.Clean(filepath.Join(cfg.baseURL, importPath)))
 		}
-		// Fall back to the legacy behaviour of joining against the source
-		// dir. Harmless if nothing resolves; preserves any external-but-vendored
-		// patterns that happened to work before this change.
-		sourceDir := filepath.Dir(sourceFile)
-		bases = append(bases, filepath.Clean(filepath.Join(sourceDir, importPath)))
+		// A bare specifier names an npm package; it must NOT be joined naively
+		// against the source dir (that turned `import 'mermaid'` into the sibling
+		// mermaid.ts). Legitimate bare-to-local resolution only happens via
+		// workspace packages or tsconfig baseUrl, both handled above.
 		return bases
 	}
 

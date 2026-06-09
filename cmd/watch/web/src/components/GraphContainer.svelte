@@ -1,8 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { viewModel } from '../lib/stores/graphStore';
-  import { initGraphviz, renderDot } from '../lib/graphviz';
-  import { renderMermaid } from '../lib/mermaid';
+  import { initRenderer, renderGraph } from '../lib/renderer';
   import {
     beginRender,
     cancelPendingRenders,
@@ -14,37 +13,37 @@
   import Skeleton from '../lib/components/ui/skeleton.svelte';
 
   let graphContainer: HTMLDivElement;
-  let graphvizReady = $state(false);
+  let dotReady = $state(false);
   let renderError = $state<string | null>(null);
   // Internal render bookkeeping; this should not participate in Svelte reactivity.
   let renderState = createRenderState();
 
   onMount(async () => {
     try {
-      await initGraphviz();
-      graphvizReady = true;
+      await initRenderer();
+      dotReady = true;
     } catch (err) {
-      console.error('Failed to initialize Graphviz:', err);
-      renderError = 'Failed to load Graphviz';
+      console.error('Failed to initialize renderer:', err);
+      renderError = 'Failed to load renderer';
     }
   });
 
-  // Mermaid is rendered lazily and needs no eager init, so the dot renderer's
+  // Mermaid is rendered lazily and needs no eager init, so the dot backend's
   // readiness only gates the dot path.
   let rendererReady = $derived(
-    ($viewModel.renderFormat ?? 'dot') === 'mermaid' ? true : graphvizReady,
+    ($viewModel.renderFormat ?? 'dot') === 'mermaid' ? true : dotReady,
   );
 
-  async function renderGraph(source: string, format: string) {
+  async function paintGraph(source: string, format: string) {
     if (!graphContainer) return;
-    if (format !== 'mermaid' && !graphvizReady) return;
+    if (format !== 'mermaid' && !dotReady) return;
 
     const started = beginRender(renderState);
     renderState = started.state;
     const requestID = started.requestID;
 
     try {
-      const svg = format === 'mermaid' ? await renderMermaid(source) : await renderDot(source);
+      const svg = await renderGraph(source, format);
       renderState = completeRender(renderState, requestID, source);
       if (requestID !== renderState.activeRequestID) {
         return;
@@ -67,7 +66,7 @@
     const format = $viewModel.renderFormat ?? 'dot';
     if (source && rendererReady) {
       if (shouldRenderDot(renderState, source)) {
-        renderGraph(source, format);
+        paintGraph(source, format);
       }
     } else if (!source && graphContainer) {
       renderState = cancelPendingRenders(renderState);
