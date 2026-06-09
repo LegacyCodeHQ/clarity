@@ -24,9 +24,10 @@ func ResolveCppProjectIncludes(
 
 	var projectIncludes []string
 	for _, inc := range includes {
-		if inc.Kind != IncludeLocal {
-			continue
-		}
+		// Resolve every include against the supplied files, not just quoted
+		// ones: a project header is frequently included with angle brackets
+		// (e.g. <proj/foo.h> via -I). System headers never match a supplied
+		// file, so resolving angle-bracket includes stays precise.
 		resolvedFiles := ResolveCppIncludePath(absPath, inc.Path, suppliedFiles)
 		projectIncludes = append(projectIncludes, resolvedFiles...)
 	}

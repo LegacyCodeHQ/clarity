@@ -5,9 +5,29 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/LegacyCodeHQ/clarity/vcs"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+func TestResolveCppProjectIncludes_ResolvesAngleBracketProjectHeader(t *testing.T) {
+	tmpDir := t.TempDir()
+	incDir := filepath.Join(tmpDir, "include", "proj")
+	require.NoError(t, os.MkdirAll(incDir, 0o755))
+	header := filepath.Join(incDir, "foo.h")
+	require.NoError(t, os.WriteFile(header, []byte("#pragma once\n"), 0o644))
+
+	srcDir := filepath.Join(tmpDir, "src")
+	require.NoError(t, os.MkdirAll(srcDir, 0o755))
+	src := filepath.Join(srcDir, "main.cpp")
+	// Angle-bracket include of a project header (resolved via -I in a real build).
+	require.NoError(t, os.WriteFile(src, []byte("#include <proj/foo.h>\nint main(){}\n"), 0o644))
+
+	supplied := map[string]bool{header: true, src: true}
+	deps, err := ResolveCppProjectIncludes(src, src, supplied, vcs.FilesystemContentReader())
+	require.NoError(t, err)
+	assert.Contains(t, deps, header)
+}
 
 func TestParseCppIncludes(t *testing.T) {
 	source := `
