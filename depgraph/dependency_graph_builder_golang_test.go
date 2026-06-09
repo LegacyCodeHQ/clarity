@@ -252,3 +252,72 @@ func main() {
 	assert.Contains(t, mainDeps, fooPath)
 	assert.NotContains(t, mainDeps, barPath)
 }
+
+func TestBuildDependencyGraph_GoExternalTestPackageDoesNotLinkSiblingTestFiles(t *testing.T) {
+	// Two black-box test files (package foo_test) live in the same directory as
+	// package foo and both import foo. When foo's production files are absent
+	// from the supplied set (e.g. a commit-scoped/watch view), the import of foo
+	// must NOT resolve to the *other* sibling _test.go file. An external test
+	// package is not part of the package it tests, so `import foo` never pulls in
+	// foo_test files. Otherwise scoped views manufacture a phantom cycle between
+	// unrelated sibling test files.
+	goModPath := filepath.Clean("/virtual/go.mod")
+	aTestPath := filepath.Clean("/virtual/foo/a_test.go")
+	bTestPath := filepath.Clean("/virtual/foo/b_test.go")
+
+	reader := mapContentReader(map[string]string{
+		goModPath: "module foomod\n\ngo 1.25\n",
+		aTestPath: `package foo_test
+
+import "foomod/foo"
+
+var _ = foo.Thing
+`,
+		bTestPath: `package foo_test
+
+import "foomod/foo"
+
+var _ = foo.Thing
+`,
+	})
+
+	files := []string{aTestPath, bTestPath}
+	graph, err := depgraph.BuildDependencyGraph(files, reader)
+	require.NoError(t, err)
+
+	adj := mustAdjacency(t, graph)
+	assert.NotContains(t, adj[aTestPath], bTestPath,
+		"an external test file must not depend on a sibling external test file via the package import")
+	assert.NotContains(t, adj[bTestPath], aTestPath,
+		"an external test file must not depend on a sibling external test file via the package import")
+}
+
+func TestBuildDependencyGraph_GoExternalTestPackageStillLinksProductionFiles(t *testing.T) {
+	// Guard for the fix above: an external test file must still resolve its
+	// package import to the package's *production* files.
+	goModPath := filepath.Clean("/virtual/go.mod")
+	prodPath := filepath.Clean("/virtual/foo/foo.go")
+	testPath := filepath.Clean("/virtual/foo/foo_test.go")
+
+	reader := mapContentReader(map[string]string{
+		goModPath: "module foomod\n\ngo 1.25\n",
+		prodPath: `package foo
+
+var Thing = 1
+`,
+		testPath: `package foo_test
+
+import "foomod/foo"
+
+var _ = foo.Thing
+`,
+	})
+
+	files := []string{prodPath, testPath}
+	graph, err := depgraph.BuildDependencyGraph(files, reader)
+	require.NoError(t, err)
+
+	adj := mustAdjacency(t, graph)
+	assert.Contains(t, adj[testPath], prodPath,
+		"an external test file should still depend on the production files of the package it imports")
+}

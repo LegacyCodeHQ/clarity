@@ -162,7 +162,14 @@ func resolveGoProjectImportsFromAnalysis(
 				if depFile == absPath {
 					continue
 				}
-				if strings.HasSuffix(depFile, "_test.go") && !sameDir {
+				// Test files are never part of a package's importable surface, so
+				// an `import` must never resolve to a _test.go file. This holds even
+				// for a black-box test package (package foo_test) importing foo from
+				// its own directory (sameDir): an external test package is not part
+				// of the package it tests, so its sibling _test.go files must not be
+				// treated as import targets. Real intra-test-package references
+				// (e.g. a shared helper) are recovered by the symbol pass instead.
+				if strings.HasSuffix(depFile, "_test.go") {
 					continue
 				}
 				if filepath.Ext(depFile) != ".go" {
