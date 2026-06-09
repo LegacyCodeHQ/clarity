@@ -41,6 +41,12 @@
       "files": [
         "depgraph/languages/csharp/*.go"
       ]
+    },
+    {
+      "name": "dart support",
+      "files": [
+        "depgraph/languages/dart/*.go"
+      ]
     }
   ]
 }
