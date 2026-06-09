@@ -95,6 +95,12 @@
       "files": [
         "depgraph/languages/zig/*.go"
       ]
+    },
+    {
+      "name": "markdown support",
+      "files": [
+        "depgraph/languages/markdown/*.go"
+      ]
     }
   ]
 }
