@@ -11,6 +11,10 @@
     {
       "name": "svelte support",
       "files": ["depgraph/languages/svelte/*.go"]
+    },
+    {
+      "name": "typescript support",
+      "files": ["depgraph/languages/typescript/*.go"]
     }
   ]
 }
