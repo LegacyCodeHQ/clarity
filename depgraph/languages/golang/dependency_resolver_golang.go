@@ -185,7 +185,48 @@ func resolveGoProjectImportsFromAnalysis(
 		}
 	}
 
+	// cgo: a file importing the pseudo-package "C" pulls the C/C++/asm sources in
+	// its own package directory into the build, so it depends on them. Without
+	// this the C sources are a disconnected island, since the cgo boundary is not
+	// otherwise crossed. Headers are reached transitively via those sources.
+	if goFileImportsC(imports) {
+		sourceDir := filepath.Dir(absPath)
+		for _, sibling := range dirToFiles[sourceDir] {
+			if sibling != absPath && isCgoCompiledSource(sibling) {
+				projectImports = append(projectImports, sibling)
+			}
+		}
+	}
+
 	return projectImports
+}
+
+// goFileImportsC reports whether the file is a cgo file (imports "C").
+func goFileImportsC(imports []GoImport) bool {
+	for _, imp := range imports {
+		if imp.Path() == "C" {
+			return true
+		}
+	}
+	return false
+}
+
+// cgoCompiledExtensions are the non-Go source extensions the go toolchain
+// compiles into a cgo package. Headers (.h/.hpp) are intentionally excluded:
+// they are reached transitively through the C sources that include them.
+var cgoCompiledExtensions = map[string]bool{
+	".c":   true,
+	".cc":  true,
+	".cpp": true,
+	".cxx": true,
+	".m":   true,
+	".mm":  true,
+	".s":   true,
+	".S":   true,
+}
+
+func isCgoCompiledSource(path string) bool {
+	return cgoCompiledExtensions[filepath.Ext(path)]
 }
 
 func (r *ProjectImportResolver) resolveImportPath(sourceFile, importPath string) string {

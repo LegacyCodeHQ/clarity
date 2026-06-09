@@ -17,6 +17,8 @@ digraph dependencies {
   "tree_sitter_external/dart/scanner.c" [label="scanner.c", style=filled, fillcolor=lightblue];
 
   "parsers/dart/dart_parser.go" -> "tree_sitter_external/dart/binding.go";
+  "tree_sitter_external/dart/binding.go" -> "tree_sitter_external/dart/parser.c";
+  "tree_sitter_external/dart/binding.go" -> "tree_sitter_external/dart/scanner.c";
   "tree_sitter_external/dart/binding_test.go" -> "tree_sitter_external/dart/binding.go";
   "tree_sitter_external/dart/parser.c" -> "tree_sitter_external/dart/parser.h";
   "tree_sitter_external/dart/scanner.c" -> "tree_sitter_external/dart/parser.h";

@@ -321,3 +321,37 @@ var _ = foo.Thing
 	assert.Contains(t, adj[testPath], prodPath,
 		"an external test file should still depend on the production files of the package it imports")
 }
+
+func TestBuildDependencyGraph_GoCgoFileDependsOnSiblingCSources(t *testing.T) {
+	// A cgo file (import "C") pulls the C/C++/asm sources in its own package
+	// directory into the build, so it depends on them. Without this they are a
+	// disconnected island, since clarity does not otherwise cross the cgo
+	// boundary. Headers are reached transitively via the C sources.
+	bindingPath := filepath.Clean("/virtual/binding.go")
+	parserCPath := filepath.Clean("/virtual/parser.c")
+	scannerCPath := filepath.Clean("/virtual/scanner.c")
+	headerPath := filepath.Clean("/virtual/parser.h")
+
+	reader := mapContentReader(map[string]string{
+		bindingPath: `package treesitter
+
+// #include "parser.h"
+import "C"
+
+func New() {}
+`,
+		parserCPath:  "#include \"parser.h\"\nint parse(void) { return 0; }\n",
+		scannerCPath: "int scan(void) { return 0; }\n",
+		headerPath:   "int parse(void);\n",
+	})
+
+	files := []string{bindingPath, parserCPath, scannerCPath, headerPath}
+	graph, err := depgraph.BuildDependencyGraph(files, reader)
+	require.NoError(t, err)
+
+	adj := mustAdjacency(t, graph)
+	assert.Contains(t, adj[bindingPath], parserCPath,
+		"a cgo file should depend on sibling .c sources compiled into its package")
+	assert.Contains(t, adj[bindingPath], scannerCPath,
+		"a cgo file should depend on every sibling C source in its package")
+}

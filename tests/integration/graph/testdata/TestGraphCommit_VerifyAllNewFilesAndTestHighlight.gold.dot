@@ -13,6 +13,8 @@ digraph dependencies {
   "tree_sitter_dart/parser.h" [label="🪴 parser.h\n+286", style=filled, fillcolor=mistyrose];
   "tree_sitter_dart/scanner.c" [label="🪴 scanner.c\n+130", style=filled, fillcolor=white];
 
+  "tree_sitter_dart/binding.go" -> "tree_sitter_dart/parser.c";
+  "tree_sitter_dart/binding.go" -> "tree_sitter_dart/scanner.c";
   "tree_sitter_dart/binding_test.go" -> "tree_sitter_dart/binding.go";
   "tree_sitter_dart/parser.c" -> "tree_sitter_dart/parser.h";
   "tree_sitter_dart/scanner.c" -> "tree_sitter_dart/parser.h";
