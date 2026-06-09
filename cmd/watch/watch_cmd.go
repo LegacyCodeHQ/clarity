@@ -46,6 +46,12 @@ func NewCommand() *cobra.Command {
 		"d",
 		opts.direction,
 		fmt.Sprintf("Graph direction (%s)", formatters.SupportedDirections()))
+	cmd.Flags().StringVarP(
+		&opts.format,
+		"format",
+		"f",
+		opts.format,
+		fmt.Sprintf("Output format (%s)", formatters.SupportedFormats()))
 	cmd.Flags().BoolVar(&opts.noPhantom, "no-phantom", false, "Suppress phantom test nodes (Rust files with #[cfg(test)] regions are rendered as a single node)")
 
 	return cmd
@@ -86,12 +92,14 @@ func runWatch(cmd *cobra.Command, opts *watchOptions) error {
 	}
 	defer ln.Close()
 
-	b := newBroker()
-	srv := newServer(b, actualPort, repoPath)
-	formatter, err := formatters.NewFormatter("dot")
+	formatter, err := formatters.NewFormatter(opts.format)
 	if err != nil {
 		return err
 	}
+
+	b := newBroker()
+	b.format = opts.format
+	srv := newServer(b, actualPort, repoPath)
 
 	go func() {
 		if serveErr := srv.Serve(ln); serveErr != nil && !errors.Is(serveErr, http.ErrServerClosed) {

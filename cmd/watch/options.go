@@ -6,6 +6,7 @@ type watchOptions struct {
 	repoPath   string
 	port       int
 	direction  string
+	format     string
 	includeExt string
 	excludeExt string
 	includes   []string
@@ -17,5 +18,6 @@ func defaultWatchOptions() *watchOptions {
 	return &watchOptions{
 		port:      4900,
 		direction: formatters.DefaultDirection.StringLower(),
+		format:    formatters.OutputFormatDOT.String(),
 	}
 }

@@ -58,7 +58,11 @@ type CommitSummary struct {
 
 // GraphStreamPayload is the wire payload for SSE "graph" events.
 type GraphStreamPayload struct {
-	Repos                  []RepoDescriptor     `json:"repos"`
+	Repos []RepoDescriptor `json:"repos"`
+	// Format is the render format of every snapshot's DOT field for this watch
+	// session ("dot" or "mermaid"). Session-global; clients treat an empty value
+	// as "dot".
+	Format                 string               `json:"format,omitempty"`
 	WorkingSnapshots       []GraphSnapshot      `json:"workingSnapshots"`
 	PastCollections        []SnapshotCollection `json:"pastCollections"`
 	LatestWorkingID        int64                `json:"latestWorkingId"`

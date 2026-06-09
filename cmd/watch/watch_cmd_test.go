@@ -422,6 +422,40 @@ func TestBuildGraph_ProducesOutput(t *testing.T) {
 	assert.Contains(t, dot, "main.go")
 }
 
+func TestBuildGraph_MermaidFormat(t *testing.T) {
+	dir := t.TempDir()
+	initGitRepo(t, dir)
+
+	err := os.WriteFile(filepath.Join(dir, "main.go"), []byte("package main\n"), 0o644)
+	require.NoError(t, err)
+
+	opts := &watchOptions{}
+	formatter, err := formatters.NewFormatter("mermaid")
+	require.NoError(t, err)
+	out, err := buildGraph(dir, opts, formatter)
+	require.NoError(t, err)
+
+	assert.Contains(t, out, "flowchart")
+	assert.Contains(t, out, "main.go")
+	assert.NotContains(t, out, "digraph")
+}
+
+func TestBroker_PayloadCarriesSessionFormat(t *testing.T) {
+	b := newBroker()
+	b.format = "mermaid"
+	ch := b.subscribe()
+	defer b.unsubscribe(ch)
+
+	b.publish("primary", "flowchart LR\n")
+
+	select {
+	case payload := <-ch:
+		assert.Equal(t, "mermaid", payload.Format)
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for payload with session format")
+	}
+}
+
 func TestBuildGraph_RustPhantomTestOnly(t *testing.T) {
 	dir := t.TempDir()
 	initGitRepo(t, dir)

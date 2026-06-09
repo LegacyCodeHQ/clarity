@@ -43,6 +43,10 @@ type broker struct {
 	repoStates  map[string]*repoState
 	nextID      int64
 	nextCycleID int64
+	// format is the session-global render format ("dot" or "mermaid") echoed to
+	// clients so the viewer knows how to render each snapshot's DOT payload. An
+	// empty value is treated as "dot".
+	format string
 }
 
 func newBroker() *broker {
@@ -285,6 +289,7 @@ func (b *broker) currentPayloadLocked() (protocol.GraphStreamPayload, bool) {
 
 	return protocol.GraphStreamPayload{
 		Repos:                  repos,
+		Format:                 b.format,
 		WorkingSnapshots:       working,
 		PastCollections:        past,
 		LatestWorkingID:        latestWorkingID,
