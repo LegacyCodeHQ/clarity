@@ -13,6 +13,13 @@ import (
 )
 
 func buildDOTGraph(repoPath string, opts *watchOptions, formatter formatters.Formatter) (string, error) {
+	// Resolve symlinks so the render base path matches the (symlink-resolved)
+	// file node paths. Otherwise relative-path shortening fails (e.g. macOS
+	// /var vs /private/var) and every node renders with an absolute id.
+	if resolved, err := filepath.EvalSymlinks(repoPath); err == nil {
+		repoPath = resolved
+	}
+
 	filePaths, err := git.GetUncommittedFiles(repoPath)
 	if err != nil {
 		return "", fmt.Errorf("failed to get uncommitted files: %w", err)
@@ -50,6 +57,11 @@ func buildDOTGraph(repoPath string, opts *watchOptions, formatter formatters.For
 		return "", fmt.Errorf("failed to build dependency graph: %w", err)
 	}
 
+	graph, deletedFiles, err = pruneIsolatedDeletedNodes(graph, deletedFiles)
+	if err != nil {
+		return "", err
+	}
+
 	fileStats, _ := git.GetUncommittedFileStats(repoPath)
 
 	fileGraph, err := depgraph.NewFileDependencyGraph(graph, fileStats, contentReader)
@@ -77,6 +89,61 @@ func buildDOTGraph(repoPath string, opts *watchOptions, formatter formatters.For
 }
 
 var errNoUncommittedChanges = fmt.Errorf("no uncommitted changes")
+
+// pruneIsolatedDeletedNodes drops deleted files that have no edges in the graph.
+// A clean rename (delete the old path, add the new path, repoint importers)
+// leaves the old path as an isolated deleted node; rendering it would surface a
+// phantom "(deleted)" file for what is really a rename. Deleted files that are
+// still connected -- imported by live code, or part of a deleted subtree with
+// internal edges -- are kept, since those are meaningful to show.
+func pruneIsolatedDeletedNodes(graph depgraph.DependencyGraph, deletedFiles []string) (depgraph.DependencyGraph, []string, error) {
+	if len(deletedFiles) == 0 {
+		return graph, deletedFiles, nil
+	}
+
+	adjacency, err := depgraph.AdjacencyList(graph)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to build adjacency list: %w", err)
+	}
+
+	inDegree := make(map[string]int)
+	for _, deps := range adjacency {
+		for _, dep := range deps {
+			inDegree[dep]++
+		}
+	}
+
+	isolated := make(map[string]bool)
+	for _, f := range deletedFiles {
+		if len(adjacency[f]) == 0 && inDegree[f] == 0 {
+			isolated[f] = true
+		}
+	}
+	if len(isolated) == 0 {
+		return graph, deletedFiles, nil
+	}
+
+	filtered := make(map[string][]string, len(adjacency))
+	for node, deps := range adjacency {
+		if isolated[node] {
+			continue
+		}
+		filtered[node] = deps
+	}
+
+	newGraph, err := depgraph.NewDependencyGraphFromAdjacency(filtered)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to rebuild graph after pruning deleted nodes: %w", err)
+	}
+
+	remaining := make([]string, 0, len(deletedFiles))
+	for _, f := range deletedFiles {
+		if !isolated[f] {
+			remaining = append(remaining, f)
+		}
+	}
+	return newGraph, remaining, nil
+}
 
 func loadDeletedFileContent(repoPath string, deletedFiles []string) (map[string][]byte, error) {
 	if len(deletedFiles) == 0 {
