@@ -145,7 +145,7 @@ func stopAndDrainTimer(timer *time.Timer) {
 }
 
 func publishCurrentGraph(repoID, repoPath string, opts *watchOptions, b *broker, formatter formatters.Formatter) {
-	dot, err := buildDOTGraph(repoPath, opts, formatter)
+	dot, err := buildGraph(repoPath, opts, formatter)
 	if errors.Is(err, errNoUncommittedChanges) {
 		b.clearWorkingSet(repoID)
 		return

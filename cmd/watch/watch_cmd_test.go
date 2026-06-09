@@ -405,7 +405,7 @@ func initGitRepo(t *testing.T, dir string) {
 	}
 }
 
-func TestBuildDOTGraph_ProducesOutput(t *testing.T) {
+func TestBuildGraph_ProducesOutput(t *testing.T) {
 	dir := t.TempDir()
 	initGitRepo(t, dir)
 
@@ -415,14 +415,14 @@ func TestBuildDOTGraph_ProducesOutput(t *testing.T) {
 	opts := &watchOptions{}
 	formatter, err := formatters.NewFormatter("dot")
 	require.NoError(t, err)
-	dot, err := buildDOTGraph(dir, opts, formatter)
+	dot, err := buildGraph(dir, opts, formatter)
 	require.NoError(t, err)
 
 	assert.Contains(t, dot, "digraph")
 	assert.Contains(t, dot, "main.go")
 }
 
-func TestBuildDOTGraph_RustPhantomTestOnly(t *testing.T) {
+func TestBuildGraph_RustPhantomTestOnly(t *testing.T) {
 	dir := t.TempDir()
 	initGitRepo(t, dir)
 
@@ -455,14 +455,14 @@ mod tests {
 	opts := &watchOptions{}
 	formatter, err := formatters.NewFormatter("dot")
 	require.NoError(t, err)
-	dot, err := buildDOTGraph(dir, opts, formatter)
+	dot, err := buildGraph(dir, opts, formatter)
 	require.NoError(t, err)
 
 	assert.Contains(t, dot, "::tests", "phantom node must appear when test region changed")
 	assert.Contains(t, dot, "fillcolor=lightgreen", "phantom node is green")
 }
 
-func TestBuildDOTGraph_RustNoPhantomFlag_SuppressesPhantom(t *testing.T) {
+func TestBuildGraph_RustNoPhantomFlag_SuppressesPhantom(t *testing.T) {
 	dir := t.TempDir()
 	initGitRepo(t, dir)
 
@@ -495,7 +495,7 @@ mod tests {
 	opts := &watchOptions{noPhantom: true}
 	formatter, err := formatters.NewFormatter("dot")
 	require.NoError(t, err)
-	dot, err := buildDOTGraph(dir, opts, formatter)
+	dot, err := buildGraph(dir, opts, formatter)
 	require.NoError(t, err)
 
 	assert.NotContains(t, dot, "::tests", "--no-phantom should suppress phantom node even when test region changed")
@@ -510,18 +510,18 @@ func requireCmd(t *testing.T, dir string, args ...string) {
 	require.NoError(t, err, "cmd %v failed: %s", args, out)
 }
 
-func TestBuildDOTGraph_NoUncommittedChanges(t *testing.T) {
+func TestBuildGraph_NoUncommittedChanges(t *testing.T) {
 	dir := t.TempDir()
 	initGitRepo(t, dir)
 
 	opts := &watchOptions{}
 	formatter, err := formatters.NewFormatter("dot")
 	require.NoError(t, err)
-	_, err = buildDOTGraph(dir, opts, formatter)
+	_, err = buildGraph(dir, opts, formatter)
 	assert.True(t, errors.Is(err, errNoUncommittedChanges))
 }
 
-func TestBuildDOTGraph_WithIncludeExt(t *testing.T) {
+func TestBuildGraph_WithIncludeExt(t *testing.T) {
 	dir := t.TempDir()
 	initGitRepo(t, dir)
 
@@ -533,14 +533,14 @@ func TestBuildDOTGraph_WithIncludeExt(t *testing.T) {
 	opts := &watchOptions{includeExt: ".go"}
 	formatter, err := formatters.NewFormatter("dot")
 	require.NoError(t, err)
-	dot, err := buildDOTGraph(dir, opts, formatter)
+	dot, err := buildGraph(dir, opts, formatter)
 	require.NoError(t, err)
 
 	assert.Contains(t, dot, "main.go")
 	assert.NotContains(t, dot, "app.py")
 }
 
-func TestBuildDOTGraph_WithExcludeExt(t *testing.T) {
+func TestBuildGraph_WithExcludeExt(t *testing.T) {
 	dir := t.TempDir()
 	initGitRepo(t, dir)
 
@@ -552,7 +552,7 @@ func TestBuildDOTGraph_WithExcludeExt(t *testing.T) {
 	opts := &watchOptions{excludeExt: ".py"}
 	formatter, err := formatters.NewFormatter("dot")
 	require.NoError(t, err)
-	dot, err := buildDOTGraph(dir, opts, formatter)
+	dot, err := buildGraph(dir, opts, formatter)
 	require.NoError(t, err)
 
 	assert.Contains(t, dot, "main.go")
@@ -592,7 +592,7 @@ func TestNewCommand_DefaultPort(t *testing.T) {
 	assert.Equal(t, 4900, port)
 }
 
-func TestBuildDOTGraph_IncludesFileStats(t *testing.T) {
+func TestBuildGraph_IncludesFileStats(t *testing.T) {
 	dir := t.TempDir()
 	initGitRepo(t, dir)
 
@@ -602,13 +602,13 @@ func TestBuildDOTGraph_IncludesFileStats(t *testing.T) {
 	opts := &watchOptions{}
 	formatter, err := formatters.NewFormatter("dot")
 	require.NoError(t, err)
-	dot, err := buildDOTGraph(dir, opts, formatter)
+	dot, err := buildGraph(dir, opts, formatter)
 	require.NoError(t, err)
 
 	assert.Contains(t, dot, "main.go")
 }
 
-func TestBuildDOTGraph_IncludesDeletedSubtree(t *testing.T) {
+func TestBuildGraph_IncludesDeletedSubtree(t *testing.T) {
 	dir := t.TempDir()
 	initGitRepo(t, dir)
 
@@ -628,7 +628,7 @@ func TestBuildDOTGraph_IncludesDeletedSubtree(t *testing.T) {
 	opts := &watchOptions{}
 	formatter, err := formatters.NewFormatter("dot")
 	require.NoError(t, err)
-	dot, err := buildDOTGraph(dir, opts, formatter)
+	dot, err := buildGraph(dir, opts, formatter)
 	require.NoError(t, err)
 
 	assert.Contains(t, dot, "obsolete.ts")

@@ -12,7 +12,7 @@ import (
 	"github.com/LegacyCodeHQ/clarity/vcs/git"
 )
 
-func buildDOTGraph(repoPath string, opts *watchOptions, formatter formatters.Formatter) (string, error) {
+func buildGraph(repoPath string, opts *watchOptions, formatter formatters.Formatter) (string, error) {
 	// Resolve symlinks so the render base path matches the (symlink-resolved)
 	// file node paths. Otherwise relative-path shortening fails (e.g. macOS
 	// /var vs /private/var) and every node renders with an absolute id.
