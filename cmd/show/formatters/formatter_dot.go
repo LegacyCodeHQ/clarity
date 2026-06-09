@@ -186,8 +186,11 @@ func (f *dotFormatter) Format(g depgraph.FileDependencyGraph, opts RenderOptions
 				}
 			}
 			isDeleted := hasFileMetadata && fileMetadata.State == depgraph.FileStateDeleted
+			isRenamed := hasFileMetadata && fileMetadata.State == depgraph.FileStateRenamed
 			if isDeleted {
 				nodeLabel = fmt.Sprintf("%s\n(deleted)", nodeLabel)
+			} else if isRenamed {
+				nodeLabel = fmt.Sprintf("%s\n(renamed)", nodeLabel)
 			}
 
 			prodIsContext := hasFileMetadata &&
@@ -198,6 +201,8 @@ func (f *dotFormatter) Format(g depgraph.FileDependencyGraph, opts RenderOptions
 			switch {
 			case isDeleted:
 				sb.WriteString(fmt.Sprintf("  %q [label=%q, style=\"filled,dashed\", fillcolor=\"#ffe6e6\", color=\"#cc3333\", fontcolor=\"#7a0000\"];\n", sourceNodeKey, nodeLabel))
+			case isRenamed:
+				sb.WriteString(fmt.Sprintf("  %q [label=%q, style=\"filled,dashed\", fillcolor=\"#fff3e0\", color=\"#cc8800\", fontcolor=\"#7a4d00\"];\n", sourceNodeKey, nodeLabel))
 			case isModule:
 				// A module renders as a single component-shaped node; keep the
 				// red cycle border when the collapsed node participates in one.
@@ -275,6 +280,9 @@ func (f *dotFormatter) Format(g depgraph.FileDependencyGraph, opts RenderOptions
 			var edgeAttrs []string
 			if edgeMD.State == depgraph.EdgeStateDeleted {
 				edgeAttrs = append(edgeAttrs, "color=\"#cc3333\"", "style=dashed", "fontcolor=\"#7a0000\"")
+			}
+			if edgeMD.State == depgraph.EdgeStateRenamed {
+				edgeAttrs = append(edgeAttrs, "color=\"#cc8800\"", "style=dashed")
 			}
 			if edgeMD.InCycle {
 				edgeAttrs = append(edgeAttrs, "color=red", "style=dashed")

@@ -672,6 +672,54 @@ func TestBuildGraph_IncludesDeletedSubtree(t *testing.T) {
 	assert.Contains(t, dot, `color="#cc3333"`)
 }
 
+func TestBuildGraph_DeletedIsolatedFileStillRendered(t *testing.T) {
+	// A deleted file that nothing imports (and that imports nothing) is isolated,
+	// but a deletion is information the developer wants to see -- it must still
+	// render as "(deleted)", not be pruned away.
+	dir := t.TempDir()
+	initGitRepo(t, dir)
+	orphan := filepath.Join(dir, "orphan.ts")
+	require.NoError(t, os.WriteFile(orphan, []byte("export const z = 1;\n"), 0o644))
+	runGit(t, dir, "add", ".")
+	runGit(t, dir, "commit", "-m", "seed")
+	require.NoError(t, os.Remove(orphan))
+
+	opts := &watchOptions{}
+	formatter, err := formatters.NewFormatter("dot")
+	require.NoError(t, err)
+	dot, err := buildGraph(dir, opts, formatter)
+	require.NoError(t, err)
+
+	assert.Contains(t, dot, "orphan.ts")
+	assert.Contains(t, dot, "(deleted)")
+}
+
+func TestBuildGraph_RenameRendersAsRenamedWithEdge(t *testing.T) {
+	// A rename = old path deleted + new path added with identical content. Show
+	// the old path distinctly as "(renamed)" with an edge to the new path, rather
+	// than hiding it or mislabeling it as a plain deletion.
+	dir := t.TempDir()
+	initGitRepo(t, dir)
+	oldPath := filepath.Join(dir, "chart.ts")
+	require.NoError(t, os.WriteFile(oldPath, []byte("export const x = 1;\n"), 0o644))
+	runGit(t, dir, "add", ".")
+	runGit(t, dir, "commit", "-m", "seed")
+	newPath := filepath.Join(dir, "ScatterPlot.ts")
+	require.NoError(t, os.Rename(oldPath, newPath))
+
+	opts := &watchOptions{}
+	formatter, err := formatters.NewFormatter("dot")
+	require.NoError(t, err)
+	dot, err := buildGraph(dir, opts, formatter)
+	require.NoError(t, err)
+
+	assert.Contains(t, dot, "ScatterPlot.ts")
+	assert.Contains(t, dot, "(renamed)")
+	assert.Contains(t, dot, `"chart.ts" -> "ScatterPlot.ts"`)
+	// A rename source is not a plain deletion.
+	assert.NotContains(t, dot, "chart.ts\\n-1\\n(deleted)")
+}
+
 func TestPublishCurrentGraph_NoUncommittedChangesClearsWorkingSnapshots(t *testing.T) {
 	dir := t.TempDir()
 	initGitRepo(t, dir)
@@ -773,7 +821,10 @@ func TestWatchAndRebuild_DetectsFileRename(t *testing.T) {
 	snap, ok := latestSnapshot(b)
 	require.True(t, ok, "no graph published after rename")
 	assert.Contains(t, snap, "ScatterPlot.ts", "post-rename graph missing new file name")
-	assert.NotContains(t, snap, "chart.ts", "post-rename graph still references old file name")
+	// The rename source stays visible, rendered distinctly as a rename to the
+	// new path rather than hidden or shown as a plain deletion.
+	assert.Contains(t, snap, "chart.ts", "post-rename graph dropped the rename source")
+	assert.Contains(t, snap, "(renamed)", "rename source not marked as renamed")
 }
 
 // TestWatchAndRebuild_DebounceFiresOnEverySaveCycle reproduces a watcher bug

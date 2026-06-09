@@ -33,12 +33,15 @@ type FileState string
 const (
 	FileStatePresent FileState = "present"
 	FileStateDeleted FileState = "deleted"
+	FileStateRenamed FileState = "renamed"
 )
 
 // FileMetadata holds metadata for a single file node.
 type FileMetadata struct {
-	Stats           *vcs.FileStats
-	State           FileState
+	Stats *vcs.FileStats
+	State FileState
+	// RenamedTo is the new path when State is FileStateRenamed.
+	RenamedTo       string
 	IsTest          bool
 	IsPruned        bool
 	IsModule        bool
@@ -71,6 +74,7 @@ type EdgeState string
 const (
 	EdgeStatePresent EdgeState = "present"
 	EdgeStateDeleted EdgeState = "deleted"
+	EdgeStateRenamed EdgeState = "renamed"
 )
 
 // EdgeMetadata holds metadata for a graph edge.
@@ -157,6 +161,26 @@ func MarkDeletedFiles(fg *FileDependencyGraph, deletedFiles []string) {
 			md.State = EdgeStateDeleted
 			fg.Meta.Edges[edge] = md
 		}
+	}
+}
+
+// MarkRenamedFiles marks each rename source (old path) as renamed to its new
+// path and tags the synthetic old->new edge so renderers can show the move
+// distinctly from a deletion. The old->new edge must already exist in the graph.
+func MarkRenamedFiles(fg *FileDependencyGraph, renames map[string]string) {
+	for oldPath, newPath := range renames {
+		md := fg.Meta.Files[oldPath]
+		md.State = FileStateRenamed
+		md.RenamedTo = newPath
+		if md.Extension == "" {
+			md.Extension = filepath.Ext(filepath.Base(oldPath))
+		}
+		fg.Meta.Files[oldPath] = md
+
+		edge := FileEdge{From: oldPath, To: newPath}
+		em := fg.Meta.Edges[edge]
+		em.State = EdgeStateRenamed
+		fg.Meta.Edges[edge] = em
 	}
 }
 

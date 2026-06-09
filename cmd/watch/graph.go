@@ -1,6 +1,8 @@
 package watch
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -57,9 +59,19 @@ func buildGraph(repoPath string, opts *watchOptions, formatter formatters.Format
 		return "", fmt.Errorf("failed to build dependency graph: %w", err)
 	}
 
-	graph, deletedFiles, err = pruneIsolatedDeletedNodes(graph, deletedFiles)
+	// A rename is an old path deleted + a new path added with identical content.
+	// Detect those, add the old->new edge, and render them distinctly from plain
+	// deletions. Every removed file stays visible either way.
+	renames := detectRenames(deletedFiles, deletedContent, filePaths, contentReader)
+	graph, err = addRenameEdges(graph, renames)
 	if err != nil {
 		return "", err
+	}
+	pureDeleted := make([]string, 0, len(deletedFiles))
+	for _, d := range deletedFiles {
+		if _, renamed := renames[d]; !renamed {
+			pureDeleted = append(pureDeleted, d)
+		}
 	}
 
 	fileStats, _ := git.GetUncommittedFileStats(repoPath)
@@ -68,7 +80,8 @@ func buildGraph(repoPath string, opts *watchOptions, formatter formatters.Format
 	if err != nil {
 		return "", fmt.Errorf("failed to build file graph metadata: %w", err)
 	}
-	depgraph.MarkDeletedFiles(&fileGraph, deletedFiles)
+	depgraph.MarkDeletedFiles(&fileGraph, pureDeleted)
+	depgraph.MarkRenamedFiles(&fileGraph, renames)
 
 	if !opts.noPhantom {
 		if diffs, diffErr := git.GetUncommittedFileDiffs(repoPath); diffErr == nil {
@@ -90,59 +103,79 @@ func buildGraph(repoPath string, opts *watchOptions, formatter formatters.Format
 
 var errNoUncommittedChanges = fmt.Errorf("no uncommitted changes")
 
-// pruneIsolatedDeletedNodes drops deleted files that have no edges in the graph.
-// A clean rename (delete the old path, add the new path, repoint importers)
-// leaves the old path as an isolated deleted node; rendering it would surface a
-// phantom "(deleted)" file for what is really a rename. Deleted files that are
-// still connected -- imported by live code, or part of a deleted subtree with
-// internal edges -- are kept, since those are meaningful to show.
-func pruneIsolatedDeletedNodes(graph depgraph.DependencyGraph, deletedFiles []string) (depgraph.DependencyGraph, []string, error) {
+// detectRenames identifies rename sources among the deleted files: a deleted
+// path whose pre-deletion (HEAD) content reappears verbatim in a currently
+// existing file is treated as having been renamed to that file. Returns a map of
+// old path -> new path.
+func detectRenames(
+	deletedFiles []string,
+	deletedContent map[string][]byte,
+	filePaths []string,
+	contentReader vcs.ContentReader,
+) map[string]string {
 	if len(deletedFiles) == 0 {
-		return graph, deletedFiles, nil
+		return nil
+	}
+
+	deleted := make(map[string]bool, len(deletedFiles))
+	for _, d := range deletedFiles {
+		deleted[d] = true
+	}
+
+	// Index currently-existing (non-deleted) files by content hash.
+	byHash := make(map[string]string)
+	for _, f := range filePaths {
+		if deleted[f] {
+			continue
+		}
+		content, err := contentReader(f)
+		if err != nil || len(content) == 0 {
+			continue
+		}
+		byHash[contentHash(content)] = f
+	}
+
+	renames := make(map[string]string)
+	for _, d := range deletedFiles {
+		content, ok := deletedContent[d]
+		if !ok || len(content) == 0 {
+			continue
+		}
+		if newPath, ok := byHash[contentHash(content)]; ok {
+			renames[d] = newPath
+		}
+	}
+	if len(renames) == 0 {
+		return nil
+	}
+	return renames
+}
+
+func contentHash(content []byte) string {
+	sum := sha256.Sum256(content)
+	return hex.EncodeToString(sum[:])
+}
+
+// addRenameEdges adds an old->new edge for each detected rename so the move is
+// drawn in the graph. The new path is already a node (it's a supplied file).
+func addRenameEdges(graph depgraph.DependencyGraph, renames map[string]string) (depgraph.DependencyGraph, error) {
+	if len(renames) == 0 {
+		return graph, nil
 	}
 
 	adjacency, err := depgraph.AdjacencyList(graph)
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to build adjacency list: %w", err)
+		return nil, fmt.Errorf("failed to build adjacency list: %w", err)
+	}
+	for oldPath, newPath := range renames {
+		adjacency[oldPath] = append(adjacency[oldPath], newPath)
 	}
 
-	inDegree := make(map[string]int)
-	for _, deps := range adjacency {
-		for _, dep := range deps {
-			inDegree[dep]++
-		}
-	}
-
-	isolated := make(map[string]bool)
-	for _, f := range deletedFiles {
-		if len(adjacency[f]) == 0 && inDegree[f] == 0 {
-			isolated[f] = true
-		}
-	}
-	if len(isolated) == 0 {
-		return graph, deletedFiles, nil
-	}
-
-	filtered := make(map[string][]string, len(adjacency))
-	for node, deps := range adjacency {
-		if isolated[node] {
-			continue
-		}
-		filtered[node] = deps
-	}
-
-	newGraph, err := depgraph.NewDependencyGraphFromAdjacency(filtered)
+	newGraph, err := depgraph.NewDependencyGraphFromAdjacency(adjacency)
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to rebuild graph after pruning deleted nodes: %w", err)
+		return nil, fmt.Errorf("failed to rebuild graph with rename edges: %w", err)
 	}
-
-	remaining := make([]string, 0, len(deletedFiles))
-	for _, f := range deletedFiles {
-		if !isolated[f] {
-			remaining = append(remaining, f)
-		}
-	}
-	return newGraph, remaining, nil
+	return newGraph, nil
 }
 
 func loadDeletedFileContent(repoPath string, deletedFiles []string) (map[string][]byte, error) {
