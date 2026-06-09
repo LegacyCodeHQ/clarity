@@ -11,7 +11,7 @@ import (
 func IsTestFile(filePath string, contentReader vcs.ContentReader) bool {
 	ext := filepath.Ext(filepath.Base(filePath))
 
-	module, ok := moduleForExtension(ext)
+	module, ok := ModuleForExtension(ext)
 	if !ok {
 		return false
 	}

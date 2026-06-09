@@ -6,6 +6,7 @@ import (
 	"text/tabwriter"
 	"unicode/utf8"
 
+	"github.com/LegacyCodeHQ/clarity/depgraph/moduleapi"
 	"github.com/LegacyCodeHQ/clarity/depgraph/registry"
 	"github.com/spf13/cobra"
 )
@@ -55,8 +56,8 @@ func runLanguages(cmd *cobra.Command, _ []string) error {
 	if _, err := fmt.Fprintln(cmd.OutOrStdout()); err != nil {
 		return err
 	}
-	legendParts := make([]string, 0, len(registry.MaturityLevels()))
-	for _, level := range registry.MaturityLevels() {
+	legendParts := make([]string, 0, len(moduleapi.MaturityLevels()))
+	for _, level := range moduleapi.MaturityLevels() {
 		legendParts = append(legendParts, fmt.Sprintf("%s %s", level.Symbol(), level.DisplayName()))
 	}
 	legendLine := strings.Join(legendParts, "  ")

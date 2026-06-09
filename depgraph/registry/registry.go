@@ -18,9 +18,10 @@ import (
 	"github.com/LegacyCodeHQ/clarity/depgraph/languages/swift"
 	"github.com/LegacyCodeHQ/clarity/depgraph/languages/typescript"
 	"github.com/LegacyCodeHQ/clarity/depgraph/languages/zig"
+	"github.com/LegacyCodeHQ/clarity/depgraph/moduleapi"
 )
 
-var modules = []Module{
+var modules = []moduleapi.Module{
 	c.Module{},
 	cpp.Module{},
 	csharp.Module{},
@@ -41,12 +42,12 @@ var modules = []Module{
 }
 
 // Modules returns supported language modules in deterministic order.
-func Modules() []Module {
-	return append([]Module(nil), modules...)
+func Modules() []moduleapi.Module {
+	return append([]moduleapi.Module(nil), modules...)
 }
 
 // ModuleForExtension returns the module registered for the provided extension.
-func ModuleForExtension(ext string) (Module, bool) {
+func ModuleForExtension(ext string) (moduleapi.Module, bool) {
 	for _, module := range modules {
 		for _, moduleExt := range module.Extensions() {
 			if moduleExt == ext {

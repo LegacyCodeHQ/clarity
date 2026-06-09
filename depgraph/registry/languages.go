@@ -1,13 +1,17 @@
 package registry
 
-import "sort"
+import (
+	"sort"
+
+	"github.com/LegacyCodeHQ/clarity/depgraph/moduleapi"
+)
 
 // LanguageSupport describes one supported programming language and
 // the file extensions that map to it.
 type LanguageSupport struct {
 	Name       string
 	Extensions []string
-	Maturity   MaturityLevel
+	Maturity   moduleapi.MaturityLevel
 }
 
 // SupportedLanguages returns a copy of all supported languages and their extensions.
