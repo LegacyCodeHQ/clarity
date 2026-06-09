@@ -40,6 +40,7 @@ type graphOptions struct {
 	pruneFiles   []string
 	alsoPatterns []string
 	modules      []string
+	noModules    bool
 	edgeLabels   bool
 	noStats      bool
 	noPhantom    bool
@@ -111,6 +112,7 @@ func NewCommand() *cobra.Command {
 	cmd.Flags().StringSliceVar(&opts.pruneFiles, "prune", nil, "Show node but skip its subtree (requires --file; shown with dashed border)")
 	cmd.Flags().StringSliceVar(&opts.alsoPatterns, "also", nil, "Include files matching glob patterns that connect to --file graph (requires --file)")
 	cmd.Flags().StringArrayVar(&opts.modules, "module", nil, "Group files into a named module rendered as a cluster (format: name=file1,file2; repeatable)")
+	cmd.Flags().BoolVar(&opts.noModules, "no-modules", false, "Ignore module definitions auto-discovered in .clarity/modules.json")
 	cmd.Flags().BoolVar(&opts.edgeLabels, "label", false, "Add deterministic short labels to edges")
 	cmd.Flags().BoolVar(&opts.noStats, "no-stats", false, "Skip file addition/deletion statistics for faster rendering")
 	cmd.Flags().BoolVar(&opts.noPhantom, "no-phantom", false, "Suppress phantom test nodes (Rust files with #[cfg(test)] regions are rendered as a single node)")
@@ -208,11 +210,11 @@ func runGraph(cmd *cobra.Command, opts *graphOptions) error {
 	renderBasePath := resolveRenderBasePath(opts.repoPath, filePaths)
 
 	var collapse depgraph.Collapse
-	if len(opts.modules) > 0 {
-		modules, err := buildModules(opts.modules, pathResolver)
-		if err != nil {
-			return err
-		}
+	modules, err := resolveModules(opts, pathResolver)
+	if err != nil {
+		return err
+	}
+	if len(modules) > 0 {
 		graph, collapse, err = depgraph.CollapseModules(graph, modules)
 		if err != nil {
 			return err
