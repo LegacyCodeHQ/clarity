@@ -358,6 +358,7 @@ const javaTypeIdentifierQuery = `
 ((type_identifier) @type.name)
 ((scoped_type_identifier) @type.name)
 ((field_access object: (identifier) @type.name))
+((method_invocation object: (identifier) @type.name))
 ((marker_annotation name: (identifier) @type.name))
 ((annotation name: (identifier) @type.name))
 ((marker_annotation name: (scoped_identifier) @type.name))

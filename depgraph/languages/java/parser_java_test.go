@@ -74,3 +74,20 @@ public class Cart {
 	assert.NotContains(t, identifiers, "DeliveryOption")
 	assert.NotContains(t, identifiers, "Money")
 }
+
+func TestExtractTypeIdentifiers_StaticMethodCallQualifier(t *testing.T) {
+	// A same-package type referenced only as the qualifier of a static method
+	// call (e.g. `NumberLimits.parseBigDecimal(...)`) must still be extracted, so
+	// a dependency edge is formed. Mirrors the existing static field-access rule.
+	src := []byte(`package com.example.model;
+
+public class LazilyParsedNumber {
+    public java.math.BigDecimal bigDecimalValue(String value) {
+        return NumberLimits.parseBigDecimal(value);
+    }
+}
+`)
+
+	identifiers := ExtractTypeIdentifiers(src)
+	assert.Contains(t, identifiers, "NumberLimits")
+}
