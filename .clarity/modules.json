@@ -3,6 +3,10 @@
     {
       "name": "python support",
       "files": ["depgraph/languages/python/*.go"]
+    },
+    {
+      "name": "javascript support",
+      "files": ["depgraph/languages/javascript/*.go"]
     }
   ]
 }
