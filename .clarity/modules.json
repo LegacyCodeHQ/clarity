@@ -71,6 +71,12 @@
       "files": [
         "depgraph/languages/ruby/*.go"
       ]
+    },
+    {
+      "name": "rust support",
+      "files": [
+        "depgraph/languages/rust/*.go"
+      ]
     }
   ]
 }
