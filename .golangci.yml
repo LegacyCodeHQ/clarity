@@ -1,3 +1,10 @@
+issues:
+  # node_modules (under cmd/watch/web) can contain vendored .go files shipped by
+  # npm packages (e.g. flatted via @vitest/ui); they are not part of this
+  # module's source and must never be linted.
+  exclude-dirs:
+    - node_modules
+
 linters:
   enable:
     - exhaustive
