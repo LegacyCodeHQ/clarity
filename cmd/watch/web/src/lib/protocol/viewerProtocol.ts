@@ -42,6 +42,9 @@ export interface Collection {
 
 export interface GraphStreamPayload {
   repos?: RepoDescriptor[];
+  // Session-global render format of every snapshot's `dot` field ("dot" or
+  // "mermaid"). Absent on older payloads; treated as "dot".
+  format?: string;
   workingSnapshots: Snapshot[];
   pastCollections: Collection[];
   latestWorkingId?: number;
@@ -137,6 +140,7 @@ export function normalizeGraphStreamPayload(payload: unknown): GraphStreamPayloa
   if (!payload || typeof payload !== "object") {
     return {
       repos: [],
+      format: "dot",
       workingSnapshots: [],
       pastCollections: [],
     };
@@ -156,5 +160,6 @@ export function normalizeGraphStreamPayload(payload: unknown): GraphStreamPayloa
       : [],
     latestWorkingId: Number.isFinite(p.latestWorkingId) ? (p.latestWorkingId as number) : 0,
     latestPastCollectionId: Number.isFinite(p.latestPastCollectionId) ? (p.latestPastCollectionId as number) : 0,
+    format: typeof p.format === "string" && p.format !== "" ? p.format : "dot",
   };
 }

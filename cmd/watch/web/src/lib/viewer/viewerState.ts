@@ -32,6 +32,9 @@ export interface ViewerState {
   selectedCollectionID: number | null;
   selectedCollectionSnapshotIndex: number;
   liveSnapshotIndex: number | null;
+
+  // Session-global render format ("dot" or "mermaid") from the latest payload.
+  format: string;
 }
 
 export interface SourceOption {
@@ -57,6 +60,7 @@ export interface ViewModel {
   sourceValue: string;
   sourceOptions: SourceOption[];
   renderDot: string | null;
+  renderFormat: string;
   timeline: TimelineViewModel;
 }
 
@@ -159,6 +163,7 @@ export function normalizeState(state: Partial<ViewerState>): ViewerState {
     liveSnapshotIndex: state.liveSnapshotIndex === null || Number.isFinite(state.liveSnapshotIndex)
       ? state.liveSnapshotIndex ?? null
       : null,
+    format: state.format ?? "dot",
   };
 
   if (next.workingSnapshots.length === 0) {
@@ -250,6 +255,7 @@ export function mergePayload(state: ViewerState, payload: GraphStreamPayload): V
     ...state,
     repos,
     byRepo,
+    format: payload.format ?? state.format ?? "dot",
     // Discard the previous projection so it can't leak through normalizeState's
     // fallback when the new bucket is empty for the selected repo.
     workingSnapshots: [],
@@ -405,6 +411,7 @@ export function getViewModel(state: ViewerState, timeFormatter: TimeFormatter = 
       sourceValue,
       sourceOptions: getSourceOptions(normalized, timeFormatter),
       renderDot: total > 0 ? normalized.workingSnapshots[selectedIndex]!.dot : null,
+      renderFormat: normalized.format,
       timeline: {
         modeText: !allowsLive
           ? "Removed working directory snapshot"
@@ -437,6 +444,7 @@ export function getViewModel(state: ViewerState, timeFormatter: TimeFormatter = 
     sourceValue,
     sourceOptions: getSourceOptions(normalized, timeFormatter),
     renderDot: total > 0 ? snapshots[normalized.selectedCollectionSnapshotIndex]!.dot : null,
+    renderFormat: normalized.format,
     timeline: {
       modeText: "Session snapshots",
       sliderDisabled: total <= 1,

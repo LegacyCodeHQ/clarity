@@ -49,9 +49,17 @@ describe('normalizeGraphStreamPayload', () => {
   it('handles non-object input', () => {
     expect(normalizeGraphStreamPayload(null)).toEqual({
       repos: [],
+      format: "dot",
       workingSnapshots: [],
       pastCollections: [],
     });
+  });
+
+  it('defaults format to "dot" when missing and preserves it when present', () => {
+    expect(normalizeGraphStreamPayload({ workingSnapshots: [], pastCollections: [] }).format).toBe("dot");
+    expect(
+      normalizeGraphStreamPayload({ format: "mermaid", workingSnapshots: [], pastCollections: [] }).format,
+    ).toBe("mermaid");
   });
 
   it('defaults repoId to empty string when missing', () => {

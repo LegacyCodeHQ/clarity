@@ -2,6 +2,7 @@
   import { onMount } from 'svelte';
   import { viewModel } from '../lib/stores/graphStore';
   import { initGraphviz, renderDot } from '../lib/graphviz';
+  import { renderMermaid } from '../lib/mermaid';
   import {
     beginRender,
     cancelPendingRenders,
@@ -28,16 +29,23 @@
     }
   });
 
-  async function renderGraph(dot: string) {
-    if (!graphvizReady || !graphContainer) return;
+  // Mermaid is rendered lazily and needs no eager init, so the dot renderer's
+  // readiness only gates the dot path.
+  let rendererReady = $derived(
+    ($viewModel.renderFormat ?? 'dot') === 'mermaid' ? true : graphvizReady,
+  );
+
+  async function renderGraph(source: string, format: string) {
+    if (!graphContainer) return;
+    if (format !== 'mermaid' && !graphvizReady) return;
 
     const started = beginRender(renderState);
     renderState = started.state;
     const requestID = started.requestID;
 
     try {
-      const svg = await renderDot(dot);
-      renderState = completeRender(renderState, requestID, dot);
+      const svg = format === 'mermaid' ? await renderMermaid(source) : await renderDot(source);
+      renderState = completeRender(renderState, requestID, source);
       if (requestID !== renderState.activeRequestID) {
         return;
       }
@@ -49,18 +57,19 @@
         return;
       }
 
-      console.error('Graphviz render error:', err);
+      console.error('Graph render error:', err);
       renderError = 'Render error';
     }
   }
 
   $effect(() => {
-    const dot = $viewModel.renderDot;
-    if (dot && graphvizReady) {
-      if (shouldRenderDot(renderState, dot)) {
-        renderGraph(dot);
+    const source = $viewModel.renderDot;
+    const format = $viewModel.renderFormat ?? 'dot';
+    if (source && rendererReady) {
+      if (shouldRenderDot(renderState, source)) {
+        renderGraph(source, format);
       }
-    } else if (!dot && graphContainer) {
+    } else if (!source && graphContainer) {
       renderState = cancelPendingRenders(renderState);
       renderState = clearRenderedDot(renderState);
       graphContainer.innerHTML = '';
@@ -74,11 +83,11 @@
     <div bind:this={graphContainer} class="w-full h-full flex items-center justify-center p-12 transition-opacity duration-300 [&_svg]:transition-all [&_svg]:duration-300"></div>
 
     <!-- Message container (Svelte managed) -->
-    {#if !graphvizReady}
+    {#if !rendererReady}
       <div class="absolute inset-0 flex items-center justify-center">
         <div class="flex flex-col items-center gap-4 animate-fade-in">
           <Skeleton class="h-24 w-48" />
-          <p class="text-muted-foreground text-sm">Loading Graphviz...</p>
+          <p class="text-muted-foreground text-sm">Loading renderer...</p>
         </div>
       </div>
     {:else if renderError}

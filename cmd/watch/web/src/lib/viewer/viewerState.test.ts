@@ -38,6 +38,7 @@ function baseState(): ViewerState {
     selectedCollectionID: null,
     selectedCollectionSnapshotIndex: 0,
     liveSnapshotIndex: null,
+    format: "dot",
   };
 }
 
