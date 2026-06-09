@@ -11,31 +11,27 @@ import (
 type dependencyGraphContext = moduleapi.Context
 
 func buildDependencyGraphContext(filePaths []string, contentReader vcs.ContentReader) (*dependencyGraphContext, error) {
-	suppliedFiles, dirToFiles, javaFiles, kotlinFiles, goFiles, err := collectDependencyGraphFiles(filePaths)
+	suppliedFiles, dirToFiles, filesByExtension, err := collectDependencyGraphFiles(filePaths)
 	if err != nil {
 		return nil, err
 	}
 
 	return &dependencyGraphContext{
-		SuppliedFiles: suppliedFiles,
-		DirToFiles:    dirToFiles,
-		JavaFiles:     javaFiles,
-		KotlinFiles:   kotlinFiles,
-		GoFiles:       goFiles,
+		SuppliedFiles:    suppliedFiles,
+		DirToFiles:       dirToFiles,
+		FilesByExtension: filesByExtension,
 	}, nil
 }
 
-func collectDependencyGraphFiles(filePaths []string) (map[string]bool, map[string][]string, []string, []string, []string, error) {
+func collectDependencyGraphFiles(filePaths []string) (map[string]bool, map[string][]string, map[string][]string, error) {
 	suppliedFiles := make(map[string]bool)
 	dirToFiles := make(map[string][]string)
-	var javaFiles []string
-	var kotlinFiles []string
-	var goFiles []string
+	filesByExtension := make(map[string][]string)
 
 	for _, filePath := range filePaths {
 		absPath, err := filepath.Abs(filePath)
 		if err != nil {
-			return nil, nil, nil, nil, nil, fmt.Errorf("failed to resolve path %s: %w", filePath, err)
+			return nil, nil, nil, fmt.Errorf("failed to resolve path %s: %w", filePath, err)
 		}
 		suppliedFiles[absPath] = true
 
@@ -43,21 +39,11 @@ func collectDependencyGraphFiles(filePaths []string) (map[string]bool, map[strin
 		dir := filepath.Dir(absPath)
 		dirToFiles[dir] = append(dirToFiles[dir], absPath)
 
-		// Collect Java files for package/type indexing
-		if filepath.Ext(absPath) == ".java" {
-			javaFiles = append(javaFiles, absPath)
-		}
-
-		// Collect Kotlin files for package indexing
-		if ext := filepath.Ext(absPath); ext == ".kt" || ext == ".kts" {
-			kotlinFiles = append(kotlinFiles, absPath)
-		}
-
-		// Collect Go files for export indexing
-		if filepath.Ext(absPath) == ".go" {
-			goFiles = append(goFiles, absPath)
-		}
+		// Group by extension so providers can fetch the files they declare
+		// without this builder knowing about specific languages.
+		ext := filepath.Ext(absPath)
+		filesByExtension[ext] = append(filesByExtension[ext], absPath)
 	}
 
-	return suppliedFiles, dirToFiles, javaFiles, kotlinFiles, goFiles, nil
+	return suppliedFiles, dirToFiles, filesByExtension, nil
 }

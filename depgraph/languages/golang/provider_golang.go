@@ -45,7 +45,7 @@ func (r resolver) ResolveProjectImports(absPath, filePath, _ string) ([]string, 
 }
 
 func (r resolver) FinalizeGraph(graph moduleapi.Graph) error {
-	return addGoIntraPackageDependencies(graph, r.ctx.GoFiles, r.contentReader, r.projectResolver)
+	return addGoIntraPackageDependencies(graph, r.ctx.FilesByExtension[".go"], r.contentReader, r.projectResolver)
 }
 
 func addGoIntraPackageDependencies(

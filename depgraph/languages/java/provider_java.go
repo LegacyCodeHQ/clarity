@@ -20,7 +20,7 @@ func (Provider) Maturity() moduleapi.MaturityLevel {
 }
 
 func (Provider) NewResolver(ctx *moduleapi.Context, contentReader vcs.ContentReader) moduleapi.Resolver {
-	packageIndex, packageTypes, filePackages := BuildJavaIndices(ctx.JavaFiles, contentReader)
+	packageIndex, packageTypes, filePackages := BuildJavaIndices(ctx.FilesByExtension[".java"], contentReader)
 	return resolver{
 		ctx:           ctx,
 		contentReader: contentReader,
