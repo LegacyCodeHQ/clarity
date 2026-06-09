@@ -7,7 +7,6 @@ import (
 	"strconv"
 
 	cyclescmd "github.com/LegacyCodeHQ/clarity/cmd/cycles"
-	diffcmd "github.com/LegacyCodeHQ/clarity/cmd/diff"
 	extensionscmd "github.com/LegacyCodeHQ/clarity/cmd/extensions"
 	"github.com/LegacyCodeHQ/clarity/cmd/languages"
 	setupcmd "github.com/LegacyCodeHQ/clarity/cmd/setup"
@@ -102,7 +101,6 @@ func init() {
 	rootCmd.AddCommand(setupcmd.Cmd)
 	rootCmd.AddCommand(watchcmd.Cmd)
 	if isDevelopmentBuild(enableDevCommands) {
-		rootCmd.AddCommand(diffcmd.Cmd)
 		rootCmd.AddCommand(whycmd.Cmd)
 	}
 	rootCmd.CompletionOptions.DisableDefaultCmd = true

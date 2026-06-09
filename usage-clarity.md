@@ -23,34 +23,12 @@ Inherited by all subcommands. Extracted from `cmd/root.go`.
 
 | Command | Description |
 |---|---|
-| `diff` | Show dependency-graph changes between snapshots |
 | `languages` | List all supported languages and file extensions |
 | `setup` | Add clarity usage instructions to AGENTS.md |
 | `show` | Show a scoped file-based dependency graph |
 | `watch` | Watch for file changes and serve a live dependency graph |
 | `why <from> <to>` | Show direct dependency direction(s) between two files |
 | `workspace` | Experimental workspace relationship graph for Go modules and Rust crates |
-
----
-
-
-## `clarity diff`
-
-Show dependency-graph changes between snapshots.
-
-```
-clarity diff [OPTIONS]
-```
-
-| Flag | Short | Type | Default | Description |
-|---|---|---|---|---|
-| `--repo` | `-r` | string | `""` | Git repository path (default: current directory) |
-| `--format` | `-f` | string | `opts.outputFmt` | fmt.Sprintf("Output format (%s)", formatters.SupportedFormats()) |
-| `--commit` | `-c` | string | `""` | Compare committed snapshots (<commit> or <A>,<B>) |
-| `--summary` | | bool | `false` | Print text summary only |
-
----
-
 
 ## `clarity languages`
 
