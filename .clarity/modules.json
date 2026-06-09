@@ -1,0 +1,8 @@
+{
+  "modules": [
+    {
+      "name": "python support",
+      "files": ["depgraph/languages/python/*.go"]
+    }
+  ]
+}
