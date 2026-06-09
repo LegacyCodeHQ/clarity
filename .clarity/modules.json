@@ -2,19 +2,33 @@
   "modules": [
     {
       "name": "python support",
-      "files": ["depgraph/languages/python/*.go"]
+      "files": [
+        "depgraph/languages/python/*.go"
+      ]
     },
     {
       "name": "javascript support",
-      "files": ["depgraph/languages/javascript/*.go"]
+      "files": [
+        "depgraph/languages/javascript/*.go"
+      ]
     },
     {
       "name": "svelte support",
-      "files": ["depgraph/languages/svelte/*.go"]
+      "files": [
+        "depgraph/languages/svelte/*.go"
+      ]
     },
     {
       "name": "typescript support",
-      "files": ["depgraph/languages/typescript/*.go"]
+      "files": [
+        "depgraph/languages/typescript/*.go"
+      ]
+    },
+    {
+      "name": "c support",
+      "files": [
+        "depgraph/languages/c/*.go"
+      ]
     }
   ]
 }
