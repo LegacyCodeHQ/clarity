@@ -210,10 +210,15 @@ func runGraph(cmd *cobra.Command, opts *graphOptions) error {
 	renderBasePath := resolveRenderBasePath(opts.repoPath, filePaths)
 
 	var collapse depgraph.Collapse
-	modules, err := resolveModules(opts, pathResolver)
+	configModules, err := resolveConfigModules(opts.repoPath, opts.noModules)
 	if err != nil {
 		return err
 	}
+	flagModules, err := buildModules(opts.modules, pathResolver)
+	if err != nil {
+		return err
+	}
+	modules := mergeModules(configModules, flagModules)
 	if len(modules) > 0 {
 		graph, collapse, err = depgraph.CollapseModules(graph, modules)
 		if err != nil {

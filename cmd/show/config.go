@@ -108,26 +108,14 @@ func hasGlobMeta(pattern string) bool {
 	return strings.ContainsAny(pattern, "*?[")
 }
 
-// resolveModules combines modules declared in .clarity/modules.json with those
-// passed via --module flags. Flag modules take precedence over config modules
-// with the same name. Config discovery is skipped entirely when --no-modules
-// is set.
-func resolveModules(opts *graphOptions, pathResolver PathResolver) ([]depgraph.Module, error) {
-	var configModules []depgraph.Module
-	if !opts.noModules {
-		var err error
-		configModules, err = loadConfigModules(opts.repoPath)
-		if err != nil {
-			return nil, err
-		}
+// resolveConfigModules returns modules declared in .clarity/modules.json unless
+// config discovery is disabled.
+func resolveConfigModules(repoPath string, noModules bool) ([]depgraph.Module, error) {
+	if noModules {
+		return nil, nil
 	}
 
-	flagModules, err := buildModules(opts.modules, pathResolver)
-	if err != nil {
-		return nil, err
-	}
-
-	return mergeModules(configModules, flagModules), nil
+	return loadConfigModules(repoPath)
 }
 
 // mergeModules returns configModules followed by flagModules, with a flag module
