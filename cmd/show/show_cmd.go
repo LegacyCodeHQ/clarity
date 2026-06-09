@@ -153,6 +153,26 @@ func runGraph(cmd *cobra.Command, opts *graphOptions) error {
 		return nil
 	}
 
+	// Bring deleted files into the bare commit view as nodes. They're excluded
+	// from the changed-file list (they no longer exist in the tree), so collect
+	// them separately and load their content from the parent ref.
+	var deletedContent map[string][]byte
+	var deletedFiles []string
+	if isPlainCommitView(opts) {
+		var baseRef string
+		deletedFiles, baseRef, err = collectCommitDeletedFiles(opts, fromCommit, toCommit, isCommitRange)
+		if err != nil {
+			return err
+		}
+		if len(deletedFiles) > 0 {
+			deletedContent, err = loadDeletedFileContent(opts.repoPath, baseRef, deletedFiles)
+			if err != nil {
+				return err
+			}
+			filePaths = append(filePaths, deletedFiles...)
+		}
+	}
+
 	filePaths, err = applyExcludePathFilter(opts, pathResolver, filePaths)
 	if err != nil {
 		return err
@@ -171,12 +191,25 @@ func runGraph(cmd *cobra.Command, opts *graphOptions) error {
 	emitUnsupportedFileWarning(filePaths)
 
 	contentReader := selectContentReader(opts, toCommit)
+	if len(deletedContent) > 0 {
+		contentReader = deletedAwareContentReader(contentReader, deletedContent)
+	}
 
 	graph, err := depgraph.BuildDependencyGraph(filePaths, contentReader)
 	if err != nil {
 		mcplogdlog.Error("show: build dependency graph failed", map[string]any{"error": err.Error()})
 		return fmt.Errorf("failed to build dependency graph: %w", err)
 	}
+
+	// A rename surfaces as an old path deleted + a new path added with identical
+	// content. Detect those so they render as a move instead of a duplicated
+	// subtree, leaving only genuine removals marked as deletions.
+	renames := depgraph.DetectRenames(deletedFiles, deletedContent, filePaths, contentReader)
+	graph, err = depgraph.AddRenameEdges(graph, renames)
+	if err != nil {
+		return err
+	}
+	deletedFiles = filterRenamed(deletedFiles, renames)
 
 	var fullAdjacency map[string][]string
 	if len(opts.alsoPatterns) > 0 {
@@ -237,6 +270,9 @@ func runGraph(cmd *cobra.Command, opts *graphOptions) error {
 	if err != nil {
 		return fmt.Errorf("failed to build file graph metadata: %w", err)
 	}
+
+	depgraph.MarkDeletedFiles(&fileGraph, deletedFiles)
+	depgraph.MarkRenamedFiles(&fileGraph, renames)
 
 	for node := range prunedNodes {
 		if md, ok := fileGraph.Meta.Files[node]; ok {
@@ -634,6 +670,79 @@ func selectContentReader(opts *graphOptions, toCommit string) vcs.ContentReader 
 		return git.GitCommitContentReader(opts.repoPath, toCommit)
 	}
 	return vcs.FilesystemContentReader()
+}
+
+// isPlainCommitView reports whether this is a bare `-c <commit>` view, as opposed
+// to one narrowed by --input, --between, or --file. Only the plain view injects
+// deleted files as nodes; the narrowed views resolve against the commit tree.
+func isPlainCommitView(opts *graphOptions) bool {
+	return opts.commitID != "" && len(opts.includes) == 0 && len(opts.betweenFiles) == 0 && opts.targetFile == ""
+}
+
+// collectCommitDeletedFiles returns the files removed by the commit (or range)
+// and the ref to read their pre-deletion content from: the commit's first parent
+// for a single commit, or the lower bound for a range. A root commit (no parent)
+// can have no deletions, so it returns nothing.
+func collectCommitDeletedFiles(opts *graphOptions, fromCommit, toCommit string, isCommitRange bool) (paths []string, baseRef string, err error) {
+	if isCommitRange {
+		paths, err = git.GetCommitRangeDeletedFiles(opts.repoPath, fromCommit, toCommit)
+		return paths, fromCommit, err
+	}
+
+	parent, hasParent, err := git.ResolveFirstParent(opts.repoPath, toCommit)
+	if err != nil {
+		return nil, "", err
+	}
+	if !hasParent {
+		return nil, "", nil
+	}
+	paths, err = git.GetCommitDeletedFiles(opts.repoPath, toCommit)
+	return paths, parent, err
+}
+
+// loadDeletedFileContent reads each deleted file's content from baseRef so the
+// graph can still parse its dependencies and render it as a node.
+func loadDeletedFileContent(repoPath, baseRef string, deletedFiles []string) (map[string][]byte, error) {
+	if len(deletedFiles) == 0 {
+		return nil, nil
+	}
+
+	reader := git.GitCommitContentReader(repoPath, baseRef)
+	content := make(map[string][]byte, len(deletedFiles))
+	for _, absPath := range deletedFiles {
+		bytes, err := reader(absPath)
+		if err != nil {
+			return nil, fmt.Errorf("failed to read deleted file %s from %s: %w", absPath, baseRef, err)
+		}
+		content[absPath] = bytes
+	}
+	return content, nil
+}
+
+// filterRenamed drops rename sources from the deleted set so they're marked as
+// moves rather than plain deletions.
+func filterRenamed(deletedFiles []string, renames map[string]string) []string {
+	if len(renames) == 0 {
+		return deletedFiles
+	}
+	pure := make([]string, 0, len(deletedFiles))
+	for _, d := range deletedFiles {
+		if _, renamed := renames[d]; !renamed {
+			pure = append(pure, d)
+		}
+	}
+	return pure
+}
+
+// deletedAwareContentReader serves deleted-file content from the preloaded map
+// (read from the parent ref) and delegates everything else to the base reader.
+func deletedAwareContentReader(base vcs.ContentReader, deletedContent map[string][]byte) vcs.ContentReader {
+	return func(absPath string) ([]byte, error) {
+		if content, ok := deletedContent[absPath]; ok {
+			return content, nil
+		}
+		return base(absPath)
+	}
 }
 
 // annotateRustPhantoms attaches phantom-test metadata to .rs files in the

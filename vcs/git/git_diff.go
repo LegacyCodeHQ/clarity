@@ -175,6 +175,74 @@ func getCommitFiles(repoPath, commitID string) ([]string, error) {
 	return files, nil
 }
 
+// GetCommitDeletedFiles finds all files that were deleted by a specific commit.
+// Returns absolute paths. Their content no longer exists in the commit, so read
+// it from the commit's parent (see ResolveFirstParent).
+func GetCommitDeletedFiles(repoPath, commitID string) ([]string, error) {
+	if _, err := os.Stat(repoPath); os.IsNotExist(err) {
+		return nil, fmt.Errorf("repository path does not exist: %s", repoPath)
+	}
+	if !isGitRepository(repoPath) {
+		return nil, fmt.Errorf("%s is not a git repository (use 'git init' to initialize)", repoPath)
+	}
+	if err := validateCommit(repoPath, commitID); err != nil {
+		return nil, err
+	}
+
+	repoRoot, err := GetRepositoryRoot(repoPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get repository root: %w", err)
+	}
+
+	// --diff-filter=D (uppercase) selects only deleted files, the inverse of the
+	// lowercase d used elsewhere to exclude them.
+	stdout, stderr, err := runGitCommand(repoPath, "diff-tree", "--no-commit-id", "--name-only", "-r", "--root", "--diff-filter=D", commitID)
+	if err != nil {
+		return nil, gitCommandError(err, stderr)
+	}
+
+	return toAbsolutePaths(repoRoot, parseNonEmptyLines(stdout)), nil
+}
+
+// GetCommitRangeDeletedFiles finds all files deleted between two commits.
+// Returns absolute paths. Their content should be read from fromCommit.
+func GetCommitRangeDeletedFiles(repoPath, fromCommit, toCommit string) ([]string, error) {
+	if _, err := os.Stat(repoPath); os.IsNotExist(err) {
+		return nil, fmt.Errorf("repository path does not exist: %s", repoPath)
+	}
+	if !isGitRepository(repoPath) {
+		return nil, fmt.Errorf("%s is not a git repository (use 'git init' to initialize)", repoPath)
+	}
+	if err := validateCommit(repoPath, fromCommit); err != nil {
+		return nil, err
+	}
+	if err := validateCommit(repoPath, toCommit); err != nil {
+		return nil, err
+	}
+
+	repoRoot, err := GetRepositoryRoot(repoPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get repository root: %w", err)
+	}
+
+	stdout, stderr, err := runGitCommand(repoPath, "diff", "--name-only", "--diff-filter=D", fromCommit, toCommit)
+	if err != nil {
+		return nil, gitCommandError(err, stderr)
+	}
+
+	return toAbsolutePaths(repoRoot, parseNonEmptyLines(stdout)), nil
+}
+
+func parseNonEmptyLines(stdout []byte) []string {
+	var files []string
+	for _, line := range strings.Split(string(stdout), "\n") {
+		if line = strings.TrimSpace(line); line != "" {
+			files = append(files, line)
+		}
+	}
+	return files
+}
+
 // GetFileContentFromCommit reads the content of a file at a specific commit
 // using 'git show commit:path'. The filePath should be relative to the repository root.
 func GetFileContentFromCommit(repoPath, commitID, filePath string) ([]byte, error) {

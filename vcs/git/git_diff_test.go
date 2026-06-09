@@ -129,6 +129,58 @@ func TestGetUncommittedDartFiles_IncludesAllFiles(t *testing.T) {
 	g.Assert(t, t.Name(), []byte(normalizeFilePaths(tmpDir, files)))
 }
 
+func TestGetCommitDeletedFiles_ReturnsFilesDeletedByCommit(t *testing.T) {
+	tmpDir := t.TempDir()
+	setupGitRepo(t, tmpDir)
+
+	createFile(t, tmpDir, "keep.go", "package main\n")
+	createFile(t, tmpDir, "gone.go", "package main\n")
+	gitAdd(t, tmpDir, "-A")
+	gitCommit(t, tmpDir, "add files")
+
+	require.NoError(t, os.Remove(filepath.Join(tmpDir, "gone.go")))
+	gitAdd(t, tmpDir, "-A")
+	sha := gitCommitAndGetSHA(t, tmpDir, "delete gone.go")
+
+	files, err := GetCommitDeletedFiles(tmpDir, sha)
+
+	require.NoError(t, err)
+	assert.Equal(t, "$REPO/gone.go", normalizeFilePaths(tmpDir, files))
+}
+
+func TestGetCommitDeletedFiles_RootCommitHasNone(t *testing.T) {
+	tmpDir := t.TempDir()
+	setupGitRepo(t, tmpDir)
+
+	createFile(t, tmpDir, "keep.go", "package main\n")
+	gitAdd(t, tmpDir, "-A")
+	sha := gitCommitAndGetSHA(t, tmpDir, "initial commit")
+
+	files, err := GetCommitDeletedFiles(tmpDir, sha)
+
+	require.NoError(t, err)
+	assert.Empty(t, files)
+}
+
+func TestGetCommitRangeDeletedFiles_ReturnsFilesDeletedAcrossRange(t *testing.T) {
+	tmpDir := t.TempDir()
+	setupGitRepo(t, tmpDir)
+
+	createFile(t, tmpDir, "keep.go", "package main\n")
+	createFile(t, tmpDir, "gone.go", "package main\n")
+	gitAdd(t, tmpDir, "-A")
+	base := gitCommitAndGetSHA(t, tmpDir, "add files")
+
+	require.NoError(t, os.Remove(filepath.Join(tmpDir, "gone.go")))
+	gitAdd(t, tmpDir, "-A")
+	head := gitCommitAndGetSHA(t, tmpDir, "delete gone.go")
+
+	files, err := GetCommitRangeDeletedFiles(tmpDir, base, head)
+
+	require.NoError(t, err)
+	assert.Equal(t, "$REPO/gone.go", normalizeFilePaths(tmpDir, files))
+}
+
 func TestGetUncommittedDartFiles_NoUncommittedFiles(t *testing.T) {
 	tmpDir := t.TempDir()
 	setupGitRepo(t, tmpDir)

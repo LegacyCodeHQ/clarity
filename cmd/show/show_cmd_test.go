@@ -134,6 +134,99 @@ public class App {}
 	}
 }
 
+func TestGraphCommit_RendersDeletedFileNode(t *testing.T) {
+	repoDir := t.TempDir()
+	gitInitRepo(t, repoDir)
+
+	keeperFile := filepath.Join(repoDir, "keeper.ts")
+	obsoleteFile := filepath.Join(repoDir, "obsolete.ts")
+
+	// Commit 1: keeper imports obsolete; both files exist.
+	if err := os.WriteFile(keeperFile, []byte("import { gone } from './obsolete';\nexport const k = gone;\n"), 0o644); err != nil {
+		t.Fatalf("os.WriteFile() error = %v", err)
+	}
+	if err := os.WriteFile(obsoleteFile, []byte("export const gone = 1;\n"), 0o644); err != nil {
+		t.Fatalf("os.WriteFile() error = %v", err)
+	}
+	gitRun(t, repoDir, "add", "-A")
+	gitRun(t, repoDir, "commit", "-m", "add files")
+
+	// Commit 2: delete obsolete.ts while keeper still references it (a dangling
+	// import to a removed file is exactly what the deleted node should surface).
+	if err := os.Remove(obsoleteFile); err != nil {
+		t.Fatalf("os.Remove() error = %v", err)
+	}
+	if err := os.WriteFile(keeperFile, []byte("import { gone } from './obsolete';\nexport const k = gone + 1;\n"), 0o644); err != nil {
+		t.Fatalf("os.WriteFile() error = %v", err)
+	}
+	gitRun(t, repoDir, "add", "-A")
+	gitRun(t, repoDir, "commit", "-m", "delete obsolete")
+
+	cmd := NewCommand()
+	cmd.SetArgs([]string{"-r", repoDir, "-c", "HEAD", "-f", "dot"})
+
+	var stdout bytes.Buffer
+	cmd.SetOut(&stdout)
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("cmd.Execute() error = %v", err)
+	}
+
+	output := stdout.String()
+	if !strings.Contains(output, "obsolete.ts") {
+		t.Fatalf("expected deleted obsolete.ts node in output, got:\n%s", output)
+	}
+	if !strings.Contains(output, "(deleted)") {
+		t.Fatalf("expected obsolete.ts to be marked (deleted), got:\n%s", output)
+	}
+	if !strings.Contains(output, `keeper.ts" -> "`) {
+		t.Fatalf("expected edge from keeper.ts to the deleted node, got:\n%s", output)
+	}
+}
+
+func TestGraphCommit_RendersRenameAsMoveNotDeletion(t *testing.T) {
+	repoDir := t.TempDir()
+	gitInitRepo(t, repoDir)
+
+	oldFile := filepath.Join(repoDir, "old.ts")
+	newFile := filepath.Join(repoDir, "new.ts")
+	body := []byte("export const value = 1;\n")
+
+	if err := os.WriteFile(oldFile, body, 0o644); err != nil {
+		t.Fatalf("os.WriteFile() error = %v", err)
+	}
+	gitRun(t, repoDir, "add", "-A")
+	gitRun(t, repoDir, "commit", "-m", "add old.ts")
+
+	// Rename old.ts -> new.ts with identical content.
+	if err := os.Remove(oldFile); err != nil {
+		t.Fatalf("os.Remove() error = %v", err)
+	}
+	if err := os.WriteFile(newFile, body, 0o644); err != nil {
+		t.Fatalf("os.WriteFile() error = %v", err)
+	}
+	gitRun(t, repoDir, "add", "-A")
+	gitRun(t, repoDir, "commit", "-m", "rename old.ts to new.ts")
+
+	cmd := NewCommand()
+	cmd.SetArgs([]string{"-r", repoDir, "-c", "HEAD", "-f", "dot"})
+
+	var stdout bytes.Buffer
+	cmd.SetOut(&stdout)
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("cmd.Execute() error = %v", err)
+	}
+
+	output := stdout.String()
+	if !strings.Contains(output, "(renamed)") {
+		t.Fatalf("expected old.ts to be marked (renamed), got:\n%s", output)
+	}
+	if strings.Contains(output, "(deleted)") {
+		t.Fatalf("expected a rename not to render as (deleted), got:\n%s", output)
+	}
+}
+
 func TestGraphCommit_WithInput_UsesCommitTreePaths(t *testing.T) {
 	repoDir := t.TempDir()
 	gitInitRepo(t, repoDir)
