@@ -77,6 +77,12 @@
       "files": [
         "depgraph/languages/rust/*.go"
       ]
+    },
+    {
+      "name": "scala support",
+      "files": [
+        "depgraph/languages/scala/*.go"
+      ]
     }
   ]
 }
