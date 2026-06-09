@@ -65,6 +65,12 @@
       "files": [
         "depgraph/languages/kotlin/*.go"
       ]
+    },
+    {
+      "name": "ruby support",
+      "files": [
+        "depgraph/languages/ruby/*.go"
+      ]
     }
   ]
 }
