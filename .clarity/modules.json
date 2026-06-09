@@ -35,6 +35,12 @@
       "files": [
         "depgraph/languages/cpp/*.go"
       ]
+    },
+    {
+      "name": "csharp support",
+      "files": [
+        "depgraph/languages/csharp/*.go"
+      ]
     }
   ]
 }
