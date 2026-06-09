@@ -59,6 +59,12 @@
       "files": [
         "depgraph/languages/java/*.go"
       ]
+    },
+    {
+      "name": "kotlin support",
+      "files": [
+        "depgraph/languages/kotlin/*.go"
+      ]
     }
   ]
 }
