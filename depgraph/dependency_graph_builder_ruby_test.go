@@ -1,4 +1,4 @@
-package ruby_test
+package depgraph_test
 
 import (
 	"os"
@@ -10,13 +10,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
-
-func mustAdjacency(t *testing.T, g depgraph.DependencyGraph) map[string][]string {
-	t.Helper()
-	adj, err := depgraph.AdjacencyList(g)
-	require.NoError(t, err)
-	return adj
-}
 
 func TestBuildDependencyGraph_RubyConstantReferenceResolvesToSourceFile(t *testing.T) {
 	tmpDir := t.TempDir()

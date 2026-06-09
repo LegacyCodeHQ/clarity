@@ -1,4 +1,4 @@
-package golang_test
+package depgraph_test
 
 import (
 	"os"
@@ -19,13 +19,6 @@ func mapContentReader(contents map[string]string) vcs.ContentReader {
 		}
 		return []byte(content), nil
 	}
-}
-
-func mustAdjacency(t *testing.T, g depgraph.DependencyGraph) map[string][]string {
-	t.Helper()
-	adj, err := depgraph.AdjacencyList(g)
-	require.NoError(t, err)
-	return adj
 }
 
 func TestBuildDependencyGraph_GoEmbedGlobIncludesAllMatches(t *testing.T) {
