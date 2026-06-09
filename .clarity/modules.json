@@ -29,6 +29,12 @@
       "files": [
         "depgraph/languages/c/*.go"
       ]
+    },
+    {
+      "name": "cpp support",
+      "files": [
+        "depgraph/languages/cpp/*.go"
+      ]
     }
   ]
 }
