@@ -10,6 +10,38 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestResolveKotlinSamePackageDependencies_ResolvesTopLevelFunctionCall(t *testing.T) {
+	tmpDir := t.TempDir()
+	dir := filepath.Join(tmpDir, "src", "main", "kotlin", "arena", "core")
+	require.NoError(t, os.MkdirAll(dir, 0o755))
+
+	generator := filepath.Join(dir, "LevelGenerator.kt")
+	config := filepath.Join(dir, "LevelConfig.kt")
+
+	// LevelConfig calls a top-level function defined in LevelGenerator. Kotlin
+	// same-package free-function calls need no import; the edge must still form.
+	require.NoError(t, os.WriteFile(generator, []byte(`
+package arena.core
+
+fun generateLevelProgression(): List<Int> = listOf(1, 2, 3)
+`), 0o644))
+	require.NoError(t, os.WriteFile(config, []byte(`
+package arena.core
+
+fun defaultLevels(): List<Int> = generateLevelProgression()
+`), 0o644))
+
+	contentReader := vcs.FilesystemContentReader()
+	kotlinFiles := []string{generator, config}
+	packageIndex, packageTypes, filePackages := BuildKotlinIndices(kotlinFiles, contentReader)
+	suppliedFiles := map[string]bool{generator: true, config: true}
+
+	deps, err := ResolveKotlinProjectImports(
+		config, config, packageIndex, packageTypes, filePackages, suppliedFiles, contentReader)
+	require.NoError(t, err)
+	assert.Contains(t, deps, generator)
+}
+
 func TestResolveKotlinSamePackageDependencies_IgnoresSelfDeclaredTopLevelTypes(t *testing.T) {
 	tmpDir := t.TempDir()
 

@@ -448,6 +448,83 @@ func ExtractTopLevelTypeNames(sourceCode []byte) []string {
 	return names
 }
 
+// ExtractCalledFunctionNames returns the callee names of unqualified call
+// expressions (e.g. `foo()` but not `x.foo()`). Used to resolve same-package
+// top-level function calls, which ExtractTypeIdentifiers deliberately ignores
+// (it captures only type references). Resolution stays precise: a name only
+// produces an edge when the package index holds exactly one declaring file.
+func ExtractCalledFunctionNames(sourceCode []byte) []string {
+	ensureKotlinQueries()
+
+	parser := kotlinParserPool.Get().(*sitter.Parser)
+	defer kotlinParserPool.Put(parser)
+
+	tree, err := parser.ParseCtx(context.Background(), nil, sourceCode)
+	if err != nil {
+		return nil
+	}
+	defer tree.Close()
+
+	cursor := sitter.NewQueryCursor()
+	defer cursor.Close()
+	cursor.Exec(kotlinCompiledConstructorQuery, tree.RootNode())
+
+	seen := make(map[string]bool)
+	var names []string
+	for {
+		match, ok := cursor.NextMatch()
+		if !ok {
+			break
+		}
+		for _, capture := range match.Captures {
+			name := strings.TrimSpace(capture.Node.Content(sourceCode))
+			if name != "" && !seen[name] {
+				seen[name] = true
+				names = append(names, name)
+			}
+		}
+	}
+	return names
+}
+
+// ExtractTopLevelFunctionNames returns the names of functions declared at the
+// top level of the file. Kotlin same-package free-function calls carry no
+// import, so these must be indexed for an unqualified call to resolve to its
+// defining file.
+func ExtractTopLevelFunctionNames(sourceCode []byte) []string {
+	ensureKotlinQueries()
+
+	parser := kotlinParserPool.Get().(*sitter.Parser)
+	defer kotlinParserPool.Put(parser)
+
+	tree, err := parser.ParseCtx(context.Background(), nil, sourceCode)
+	if err != nil {
+		return nil
+	}
+	defer tree.Close()
+
+	var names []string
+	var walk func(*sitter.Node)
+	walk = func(node *sitter.Node) {
+		if node == nil {
+			return
+		}
+
+		if node.Type() == "function_declaration" && isTopLevelDeclaration(node) {
+			if name := extractDeclarationIdentifier(node, sourceCode); name != "" {
+				names = append(names, name)
+			}
+		}
+
+		for i := 0; i < int(node.NamedChildCount()); i++ {
+			walk(node.NamedChild(i))
+		}
+	}
+
+	walk(tree.RootNode())
+	return names
+}
+
 // ExtractTypeIdentifiers returns all type identifiers referenced within the file
 func ExtractTypeIdentifiers(sourceCode []byte) []string {
 	ensureKotlinQueries()

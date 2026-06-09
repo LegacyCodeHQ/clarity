@@ -104,8 +104,12 @@ func buildKotlinPackageIndex(filePaths []string, contentReader vcs.ContentReader
 
 		packageToFiles[pkg] = append(packageToFiles[pkg], absPath)
 
-		declaredTypes := ExtractTopLevelTypeNames(content)
-		if len(declaredTypes) == 0 {
+		// Index both top-level types and top-level functions. Same-package
+		// free-function calls carry no import, so an unqualified call resolves
+		// only if the callee's defining file is in this index.
+		declaredSymbols := ExtractTopLevelTypeNames(content)
+		declaredSymbols = append(declaredSymbols, ExtractTopLevelFunctionNames(content)...)
+		if len(declaredSymbols) == 0 {
 			continue
 		}
 
@@ -115,11 +119,11 @@ func buildKotlinPackageIndex(filePaths []string, contentReader vcs.ContentReader
 			packageToTypes[pkg] = typeMap
 		}
 
-		for _, typeName := range declaredTypes {
-			if typeName == "" {
+		for _, symbolName := range declaredSymbols {
+			if symbolName == "" {
 				continue
 			}
-			typeMap[typeName] = append(typeMap[typeName], absPath)
+			typeMap[symbolName] = append(typeMap[symbolName], absPath)
 		}
 	}
 
@@ -212,8 +216,11 @@ func resolveKotlinSamePackageDependencies(
 		return []string{}
 	}
 
-	typeReferences := ExtractTypeIdentifiers(sourceCode)
-	if len(typeReferences) == 0 {
+	// Resolve both type references and unqualified function-call callees; the
+	// latter cover same-package top-level function calls, which carry no import.
+	references := ExtractTypeIdentifiers(sourceCode)
+	references = append(references, ExtractCalledFunctionNames(sourceCode)...)
+	if len(references) == 0 {
 		return []string{}
 	}
 	declaredTypes := ExtractTopLevelTypeNames(sourceCode)
@@ -237,7 +244,7 @@ func resolveKotlinSamePackageDependencies(
 
 	seen := make(map[string]bool)
 	var deps []string
-	for _, ref := range typeReferences {
+	for _, ref := range references {
 		// Ignore references to top-level types declared in the same file.
 		// This avoids linking sibling source-set files that declare the same
 		// expect/actual type names in Kotlin Multiplatform projects.
