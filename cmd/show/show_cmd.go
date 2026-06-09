@@ -39,8 +39,7 @@ type graphOptions struct {
 	scope        string
 	pruneFiles   []string
 	alsoPatterns []string
-	modules      []string
-	noModules    bool
+	modules      bool
 	edgeLabels   bool
 	noStats      bool
 	noPhantom    bool
@@ -111,8 +110,7 @@ func NewCommand() *cobra.Command {
 	cmd.Flags().StringVar(&opts.scope, "scope", opts.scope, "Dependency scope for --file (downstream only)")
 	cmd.Flags().StringSliceVar(&opts.pruneFiles, "prune", nil, "Show node but skip its subtree (requires --file; shown with dashed border)")
 	cmd.Flags().StringSliceVar(&opts.alsoPatterns, "also", nil, "Include files matching glob patterns that connect to --file graph (requires --file)")
-	cmd.Flags().StringArrayVar(&opts.modules, "module", nil, "Group files into a named module rendered as a cluster (format: name=file1,file2; repeatable)")
-	cmd.Flags().BoolVar(&opts.noModules, "no-modules", false, "Ignore module definitions auto-discovered in .clarity/modules.json")
+	cmd.Flags().BoolVar(&opts.modules, "modules", false, "Collapse files into the modules declared in .clarity/modules.json (off by default)")
 	cmd.Flags().BoolVar(&opts.edgeLabels, "label", false, "Add deterministic short labels to edges")
 	cmd.Flags().BoolVar(&opts.noStats, "no-stats", false, "Skip file addition/deletion statistics for faster rendering")
 	cmd.Flags().BoolVar(&opts.noPhantom, "no-phantom", false, "Suppress phantom test nodes (Rust files with #[cfg(test)] regions are rendered as a single node)")
@@ -243,15 +241,10 @@ func runGraph(cmd *cobra.Command, opts *graphOptions) error {
 	renderBasePath := resolveRenderBasePath(opts.repoPath, filePaths)
 
 	var collapse depgraph.Collapse
-	configModules, err := resolveConfigModules(opts.repoPath, opts.noModules)
+	modules, err := resolveConfigModules(opts.repoPath, opts.modules)
 	if err != nil {
 		return err
 	}
-	flagModules, err := buildModules(opts.modules, pathResolver)
-	if err != nil {
-		return err
-	}
-	modules := mergeModules(configModules, flagModules)
 	if len(modules) > 0 {
 		graph, collapse, err = depgraph.CollapseModules(graph, modules)
 		if err != nil {
@@ -915,39 +908,6 @@ func matchAlsoPattern(pattern, relPath string) bool {
 	}
 	matched, _ := filepath.Match(pattern, filepath.Base(relPath))
 	return matched
-}
-
-// buildModules parses --module specs (name=file1,file2) and resolves each
-// file to an absolute graph-node path. Files need not exist in the graph;
-// AssignModules drops any that are absent post-construction.
-func buildModules(specs []string, pathResolver PathResolver) ([]depgraph.Module, error) {
-	modules := make([]depgraph.Module, 0, len(specs))
-	for _, spec := range specs {
-		name, rawFiles, ok := strings.Cut(spec, "=")
-		name = strings.TrimSpace(name)
-		if !ok || name == "" {
-			return nil, fmt.Errorf("invalid --module %q: expected format name=file1,file2", spec)
-		}
-
-		var files []string
-		for _, raw := range strings.Split(rawFiles, ",") {
-			raw = strings.TrimSpace(raw)
-			if raw == "" {
-				continue
-			}
-			resolved, err := pathResolver.Resolve(RawPath(raw))
-			if err != nil {
-				return nil, fmt.Errorf("failed to resolve module file %q: %w", raw, err)
-			}
-			files = append(files, resolved.String())
-		}
-
-		if len(files) == 0 {
-			return nil, fmt.Errorf("invalid --module %q: no files specified", spec)
-		}
-		modules = append(modules, depgraph.Module{Name: name, Files: files})
-	}
-	return modules, nil
 }
 
 func applyBetweenFilter(opts *graphOptions, pathResolver PathResolver, graph depgraph.DependencyGraph, filePaths []string) (depgraph.DependencyGraph, []string, error) {

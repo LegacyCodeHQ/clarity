@@ -6,8 +6,6 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-
-	"github.com/LegacyCodeHQ/clarity/depgraph"
 )
 
 func writeModulesConfig(t *testing.T, repoDir, body string) {
@@ -125,33 +123,7 @@ func TestLoadConfigModules_RejectsEmptyFileList(t *testing.T) {
 	}
 }
 
-func TestMergeModules_FlagOverridesConfigByName(t *testing.T) {
-	configModules := []depgraph.Module{
-		{Name: "core", Files: []string{"/repo/cfg_a.go", "/repo/cfg_b.go"}},
-		{Name: "extra", Files: []string{"/repo/extra.go"}},
-	}
-	flagModules := []depgraph.Module{
-		{Name: "core", Files: []string{"/repo/flag_a.go"}},
-	}
-
-	merged := mergeModules(configModules, flagModules)
-
-	if len(merged) != 2 {
-		t.Fatalf("expected 2 merged modules, got %d (%v)", len(merged), merged)
-	}
-	byName := make(map[string][]string)
-	for _, m := range merged {
-		byName[m.Name] = m.Files
-	}
-	if files := byName["core"]; len(files) != 1 || files[0] != "/repo/flag_a.go" {
-		t.Fatalf("expected flag to override config 'core', got %v", files)
-	}
-	if files := byName["extra"]; len(files) != 1 || files[0] != "/repo/extra.go" {
-		t.Fatalf("expected config-only 'extra' preserved, got %v", files)
-	}
-}
-
-func TestShowCommand_AutoDiscoversModuleConfig(t *testing.T) {
+func TestShowCommand_ModulesFlagAppliesConfig(t *testing.T) {
 	repoDir, srcDir := writeJavaPair(t)
 	writeModulesConfig(t, repoDir, `{
   "modules": [
@@ -159,16 +131,16 @@ func TestShowCommand_AutoDiscoversModuleConfig(t *testing.T) {
   ]
 }`)
 
-	out := runShow(t, "-i", srcDir, "-r", repoDir, "-f", "dot")
+	out := runShow(t, "-i", srcDir, "-r", repoDir, "-f", "dot", "--modules")
 	if !strings.Contains(out, `"support"`) {
-		t.Fatalf("expected collapsed module node \"support\", got:\n%s", out)
+		t.Fatalf("expected --modules to collapse into module node \"support\", got:\n%s", out)
 	}
 	if strings.Contains(out, "Helper.java") {
 		t.Fatalf("expected Helper.java collapsed into module, but it is still a node:\n%s", out)
 	}
 }
 
-func TestShowCommand_NoModulesFlagDisablesConfig(t *testing.T) {
+func TestShowCommand_ModulesOffByDefault(t *testing.T) {
 	repoDir, srcDir := writeJavaPair(t)
 	writeModulesConfig(t, repoDir, `{
   "modules": [
@@ -176,12 +148,13 @@ func TestShowCommand_NoModulesFlagDisablesConfig(t *testing.T) {
   ]
 }`)
 
-	out := runShow(t, "-i", srcDir, "-r", repoDir, "-f", "dot", "--no-modules")
+	// Without --modules the config is ignored, even though modules.json exists.
+	out := runShow(t, "-i", srcDir, "-r", repoDir, "-f", "dot")
 	if strings.Contains(out, `"support"`) {
-		t.Fatalf("expected --no-modules to skip config, but module node present:\n%s", out)
+		t.Fatalf("expected modules off by default, but module node present:\n%s", out)
 	}
 	if !strings.Contains(out, "Helper.java") {
-		t.Fatalf("expected Helper.java as a node when modules disabled, got:\n%s", out)
+		t.Fatalf("expected Helper.java as a node when modules are off, got:\n%s", out)
 	}
 }
 

@@ -108,34 +108,13 @@ func hasGlobMeta(pattern string) bool {
 	return strings.ContainsAny(pattern, "*?[")
 }
 
-// resolveConfigModules returns modules declared in .clarity/modules.json unless
-// config discovery is disabled.
-func resolveConfigModules(repoPath string, noModules bool) ([]depgraph.Module, error) {
-	if noModules {
+// resolveConfigModules returns modules declared in .clarity/modules.json, but
+// only when enabled via --modules. Module collapsing is off by default so a
+// bare render never groups, even when the config file is present.
+func resolveConfigModules(repoPath string, enabled bool) ([]depgraph.Module, error) {
+	if !enabled {
 		return nil, nil
 	}
 
 	return loadConfigModules(repoPath)
-}
-
-// mergeModules returns configModules followed by flagModules, with a flag module
-// replacing any config module that shares its name (CLI wins). Order is stable:
-// config-defined names keep their original position even when overridden.
-func mergeModules(configModules, flagModules []depgraph.Module) []depgraph.Module {
-	indexByName := make(map[string]int, len(configModules))
-	merged := make([]depgraph.Module, 0, len(configModules)+len(flagModules))
-
-	for _, m := range configModules {
-		indexByName[m.Name] = len(merged)
-		merged = append(merged, m)
-	}
-	for _, m := range flagModules {
-		if idx, ok := indexByName[m.Name]; ok {
-			merged[idx] = m
-			continue
-		}
-		indexByName[m.Name] = len(merged)
-		merged = append(merged, m)
-	}
-	return merged
 }
