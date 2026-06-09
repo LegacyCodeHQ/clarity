@@ -89,6 +89,12 @@
       "files": [
         "depgraph/languages/swift/*.go"
       ]
+    },
+    {
+      "name": "zig support",
+      "files": [
+        "depgraph/languages/zig/*.go"
+      ]
     }
   ]
 }
