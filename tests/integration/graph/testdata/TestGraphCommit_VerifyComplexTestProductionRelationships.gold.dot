@@ -23,6 +23,7 @@ digraph dependencies {
   "parsers/go_parser_test.go" [label="parsers/go_parser_test.go\n+5 -5", style=filled, fillcolor=lightgreen];
   "parsers/go_symbols.go" [label="parsers/go_symbols.go\n+1 -1", style=filled, fillcolor=white];
 
+  "cmd/graph.go" -> "parser/dependency_graph.go" [color="#cc3333", style=dashed, fontcolor="#7a0000"];
   "cmd/graph.go" -> "parsers/dependency_graph.go";
   "parser/dart_parser_test.go" -> "parser/dart_parser.go" [color="#cc3333", style=dashed, fontcolor="#7a0000"];
   "parser/dependency_graph.go" -> "parser/dart_parser.go" [color="#cc3333", style=dashed, fontcolor="#7a0000"];

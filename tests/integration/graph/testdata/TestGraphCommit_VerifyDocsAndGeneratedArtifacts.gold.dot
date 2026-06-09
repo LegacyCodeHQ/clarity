@@ -21,6 +21,7 @@ digraph dependencies {
   "tree_sitter_external/dart/parser.h" [label="dart/parser.h", style=filled, fillcolor=lightsalmon];
   "tree_sitter_external/dart/scanner.c" [label="dart/scanner.c", style=filled, fillcolor=lightblue];
 
+  "parsers/dart/dart_parser.go" -> "tree_sitter_dart/binding.go" [color="#cc3333", style=dashed, fontcolor="#7a0000"];
   "parsers/dart/dart_parser.go" -> "tree_sitter_external/dart/binding.go";
   "tree_sitter_dart/binding.go" -> "tree_sitter_dart/parser.c" [color="#cc3333", style=dashed, fontcolor="#7a0000"];
   "tree_sitter_dart/binding.go" -> "tree_sitter_dart/scanner.c" [color="#cc3333", style=dashed, fontcolor="#7a0000"];

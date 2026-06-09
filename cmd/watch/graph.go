@@ -72,6 +72,17 @@ func buildGraph(repoPath string, opts *watchOptions, formatter formatters.Format
 		}
 	}
 
+	// Reconstruct each deleted file's pre-deletion edges from HEAD so removed
+	// nodes show their old links instead of floating; MarkDeletedFiles styles
+	// them as removed edges below.
+	if len(pureDeleted) > 0 {
+		parentReader := git.GitCommitContentReader(repoPath, "HEAD")
+		graph, err = depgraph.MergeDeletedNeighborhood(graph, filePaths, pureDeleted, parentReader)
+		if err != nil {
+			return "", err
+		}
+	}
+
 	fileStats, _ := git.GetUncommittedFileStats(repoPath)
 
 	fileGraph, err := depgraph.NewFileDependencyGraph(graph, fileStats, contentReader)

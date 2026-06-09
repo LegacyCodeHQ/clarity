@@ -156,14 +156,14 @@ func runGraph(cmd *cobra.Command, opts *graphOptions) error {
 	// them separately and load their content from the parent ref.
 	var deletedContent map[string][]byte
 	var deletedFiles []string
+	var deletedBaseRef string
 	if isPlainCommitView(opts) {
-		var baseRef string
-		deletedFiles, baseRef, err = collectCommitDeletedFiles(opts, fromCommit, toCommit, isCommitRange)
+		deletedFiles, deletedBaseRef, err = collectCommitDeletedFiles(opts, fromCommit, toCommit, isCommitRange)
 		if err != nil {
 			return err
 		}
 		if len(deletedFiles) > 0 {
-			deletedContent, err = loadDeletedFileContent(opts.repoPath, baseRef, deletedFiles)
+			deletedContent, err = loadDeletedFileContent(opts.repoPath, deletedBaseRef, deletedFiles)
 			if err != nil {
 				return err
 			}
@@ -208,6 +208,17 @@ func runGraph(cmd *cobra.Command, opts *graphOptions) error {
 		return err
 	}
 	deletedFiles = filterRenamed(deletedFiles, renames)
+
+	// Reconstruct each deleted file's pre-deletion edges (who imported it, what it
+	// imported) from the parent snapshot so removed nodes show their old links
+	// instead of floating. MarkDeletedFiles styles these as removed edges below.
+	if len(deletedFiles) > 0 {
+		parentReader := git.GitCommitContentReader(opts.repoPath, deletedBaseRef)
+		graph, err = depgraph.MergeDeletedNeighborhood(graph, filePaths, deletedFiles, parentReader)
+		if err != nil {
+			return err
+		}
+	}
 
 	var fullAdjacency map[string][]string
 	if len(opts.alsoPatterns) > 0 {

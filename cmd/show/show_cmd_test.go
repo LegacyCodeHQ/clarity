@@ -184,6 +184,55 @@ func TestGraphCommit_RendersDeletedFileNode(t *testing.T) {
 	}
 }
 
+func TestGraphCommit_DeletedFileKeepsPreDeletionIncomingEdge(t *testing.T) {
+	repoDir := t.TempDir()
+	gitInitRepo(t, repoDir)
+
+	importerFile := filepath.Join(repoDir, "importer.ts")
+	leafFile := filepath.Join(repoDir, "leaf.ts")
+
+	// Commit 1: importer.ts imports leaf.ts.
+	if err := os.WriteFile(importerFile, []byte("import { v } from './leaf';\nexport const x = v;\n"), 0o644); err != nil {
+		t.Fatalf("os.WriteFile() error = %v", err)
+	}
+	if err := os.WriteFile(leafFile, []byte("export const v = 1;\n"), 0o644); err != nil {
+		t.Fatalf("os.WriteFile() error = %v", err)
+	}
+	gitRun(t, repoDir, "add", "-A")
+	gitRun(t, repoDir, "commit", "-m", "add importer and leaf")
+
+	// Commit 2: delete leaf.ts AND cleanly drop the import from importer.ts, so
+	// nothing references leaf.ts in the post-commit state.
+	if err := os.Remove(leafFile); err != nil {
+		t.Fatalf("os.Remove() error = %v", err)
+	}
+	if err := os.WriteFile(importerFile, []byte("export const x = 1;\n"), 0o644); err != nil {
+		t.Fatalf("os.WriteFile() error = %v", err)
+	}
+	gitRun(t, repoDir, "add", "-A")
+	gitRun(t, repoDir, "commit", "-m", "delete leaf and drop import")
+
+	cmd := NewCommand()
+	cmd.SetArgs([]string{"-r", repoDir, "-c", "HEAD", "-f", "dot"})
+
+	var stdout bytes.Buffer
+	cmd.SetOut(&stdout)
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("cmd.Execute() error = %v", err)
+	}
+
+	output := stdout.String()
+	if !strings.Contains(output, "(deleted)") {
+		t.Fatalf("expected leaf.ts marked (deleted), got:\n%s", output)
+	}
+	// The pre-deletion dependency importer.ts -> leaf.ts is reconstructed from the
+	// parent even though the commit removed the import.
+	if !strings.Contains(output, `importer.ts" -> "`) {
+		t.Fatalf("expected reconstructed incoming edge to deleted leaf.ts, got:\n%s", output)
+	}
+}
+
 func TestGraphCommit_RendersRenameAsMoveNotDeletion(t *testing.T) {
 	repoDir := t.TempDir()
 	gitInitRepo(t, repoDir)
