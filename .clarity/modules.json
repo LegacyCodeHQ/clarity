@@ -83,6 +83,12 @@
       "files": [
         "depgraph/languages/scala/*.go"
       ]
+    },
+    {
+      "name": "swift support",
+      "files": [
+        "depgraph/languages/swift/*.go"
+      ]
     }
   ]
 }
