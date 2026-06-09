@@ -7,6 +7,10 @@
     {
       "name": "javascript support",
       "files": ["depgraph/languages/javascript/*.go"]
+    },
+    {
+      "name": "svelte support",
+      "files": ["depgraph/languages/svelte/*.go"]
     }
   ]
 }
