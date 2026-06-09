@@ -1,8 +1,6 @@
 package watch
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -62,8 +60,8 @@ func buildGraph(repoPath string, opts *watchOptions, formatter formatters.Format
 	// A rename is an old path deleted + a new path added with identical content.
 	// Detect those, add the old->new edge, and render them distinctly from plain
 	// deletions. Every removed file stays visible either way.
-	renames := detectRenames(deletedFiles, deletedContent, filePaths, contentReader)
-	graph, err = addRenameEdges(graph, renames)
+	renames := depgraph.DetectRenames(deletedFiles, deletedContent, filePaths, contentReader)
+	graph, err = depgraph.AddRenameEdges(graph, renames)
 	if err != nil {
 		return "", err
 	}
@@ -102,81 +100,6 @@ func buildGraph(repoPath string, opts *watchOptions, formatter formatters.Format
 }
 
 var errNoUncommittedChanges = fmt.Errorf("no uncommitted changes")
-
-// detectRenames identifies rename sources among the deleted files: a deleted
-// path whose pre-deletion (HEAD) content reappears verbatim in a currently
-// existing file is treated as having been renamed to that file. Returns a map of
-// old path -> new path.
-func detectRenames(
-	deletedFiles []string,
-	deletedContent map[string][]byte,
-	filePaths []string,
-	contentReader vcs.ContentReader,
-) map[string]string {
-	if len(deletedFiles) == 0 {
-		return nil
-	}
-
-	deleted := make(map[string]bool, len(deletedFiles))
-	for _, d := range deletedFiles {
-		deleted[d] = true
-	}
-
-	// Index currently-existing (non-deleted) files by content hash.
-	byHash := make(map[string]string)
-	for _, f := range filePaths {
-		if deleted[f] {
-			continue
-		}
-		content, err := contentReader(f)
-		if err != nil || len(content) == 0 {
-			continue
-		}
-		byHash[contentHash(content)] = f
-	}
-
-	renames := make(map[string]string)
-	for _, d := range deletedFiles {
-		content, ok := deletedContent[d]
-		if !ok || len(content) == 0 {
-			continue
-		}
-		if newPath, ok := byHash[contentHash(content)]; ok {
-			renames[d] = newPath
-		}
-	}
-	if len(renames) == 0 {
-		return nil
-	}
-	return renames
-}
-
-func contentHash(content []byte) string {
-	sum := sha256.Sum256(content)
-	return hex.EncodeToString(sum[:])
-}
-
-// addRenameEdges adds an old->new edge for each detected rename so the move is
-// drawn in the graph. The new path is already a node (it's a supplied file).
-func addRenameEdges(graph depgraph.DependencyGraph, renames map[string]string) (depgraph.DependencyGraph, error) {
-	if len(renames) == 0 {
-		return graph, nil
-	}
-
-	adjacency, err := depgraph.AdjacencyList(graph)
-	if err != nil {
-		return nil, fmt.Errorf("failed to build adjacency list: %w", err)
-	}
-	for oldPath, newPath := range renames {
-		adjacency[oldPath] = append(adjacency[oldPath], newPath)
-	}
-
-	newGraph, err := depgraph.NewDependencyGraphFromAdjacency(adjacency)
-	if err != nil {
-		return nil, fmt.Errorf("failed to rebuild graph with rename edges: %w", err)
-	}
-	return newGraph, nil
-}
 
 func loadDeletedFileContent(repoPath string, deletedFiles []string) (map[string][]byte, error) {
 	if len(deletedFiles) == 0 {
