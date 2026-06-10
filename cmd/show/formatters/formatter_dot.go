@@ -22,25 +22,10 @@ func (f *dotFormatter) Format(g depgraph.FileDependencyGraph, opts RenderOptions
 		return "", err
 	}
 
-	explicitDirection := opts.Direction != ""
+	scene := BuildScene(g, opts)
 	var sb strings.Builder
-	sb.WriteString("digraph dependencies {\n")
-	dir := opts.Direction
-	if dir == "" {
-		dir = DefaultDirection
-	}
-	sb.WriteString(fmt.Sprintf("  rankdir=%s;\n", dir.String()))
-	sb.WriteString("  node [shape=box];\n")
-
-	// Add label if provided
-	if opts.Label != "" {
-		sb.WriteString(fmt.Sprintf("  label=\"%s\";\n", opts.Label))
-		sb.WriteString("  labelloc=t;\n")
-		sb.WriteString("  labeljust=l;\n")
-		sb.WriteString("  fontsize=10;\n")
-		sb.WriteString("  fontname=Courier;\n")
-	}
-	sb.WriteString("\n")
+	r := &dotRenderer{sb: &sb, explicit: scene.Header.TrailingNewline}
+	r.Begin(scene.Header)
 
 	cycleNodes := make(map[string]bool)
 	if len(g.Meta.Cycles) > 0 {
@@ -342,11 +327,38 @@ func (f *dotFormatter) Format(g depgraph.FileDependencyGraph, opts RenderOptions
 		}
 	}
 
-	sb.WriteString("}")
-	if explicitDirection {
-		sb.WriteString("\n")
+	return r.Finish()
+}
+
+// dotRenderer emits Graphviz DOT syntax for Scene primitives. It holds only the
+// output builder and trailing-newline flag; all graph derivation lives in the
+// Scene.
+type dotRenderer struct {
+	sb       *strings.Builder
+	explicit bool
+}
+
+func (r *dotRenderer) Begin(h GraphHeader) {
+	r.sb.WriteString("digraph dependencies {\n")
+	r.sb.WriteString(fmt.Sprintf("  rankdir=%s;\n", h.Orientation.String()))
+	r.sb.WriteString("  node [shape=box];\n")
+
+	if h.Title != "" {
+		r.sb.WriteString(fmt.Sprintf("  label=\"%s\";\n", h.Title))
+		r.sb.WriteString("  labelloc=t;\n")
+		r.sb.WriteString("  labeljust=l;\n")
+		r.sb.WriteString("  fontsize=10;\n")
+		r.sb.WriteString("  fontname=Courier;\n")
 	}
-	return sb.String(), nil
+	r.sb.WriteString("\n")
+}
+
+func (r *dotRenderer) Finish() (string, error) {
+	r.sb.WriteString("}")
+	if r.explicit {
+		r.sb.WriteString("\n")
+	}
+	return r.sb.String(), nil
 }
 
 // GenerateURL creates a GraphvizOnline URL with the DOT graph embedded.

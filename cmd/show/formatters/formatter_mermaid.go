@@ -21,21 +21,10 @@ func (f mermaidFormatter) Format(g depgraph.FileDependencyGraph, opts RenderOpti
 		return "", err
 	}
 
-	explicitDirection := opts.Direction != ""
+	scene := BuildScene(g, opts)
 	var sb strings.Builder
-
-	// Add title if label provided
-	if opts.Label != "" {
-		sb.WriteString("---\n")
-		sb.WriteString(fmt.Sprintf("title: %s\n", opts.Label))
-		sb.WriteString("---\n")
-	}
-
-	dir := opts.Direction
-	if dir == "" {
-		dir = DefaultDirection
-	}
-	sb.WriteString(fmt.Sprintf("flowchart %s\n", dir.String()))
+	r := &mermaidRenderer{sb: &sb, explicit: scene.Header.TrailingNewline}
+	r.Begin(scene.Header)
 
 	cycleNodes := make(map[string]bool)
 	if len(g.Meta.Cycles) > 0 {
@@ -402,8 +391,29 @@ func (f mermaidFormatter) Format(g depgraph.FileDependencyGraph, opts RenderOpti
 		sb.WriteString(stylesSB.String())
 	}
 
-	output := strings.TrimSuffix(sb.String(), "\n")
-	if explicitDirection {
+	return r.Finish()
+}
+
+// mermaidRenderer emits Mermaid flowchart syntax for Scene primitives. It holds
+// only the output builder and trailing-newline flag; all graph derivation lives
+// in the Scene.
+type mermaidRenderer struct {
+	sb       *strings.Builder
+	explicit bool
+}
+
+func (r *mermaidRenderer) Begin(h GraphHeader) {
+	if h.Title != "" {
+		r.sb.WriteString("---\n")
+		r.sb.WriteString(fmt.Sprintf("title: %s\n", h.Title))
+		r.sb.WriteString("---\n")
+	}
+	r.sb.WriteString(fmt.Sprintf("flowchart %s\n", h.Orientation.String()))
+}
+
+func (r *mermaidRenderer) Finish() (string, error) {
+	output := strings.TrimSuffix(r.sb.String(), "\n")
+	if r.explicit {
 		return output + "\n", nil
 	}
 	return output, nil
