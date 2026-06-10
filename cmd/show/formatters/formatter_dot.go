@@ -106,10 +106,8 @@ func (f *dotFormatter) Format(g depgraph.FileDependencyGraph, opts RenderOptions
 	// boundary. Populated only for the single-module boundary view; otherwise
 	// every node declaration flows to outerDecls and no box is drawn.
 	memberNodeKeys := make(map[string]bool)
-	moduleClusterName := ""
-	if g.Meta.ModuleCluster != nil {
-		moduleClusterName = g.Meta.ModuleCluster.Name
-		for _, member := range g.Meta.ModuleCluster.Members {
+	if scene.Cluster != nil {
+		for _, member := range scene.Cluster.Members {
 			memberNodeKeys[nodeKey(member, opts.BasePath)] = true
 		}
 	}
@@ -192,10 +190,10 @@ func (f *dotFormatter) Format(g depgraph.FileDependencyGraph, opts RenderOptions
 	// Emit the module boundary box (if any) around its member declarations,
 	// then everything else. The box is only drawn when a cluster was recorded,
 	// which happens solely for the single-module view with crossing edges.
-	if moduleClusterName != "" && clusterDecls.Len() > 0 {
-		sb.WriteString(fmt.Sprintf("  subgraph cluster_module {\n    label=%q;\n    labeljust=l;\n    style=rounded;\n    color=\"#888888\";\n    fontname=Courier;\n", moduleClusterName))
+	if scene.Cluster != nil && clusterDecls.Len() > 0 {
+		r.OpenCluster(*scene.Cluster)
 		sb.WriteString(clusterDecls.String())
-		sb.WriteString("  }\n")
+		r.CloseCluster()
 	} else {
 		sb.WriteString(clusterDecls.String())
 	}
@@ -307,6 +305,14 @@ func (r *dotRenderer) Begin(h GraphHeader) {
 		r.sb.WriteString("  fontname=Courier;\n")
 	}
 	r.sb.WriteString("\n")
+}
+
+func (r *dotRenderer) OpenCluster(c SceneCluster) {
+	r.sb.WriteString(fmt.Sprintf("  subgraph cluster_module {\n    label=%q;\n    labeljust=l;\n    style=rounded;\n    color=\"#888888\";\n    fontname=Courier;\n", c.Name))
+}
+
+func (r *dotRenderer) CloseCluster() {
+	r.sb.WriteString("  }\n")
 }
 
 func (r *dotRenderer) Finish() (string, error) {

@@ -11,6 +11,11 @@ package formatters
 type Renderer interface {
 	// Begin emits the graph header/preamble from the resolved header primitive.
 	Begin(GraphHeader)
+	// OpenCluster begins a labeled boundary; the member node declarations that
+	// follow are drawn inside it until CloseCluster.
+	OpenCluster(SceneCluster)
+	// CloseCluster ends the boundary opened by OpenCluster.
+	CloseCluster()
 	// Finish emits any trailer and returns the complete output.
 	Finish() (string, error)
 }

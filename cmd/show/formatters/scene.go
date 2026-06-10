@@ -28,6 +28,16 @@ type Scene struct {
 	// Nodes holds the resolved presentation for each graph node, keyed by node
 	// key. Built once here so both formatters render identical content.
 	Nodes map[string]SceneNode
+	// Cluster, when set, is the labeled module boundary to draw around its
+	// member nodes; nil when no boundary is rendered.
+	Cluster *SceneCluster
+}
+
+// SceneCluster is a labeled boundary drawn around a set of member node keys. It
+// is populated only for the single-module boundary view.
+type SceneCluster struct {
+	Name    string
+	Members []string
 }
 
 // SceneNode is a graph node resolved for rendering. LabelLines is the node's
@@ -75,6 +85,14 @@ func BuildScene(g depgraph.FileDependencyGraph, opts RenderOptions) Scene {
 		}
 	}
 
+	var cluster *SceneCluster
+	if g.Meta.ModuleCluster != nil {
+		cluster = &SceneCluster{
+			Name:    g.Meta.ModuleCluster.Name,
+			Members: g.Meta.ModuleCluster.Members,
+		}
+	}
+
 	return Scene{
 		Header: GraphHeader{
 			Orientation:     orientation,
@@ -85,6 +103,7 @@ func BuildScene(g depgraph.FileDependencyGraph, opts RenderOptions) Scene {
 		NodeNames:  nodeNames,
 		CycleNodes: buildCycleNodes(g),
 		Nodes:      nodes,
+		Cluster:    cluster,
 	}
 }
 

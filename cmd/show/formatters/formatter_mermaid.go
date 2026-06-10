@@ -98,10 +98,8 @@ func (f mermaidFormatter) Format(g depgraph.FileDependencyGraph, opts RenderOpti
 	// boundary. Populated only for the single-module boundary view; otherwise
 	// every definition flows to outerDefs and no subgraph is drawn.
 	memberSources := make(map[string]bool)
-	moduleClusterName := ""
-	if g.Meta.ModuleCluster != nil {
-		moduleClusterName = g.Meta.ModuleCluster.Name
-		for _, member := range g.Meta.ModuleCluster.Members {
+	if scene.Cluster != nil {
+		for _, member := range scene.Cluster.Members {
 			memberSources[member] = true
 		}
 	}
@@ -138,11 +136,10 @@ func (f mermaidFormatter) Format(g depgraph.FileDependencyGraph, opts RenderOpti
 	// Emit the module boundary subgraph (if any) around its member definitions,
 	// then everything else. The subgraph is drawn only when a cluster was
 	// recorded, which happens solely for the single-module view with crossings.
-	if moduleClusterName != "" && clusterDefs.Len() > 0 {
-		escaped := strings.ReplaceAll(moduleClusterName, "\"", "#quot;")
-		sb.WriteString(fmt.Sprintf("    subgraph moduleCluster[\"%s\"]\n", escaped))
+	if scene.Cluster != nil && clusterDefs.Len() > 0 {
+		r.OpenCluster(*scene.Cluster)
 		sb.WriteString(clusterDefs.String())
-		sb.WriteString("    end\n")
+		r.CloseCluster()
 	} else {
 		sb.WriteString(clusterDefs.String())
 	}
@@ -373,6 +370,15 @@ func (r *mermaidRenderer) Begin(h GraphHeader) {
 		r.sb.WriteString("---\n")
 	}
 	r.sb.WriteString(fmt.Sprintf("flowchart %s\n", h.Orientation.String()))
+}
+
+func (r *mermaidRenderer) OpenCluster(c SceneCluster) {
+	escaped := strings.ReplaceAll(c.Name, "\"", "#quot;")
+	r.sb.WriteString(fmt.Sprintf("    subgraph moduleCluster[\"%s\"]\n", escaped))
+}
+
+func (r *mermaidRenderer) CloseCluster() {
+	r.sb.WriteString("    end\n")
 }
 
 func (r *mermaidRenderer) Finish() (string, error) {
