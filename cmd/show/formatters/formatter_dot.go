@@ -52,44 +52,6 @@ func (f *dotFormatter) Format(g depgraph.FileDependencyGraph, opts RenderOptions
 	// Count files by type key to find the majority type. Extensionless files
 	// are keyed by basename so each one (e.g. `pre-commit`, `pre-push`) is its
 	// own type rather than collapsing into a single empty-string bucket.
-	extensionCounts := make(map[string]int)
-	for source := range adjacency {
-		extensionCounts[fileTypeKey(source)]++
-	}
-
-	// Find the extension with the majority count
-	// Sort extensions for deterministic selection when counts are tied
-	sortedExtensions := make([]string, 0, len(extensionCounts))
-	for ext := range extensionCounts {
-		sortedExtensions = append(sortedExtensions, ext)
-	}
-	sort.Strings(sortedExtensions)
-
-	maxCount := 0
-	majorityExtension := ""
-	for _, ext := range sortedExtensions {
-		count := extensionCounts[ext]
-		if count > maxCount {
-			maxCount = count
-			majorityExtension = ext
-		}
-	}
-
-	// Track all files that have the majority extension
-	filesWithMajorityExtension := make(map[string]bool)
-	for source := range adjacency {
-		if fileTypeKey(source) == majorityExtension {
-			filesWithMajorityExtension[source] = true
-		}
-	}
-
-	// Count unique file extensions to determine if we need extension-based coloring
-	uniqueExtensions := make(map[string]bool)
-	for source := range adjacency {
-		uniqueExtensions[fileTypeKey(source)] = true
-	}
-	hasMultipleExtensions := len(uniqueExtensions) > 1
-
 	// Helper function to get color for an extension
 	getColorForExtension := func(ext string) string {
 		if color, ok := extensionColors[ext]; ok {
@@ -115,7 +77,6 @@ func (f *dotFormatter) Format(g depgraph.FileDependencyGraph, opts RenderOptions
 
 	// First, define node styles based on file extensions
 	for _, source := range filePaths {
-		sourceBase := filepath.Base(source)
 		sourceNodeKey := nodeKey(source, opts.BasePath)
 
 		if !styledNodes[sourceNodeKey] {
@@ -126,12 +87,12 @@ func (f *dotFormatter) Format(g depgraph.FileDependencyGraph, opts RenderOptions
 			// Priority 1: Test files are always light green
 			if hasFileMetadata && fileMetadata.IsTest {
 				color = "lightgreen"
-			} else if filesWithMajorityExtension[source] {
+			} else if scene.FileType[source] == scene.MajorityType {
 				// Priority 2: Files with majority extension count are always white
 				color = "white"
-			} else if hasMultipleExtensions {
+			} else if scene.HasMultipleTypes {
 				// Priority 3: Color based on extension (only if multiple extensions exist)
-				color = getColorForExtension(fileTypeKey(sourceBase))
+				color = getColorForExtension(scene.FileType[source])
 			} else {
 				// Priority 4: Single extension - use white (no need to differentiate)
 				color = "white"

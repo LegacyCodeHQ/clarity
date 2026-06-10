@@ -31,6 +31,15 @@ type Scene struct {
 	// Cluster, when set, is the labeled module boundary to draw around its
 	// member nodes; nil when no boundary is rendered.
 	Cluster *SceneCluster
+	// FileType maps each node key to its type key: the file extension, or the
+	// base name for extensionless files (so `pre-commit` is its own type). Both
+	// formatters key coloring off this single derivation.
+	FileType map[string]string
+	// MajorityType is the most common file type; nodes of this type render
+	// neutral rather than type-colored.
+	MajorityType string
+	// HasMultipleTypes is true when more than one file type is present.
+	HasMultipleTypes bool
 }
 
 // SceneCluster is a labeled boundary drawn around a set of member node keys. It
@@ -93,18 +102,49 @@ func BuildScene(g depgraph.FileDependencyGraph, opts RenderOptions) Scene {
 		}
 	}
 
+	fileType := make(map[string]string, len(filePaths))
+	typeCounts := make(map[string]int)
+	for _, source := range filePaths {
+		key := fileTypeKey(source)
+		fileType[source] = key
+		typeCounts[key]++
+	}
+
 	return Scene{
 		Header: GraphHeader{
 			Orientation:     orientation,
 			Title:           opts.Label,
 			TrailingNewline: opts.Direction != "",
 		},
-		FilePaths:  filePaths,
-		NodeNames:  nodeNames,
-		CycleNodes: buildCycleNodes(g),
-		Nodes:      nodes,
-		Cluster:    cluster,
+		FilePaths:        filePaths,
+		NodeNames:        nodeNames,
+		CycleNodes:       buildCycleNodes(g),
+		Nodes:            nodes,
+		Cluster:          cluster,
+		FileType:         fileType,
+		MajorityType:     majorityType(typeCounts),
+		HasMultipleTypes: len(typeCounts) > 1,
 	}
+}
+
+// majorityType returns the most common type key, breaking ties by sort order so
+// the choice is deterministic.
+func majorityType(counts map[string]int) string {
+	keys := make([]string, 0, len(counts))
+	for k := range counts {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+
+	majority := ""
+	maxCount := 0
+	for _, k := range keys {
+		if counts[k] > maxCount {
+			maxCount = counts[k]
+			majority = k
+		}
+	}
+	return majority
 }
 
 // nodeLabelLines resolves a node's label into ordered visual rows. It mirrors

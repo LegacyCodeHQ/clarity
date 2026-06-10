@@ -68,6 +68,25 @@ func TestFormatterParity_NodeStates(t *testing.T) {
 	}
 }
 
+// TestFormatterParity_MajorityTypeKeying pins the unified extension keying both
+// formatters now share: extensionless files key by base name (not ""), so a
+// distinct `Makefile`/`Dockerfile` does not collapse into one bucket and the
+// majority is computed identically for DOT and Mermaid.
+func TestFormatterParity_MajorityTypeKeying(t *testing.T) {
+	g := parityFileGraph(t, map[string][]string{
+		"/p/Makefile":   {},
+		"/p/Dockerfile": {},
+		"/p/x.go":       {"/p/y.go"},
+		"/p/y.go":       {},
+	})
+
+	scene := BuildScene(g, RenderOptions{})
+
+	require.Equal(t, ".go", scene.MajorityType, "majority should be .go (2 files), not the extensionless bucket")
+	require.Equal(t, "Makefile", scene.FileType["/p/Makefile"], "extensionless files key by base name")
+	require.True(t, scene.HasMultipleTypes)
+}
+
 // TestFormatterParity_EdgeStates asserts every edge state renders distinctly in
 // both formatters.
 func TestFormatterParity_EdgeStates(t *testing.T) {

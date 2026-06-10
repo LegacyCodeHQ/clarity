@@ -57,40 +57,6 @@ func (f mermaidFormatter) Format(g depgraph.FileDependencyGraph, opts RenderOpti
 		}
 	}
 
-	// Count files by extension to find the majority extension
-	extensionCounts := make(map[string]int)
-	for _, source := range filePaths {
-		ext := filepath.Ext(filepath.Base(source))
-		extensionCounts[ext]++
-	}
-
-	// Sort extensions for deterministic majority selection when counts are tied
-	sortedExtensions := make([]string, 0, len(extensionCounts))
-	for ext := range extensionCounts {
-		sortedExtensions = append(sortedExtensions, ext)
-	}
-	sort.Strings(sortedExtensions)
-
-	// Find the extension with the majority count
-	maxCount := 0
-	majorityExtension := ""
-	for _, ext := range sortedExtensions {
-		count := extensionCounts[ext]
-		if count > maxCount {
-			maxCount = count
-			majorityExtension = ext
-		}
-	}
-
-	// Track all files that have the majority extension
-	filesWithMajorityExtension := make(map[string]bool)
-	for _, source := range filePaths {
-		ext := filepath.Ext(filepath.Base(source))
-		if ext == majorityExtension {
-			filesWithMajorityExtension[source] = true
-		}
-	}
-
 	// Track which nodes have been defined
 	definedNodes := make(map[string]bool)
 
@@ -260,14 +226,6 @@ func (f mermaidFormatter) Format(g depgraph.FileDependencyGraph, opts RenderOpti
 	var deletedNodes []string
 	var renamedNodes []string
 
-	// Count unique file extensions to determine if majority styling is meaningful.
-	uniqueExtensions := make(map[string]bool)
-	for _, source := range filePaths {
-		ext := filepath.Ext(filepath.Base(source))
-		uniqueExtensions[ext] = true
-	}
-	hasMultipleExtensions := len(uniqueExtensions) > 1
-
 	for _, source := range filePaths {
 		sourceNodeKey := nodeNames[source]
 		nodeID := nodeIDs[sourceNodeKey]
@@ -286,7 +244,7 @@ func (f mermaidFormatter) Format(g depgraph.FileDependencyGraph, opts RenderOpti
 			moduleNodes = append(moduleNodes, nodeID)
 		} else if hasFileMetadata && fileMetadata.IsTest {
 			testNodes = append(testNodes, nodeID)
-		} else if hasMultipleExtensions && filesWithMajorityExtension[source] {
+		} else if scene.HasMultipleTypes && scene.FileType[source] == scene.MajorityType {
 			majorityExtensionNodes = append(majorityExtensionNodes, nodeID)
 		}
 	}
