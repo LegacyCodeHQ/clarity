@@ -102,7 +102,7 @@ func TestFormatterParity_MajorityTypeKeying(t *testing.T) {
 	require.NoError(t, err)
 
 	require.Equal(t, ".go", scene.MajorityType, "majority should be .go (2 files), not the extensionless bucket")
-	require.Equal(t, "Makefile", scene.FileType["/p/Makefile"], "extensionless files key by base name")
+	require.Equal(t, "Makefile", scene.Nodes["/p/Makefile"].Type, "extensionless files key by base name")
 	require.True(t, scene.HasMultipleTypes)
 }
 

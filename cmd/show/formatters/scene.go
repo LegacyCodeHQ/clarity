@@ -33,10 +33,6 @@ type Scene struct {
 	// Cluster, when set, is the labeled module boundary to draw around its
 	// member nodes; nil when no boundary is rendered.
 	Cluster *SceneCluster
-	// FileType maps each node key to its type key: the file extension, or the
-	// base name for extensionless files (so `pre-commit` is its own type). Both
-	// formatters key coloring off this single derivation.
-	FileType map[string]string
 	// MajorityType is the most common file type; nodes of this type render
 	// neutral rather than type-colored.
 	MajorityType string
@@ -187,7 +183,6 @@ func BuildScene(g depgraph.FileDependencyGraph, opts RenderOptions) (Scene, erro
 		Nodes:            nodes,
 		Edges:            edges,
 		Cluster:          cluster,
-		FileType:         fileType,
 		MajorityType:     majorityType(typeCounts),
 		HasMultipleTypes: len(typeCounts) > 1,
 	}, nil
