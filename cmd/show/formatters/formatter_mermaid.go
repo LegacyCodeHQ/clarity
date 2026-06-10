@@ -248,19 +248,10 @@ func (f mermaidFormatter) Format(g depgraph.FileDependencyGraph, opts RenderOpti
 		}
 		if hasFileMetadata && fileMetadata.IsModule {
 			moduleNodes = append(moduleNodes, nodeID)
-		} else {
-			// Map the resolved fill to a Mermaid class. Exhaustive so a new fill
-			// must be handled here too.
-			switch scene.Nodes[source].Fill {
-			case NodeFillTest:
-				testNodes = append(testNodes, nodeID)
-			case NodeFillMajority:
-				if scene.HasMultipleTypes {
-					majorityExtensionNodes = append(majorityExtensionNodes, nodeID)
-				}
-			case NodeFillTypeColored, NodeFillNeutral:
-				// Mermaid does not color minority/neutral nodes.
-			}
+		} else if hasFileMetadata && fileMetadata.IsTest {
+			testNodes = append(testNodes, nodeID)
+		} else if scene.HasMultipleTypes && scene.FileType[source] == scene.MajorityType {
+			majorityExtensionNodes = append(majorityExtensionNodes, nodeID)
 		}
 	}
 

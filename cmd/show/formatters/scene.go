@@ -57,39 +57,6 @@ type SceneCluster struct {
 type SceneNode struct {
 	Key        string
 	LabelLines []string
-	// Fill is the resolved base fill of the node. Both formatters switch on it
-	// exhaustively, so a new fill must be handled in each or the build fails.
-	Fill NodeFill
-}
-
-// NodeFill is the resolved base fill of a node, before role styling (module,
-// pruned, deleted, ...) is applied on top.
-type NodeFill int
-
-const (
-	// NodeFillNeutral is the default fill (no type differentiation).
-	NodeFillNeutral NodeFill = iota
-	// NodeFillTest marks a test file.
-	NodeFillTest
-	// NodeFillMajority marks a file of the majority type.
-	NodeFillMajority
-	// NodeFillTypeColored marks a minority-type file colored by its type.
-	NodeFillTypeColored
-)
-
-// nodeFill resolves a node's base fill with the same priority both formatters
-// used inline: test > majority type > minority type > neutral.
-func nodeFill(isTest bool, fileType, majorityType string, hasMultipleTypes bool) NodeFill {
-	switch {
-	case isTest:
-		return NodeFillTest
-	case fileType == majorityType:
-		return NodeFillMajority
-	case hasMultipleTypes:
-		return NodeFillTypeColored
-	default:
-		return NodeFillNeutral
-	}
 }
 
 // GraphHeader carries the graph-level render attributes.
@@ -119,23 +86,11 @@ func BuildScene(g depgraph.FileDependencyGraph, opts RenderOptions) Scene {
 	sort.Strings(filePaths)
 
 	nodeNames := BuildNodeNames(filePaths)
-
-	fileType := make(map[string]string, len(filePaths))
-	typeCounts := make(map[string]int)
-	for _, source := range filePaths {
-		key := fileTypeKey(source)
-		fileType[source] = key
-		typeCounts[key]++
-	}
-	majority := majorityType(typeCounts)
-	hasMultiple := len(typeCounts) > 1
-
 	nodes := make(map[string]SceneNode, len(filePaths))
 	for _, source := range filePaths {
 		nodes[source] = SceneNode{
 			Key:        source,
 			LabelLines: nodeLabelLines(g, nodeNames[source], source),
-			Fill:       nodeFill(g.Meta.Files[source].IsTest, fileType[source], majority, hasMultiple),
 		}
 	}
 
@@ -145,6 +100,14 @@ func BuildScene(g depgraph.FileDependencyGraph, opts RenderOptions) Scene {
 			Name:    g.Meta.ModuleCluster.Name,
 			Members: g.Meta.ModuleCluster.Members,
 		}
+	}
+
+	fileType := make(map[string]string, len(filePaths))
+	typeCounts := make(map[string]int)
+	for _, source := range filePaths {
+		key := fileTypeKey(source)
+		fileType[source] = key
+		typeCounts[key]++
 	}
 
 	return Scene{
@@ -159,8 +122,8 @@ func BuildScene(g depgraph.FileDependencyGraph, opts RenderOptions) Scene {
 		Nodes:            nodes,
 		Cluster:          cluster,
 		FileType:         fileType,
-		MajorityType:     majority,
-		HasMultipleTypes: hasMultiple,
+		MajorityType:     majorityType(typeCounts),
+		HasMultipleTypes: len(typeCounts) > 1,
 	}
 }
 

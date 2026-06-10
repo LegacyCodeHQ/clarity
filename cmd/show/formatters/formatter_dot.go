@@ -49,9 +49,6 @@ func (f *dotFormatter) Format(g depgraph.FileDependencyGraph, opts RenderOptions
 
 	extensionColors := f.assignExtensionColors(filePaths)
 
-	// Count files by type key to find the majority type. Extensionless files
-	// are keyed by basename so each one (e.g. `pre-commit`, `pre-push`) is its
-	// own type rather than collapsing into a single empty-string bucket.
 	// Helper function to get color for an extension
 	getColorForExtension := func(ext string) string {
 		if color, ok := extensionColors[ext]; ok {
@@ -84,16 +81,17 @@ func (f *dotFormatter) Format(g depgraph.FileDependencyGraph, opts RenderOptions
 
 			fileMetadata, hasFileMetadata := g.Meta.Files[source]
 
-			// Fill is resolved in the Scene; map it to a DOT color. Exhaustive so
-			// a new fill must be colored here.
-			switch scene.Nodes[source].Fill {
-			case NodeFillTest:
+			// Priority 1: Test files are always light green
+			if hasFileMetadata && fileMetadata.IsTest {
 				color = "lightgreen"
-			case NodeFillMajority:
+			} else if scene.FileType[source] == scene.MajorityType {
+				// Priority 2: Files with majority extension count are always white
 				color = "white"
-			case NodeFillTypeColored:
+			} else if scene.HasMultipleTypes {
+				// Priority 3: Color based on extension (only if multiple extensions exist)
 				color = getColorForExtension(scene.FileType[source])
-			case NodeFillNeutral:
+			} else {
+				// Priority 4: Single extension - use white (no need to differentiate)
 				color = "white"
 			}
 
