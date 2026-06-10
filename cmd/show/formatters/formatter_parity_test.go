@@ -68,6 +68,24 @@ func TestFormatterParity_NodeStates(t *testing.T) {
 	}
 }
 
+// TestFormatterParity_PhantomNodes asserts the phantom test-sibling capability
+// renders in both formatters, so it cannot be dropped from one unnoticed.
+func TestFormatterParity_PhantomNodes(t *testing.T) {
+	g := parityFileGraph(t, map[string][]string{
+		"/p/lib.rs": {},
+		"/p/app.rs": {"/p/lib.rs"},
+	})
+
+	md := g.Meta.Files["/p/lib.rs"]
+	md.Phantom = &depgraph.PhantomMetadata{Kind: "rust-test"}
+	g.Meta.Files["/p/lib.rs"] = md
+
+	dot, mermaid := renderBoth(t, g)
+
+	require.Contains(t, dot, "darkgreen", "DOT missing phantom styling")
+	require.Contains(t, mermaid, "phantomTest", "Mermaid missing phantom styling")
+}
+
 // TestFormatterParity_MajorityTypeKeying pins the unified extension keying both
 // formatters now share: extensionless files key by base name (not ""), so a
 // distinct `Makefile`/`Dockerfile` does not collapse into one bucket and the
