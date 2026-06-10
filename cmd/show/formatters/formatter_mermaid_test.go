@@ -54,6 +54,26 @@ func TestMermaidFormatter_RenamedNodeShowsMarkerAndStyle(t *testing.T) {
 	require.Contains(t, output, "classDef renamedFile")
 }
 
+func TestMermaidFormatter_RenamedEdgeIsStyled(t *testing.T) {
+	// Parity with the DOT formatter: a renamed edge is drawn dashed amber. The
+	// Mermaid formatter previously left it as a plain edge.
+	graph := testFileGraphMermaid(t, map[string][]string{
+		"/project/old.dart": {"/project/new.dart"},
+		"/project/new.dart": {},
+	}, nil)
+
+	edge := depgraph.FileEdge{From: "/project/old.dart", To: "/project/new.dart"}
+	em := graph.Meta.Edges[edge]
+	em.State = depgraph.EdgeStateRenamed
+	graph.Meta.Edges[edge] = em
+
+	formatter := mermaidFormatter{}
+	output, err := formatter.Format(graph, RenderOptions{})
+	require.NoError(t, err)
+
+	require.Contains(t, output, "linkStyle 0 stroke:#CC8800")
+}
+
 func TestMermaidFormatter_ModuleNodeUsesSubroutineShapeWithFileCountAndChurn(t *testing.T) {
 	graph := testFileGraphMermaid(t, map[string][]string{
 		"X":                   {"/project/util.dart"},

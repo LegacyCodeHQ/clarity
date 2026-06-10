@@ -189,6 +189,7 @@ func (f mermaidFormatter) Format(g depgraph.FileDependencyGraph, opts RenderOpti
 	edgeIndex := 0
 	var cycleEdgeIndices []int
 	var deletedEdgeIndices []int
+	var renamedEdgeIndices []int
 	var phantomEdgeIndices []int
 	for _, source := range filePaths {
 		deps := adjacency[source]
@@ -213,6 +214,9 @@ func (f mermaidFormatter) Format(g depgraph.FileDependencyGraph, opts RenderOpti
 					if edgeMD.State == depgraph.EdgeStateDeleted {
 						deletedEdgeIndices = append(deletedEdgeIndices, edgeIndex)
 					}
+					if edgeMD.State == depgraph.EdgeStateRenamed {
+						renamedEdgeIndices = append(renamedEdgeIndices, edgeIndex)
+					}
 					if edgeMD.InCycle {
 						cycleEdgeIndices = append(cycleEdgeIndices, edgeIndex)
 					}
@@ -224,6 +228,9 @@ func (f mermaidFormatter) Format(g depgraph.FileDependencyGraph, opts RenderOpti
 			edgesSB.WriteString(fmt.Sprintf("    %s --> %s\n", sourceID, depID))
 			if edgeMD.State == depgraph.EdgeStateDeleted {
 				deletedEdgeIndices = append(deletedEdgeIndices, edgeIndex)
+			}
+			if edgeMD.State == depgraph.EdgeStateRenamed {
+				renamedEdgeIndices = append(renamedEdgeIndices, edgeIndex)
 			}
 			if edgeMD.InCycle {
 				cycleEdgeIndices = append(cycleEdgeIndices, edgeIndex)
@@ -284,7 +291,7 @@ func (f mermaidFormatter) Format(g depgraph.FileDependencyGraph, opts RenderOpti
 		}
 	}
 
-	hasStyles := len(testNodes) > 0 || len(majorityExtensionNodes) > 0 || len(cycleNodes) > 0 || len(cycleEdgeIndices) > 0 || len(deletedEdgeIndices) > 0 || len(prunedNodes) > 0 || len(phantomNodes) > 0 || len(prodContextNodes) > 0 || len(moduleNodes) > 0 || len(deletedNodes) > 0 || len(renamedNodes) > 0
+	hasStyles := len(testNodes) > 0 || len(majorityExtensionNodes) > 0 || len(cycleNodes) > 0 || len(cycleEdgeIndices) > 0 || len(deletedEdgeIndices) > 0 || len(prunedNodes) > 0 || len(phantomNodes) > 0 || len(prodContextNodes) > 0 || len(moduleNodes) > 0 || len(deletedNodes) > 0 || len(renamedNodes) > 0 || len(renamedEdgeIndices) > 0
 	var stylesSB strings.Builder
 
 	// Define style classes
@@ -330,6 +337,9 @@ func (f mermaidFormatter) Format(g depgraph.FileDependencyGraph, opts RenderOpti
 	}
 	for _, idx := range deletedEdgeIndices {
 		stylesSB.WriteString(fmt.Sprintf("    linkStyle %d stroke:#CC3333,stroke-width:2px,stroke-dasharray: 5 5\n", idx))
+	}
+	for _, idx := range renamedEdgeIndices {
+		stylesSB.WriteString(fmt.Sprintf("    linkStyle %d stroke:#CC8800,stroke-width:2px,stroke-dasharray: 5 5\n", idx))
 	}
 	if len(phantomNodes) > 0 {
 		stylesSB.WriteString("    classDef phantomTest fill:#90EE90,stroke:#228B22,stroke-dasharray: 1 4,color:#000000\n")
