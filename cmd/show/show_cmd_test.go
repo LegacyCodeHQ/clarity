@@ -1013,7 +1013,7 @@ func TestBuildGraphLabel_UsesGoModuleNamePrefix(t *testing.T) {
 	gitRun(t, repoDir, "add", ".")
 	gitRun(t, repoDir, "commit", "-m", "add main.go")
 
-	label := buildGraphLabel(&graphOptions{repoPath: repoDir}, formatters.OutputFormatMermaid, "", "", false, []string{filePath}, 0)
+	label := buildGraphLabel(&graphOptions{repoPath: repoDir}, formatters.OutputFormatMermaid, "", "", false, []string{filePath}, 0, 0)
 
 	if !strings.HasPrefix(label, "clarity • ") {
 		t.Fatalf("buildGraphLabel() = %q, want prefix %q", label, "clarity • ")
@@ -1032,7 +1032,7 @@ func TestNodeCountLabel(t *testing.T) {
 	}{
 		{name: "files only", moduleCount: 0, fileCount: 5, want: "5 files"},
 		{name: "single file", moduleCount: 0, fileCount: 1, want: "1 file"},
-		{name: "no nodes", moduleCount: 0, fileCount: 0, want: "0 files"},
+		{name: "no nodes", moduleCount: 0, fileCount: 0, want: ""},
 		{name: "mixed", moduleCount: 3, fileCount: 5, want: "3 modules, 5 files"},
 		{name: "mixed singulars", moduleCount: 1, fileCount: 1, want: "1 module, 1 file"},
 		{name: "all collapsed", moduleCount: 4, fileCount: 0, want: "4 modules"},
@@ -1043,6 +1043,31 @@ func TestNodeCountLabel(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			if got := nodeCountLabel(tt.moduleCount, tt.fileCount); got != tt.want {
 				t.Fatalf("nodeCountLabel(%d, %d) = %q, want %q", tt.moduleCount, tt.fileCount, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestGraphCountLabel(t *testing.T) {
+	tests := []struct {
+		name         string
+		moduleCount  int
+		fileCount    int
+		deletedCount int
+		want         string
+	}{
+		{name: "files only", fileCount: 5, want: "5 files"},
+		{name: "files and deleted", fileCount: 4, deletedCount: 13, want: "4 files • 13 deleted"},
+		{name: "single deleted", fileCount: 2, deletedCount: 1, want: "2 files • 1 deleted"},
+		{name: "all deleted drops files", fileCount: 0, deletedCount: 13, want: "13 deleted"},
+		{name: "modules files deleted", moduleCount: 2, fileCount: 4, deletedCount: 3, want: "2 modules, 4 files • 3 deleted"},
+		{name: "empty graph", want: "0 files"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := graphCountLabel(tt.moduleCount, tt.fileCount, tt.deletedCount); got != tt.want {
+				t.Fatalf("graphCountLabel(%d, %d, %d) = %q, want %q", tt.moduleCount, tt.fileCount, tt.deletedCount, got, tt.want)
 			}
 		})
 	}

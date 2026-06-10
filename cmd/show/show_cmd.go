@@ -277,7 +277,6 @@ func runGraph(cmd *cobra.Command, opts *graphOptions) error {
 		return fmt.Errorf("unknown format: %s (valid options: %s)", opts.outputFormat, formatters.SupportedFormats())
 	}
 	fileStats := collectFileStats(cmd, opts, format, fromCommit, toCommit, isCommitRange)
-	label := buildGraphLabel(opts, format, fromCommit, toCommit, isCommitRange, filePaths, len(collapse.Members))
 	fileGraph, err := depgraph.NewFileDependencyGraph(graph, fileStats, contentReader)
 	if err != nil {
 		return fmt.Errorf("failed to build file graph metadata: %w", err)
@@ -307,6 +306,10 @@ func runGraph(cmd *cobra.Command, opts *graphOptions) error {
 	if err != nil {
 		return err
 	}
+
+	// Built here (not earlier) so the deleted count is read from the marked
+	// graph, reflecting exactly what renders as deleted.
+	label := buildGraphLabel(opts, format, fromCommit, toCommit, isCommitRange, filePaths, len(collapse.Members), countDeletedFiles(fileGraph))
 
 	orientation, _ := formatters.ParseDirection(opts.orientation)
 	renderOpts := formatters.RenderOptions{
@@ -1149,7 +1152,7 @@ func collectFileStats(cmd *cobra.Command, opts *graphOptions, format formatters.
 	return fileStats
 }
 
-func buildGraphLabel(opts *graphOptions, format formatters.OutputFormat, fromCommit, toCommit string, isCommitRange bool, filePaths []string, moduleCount int) string {
+func buildGraphLabel(opts *graphOptions, format formatters.OutputFormat, fromCommit, toCommit string, isCommitRange bool, filePaths []string, moduleCount, deletedCount int) string {
 	if format != formatters.OutputFormatDOT && format != formatters.OutputFormatMermaid {
 		return ""
 	}
@@ -1185,21 +1188,56 @@ func buildGraphLabel(opts *graphOptions, format formatters.OutputFormat, fromCom
 		}
 	}
 
-	label += " • " + nodeCountLabel(moduleCount, len(filePaths)-moduleCount)
+	presentFiles := len(filePaths) - moduleCount - deletedCount
+	if presentFiles < 0 {
+		presentFiles = 0
+	}
+	label += " • " + graphCountLabel(moduleCount, presentFiles, deletedCount)
 
 	return label
+}
+
+// graphCountLabel summarizes the graph's node counts for the title: the node
+// composition (modules and present files) and a separate deleted-file count.
+// Each part is dropped when zero, so a commit removing files reads
+// "4 files • 13 deleted" and an all-deletion view reads "13 deleted"; an
+// otherwise-empty graph still reads "0 files".
+func graphCountLabel(moduleCount, fileCount, deletedCount int) string {
+	var parts []string
+	if composition := nodeCountLabel(moduleCount, fileCount); composition != "" {
+		parts = append(parts, composition)
+	}
+	if deletedCount > 0 {
+		parts = append(parts, fmt.Sprintf("%d deleted", deletedCount))
+	}
+	if len(parts) == 0 {
+		parts = append(parts, pluralize(0, "file"))
+	}
+	return strings.Join(parts, " • ")
+}
+
+// countDeletedFiles counts file nodes marked deleted in the rendered graph.
+func countDeletedFiles(fg depgraph.FileDependencyGraph) int {
+	n := 0
+	for _, md := range fg.Meta.Files {
+		if md.State == depgraph.FileStateDeleted {
+			n++
+		}
+	}
+	return n
 }
 
 // nodeCountLabel summarizes the graph's node composition for the title. With
 // --modules the graph is a mix of collapsed module nodes and plain file nodes,
 // so we report each present count rather than mislabeling every node as a
-// "file". Zero-valued terms are dropped; an all-files graph reads "N files".
+// "file". Zero-valued terms are dropped; it is empty when there is nothing to
+// report (the caller supplies an "0 files" fallback).
 func nodeCountLabel(moduleCount, fileCount int) string {
 	var parts []string
 	if moduleCount > 0 {
 		parts = append(parts, pluralize(moduleCount, "module"))
 	}
-	if fileCount > 0 || moduleCount == 0 {
+	if fileCount > 0 {
 		parts = append(parts, pluralize(fileCount, "file"))
 	}
 	return strings.Join(parts, ", ")
