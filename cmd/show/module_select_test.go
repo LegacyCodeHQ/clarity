@@ -46,6 +46,23 @@ func TestShowCommand_ModuleSelectDrawsBoundary(t *testing.T) {
 	}
 }
 
+func TestShowCommand_ModuleSelectMermaidSubgraph(t *testing.T) {
+	repoDir, srcDir := writeJavaPair(t)
+	writeModulesConfig(t, repoDir, `{
+  "modules": [
+    { "name": "support", "files": ["src/main/java/com/example/util/Helper.java"] }
+  ]
+}`)
+
+	out := runShow(t, "-i", srcDir, "-r", repoDir, "-f", "mermaid", "--module", "support")
+	if !strings.Contains(out, `subgraph moduleCluster["support"]`) {
+		t.Fatalf("expected a mermaid subgraph boundary labeled with the module name:\n%s", out)
+	}
+	if !strings.Contains(out, "prunedFile") {
+		t.Fatalf("expected the incoming dependent styled as pruned (dashed):\n%s", out)
+	}
+}
+
 func TestShowCommand_ModuleSelectDirectionIn(t *testing.T) {
 	repoDir, srcDir := writeJavaPair(t)
 	writeModulesConfig(t, repoDir, `{

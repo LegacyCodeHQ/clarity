@@ -118,6 +118,19 @@ func (f mermaidFormatter) Format(g depgraph.FileDependencyGraph, opts RenderOpti
 	// Track which nodes have been defined
 	definedNodes := make(map[string]bool)
 
+	// Group the selected module's member nodes so they render inside a subgraph
+	// boundary. Populated only for the single-module boundary view; otherwise
+	// every definition flows to outerDefs and no subgraph is drawn.
+	memberSources := make(map[string]bool)
+	moduleClusterName := ""
+	if g.Meta.ModuleCluster != nil {
+		moduleClusterName = g.Meta.ModuleCluster.Name
+		for _, member := range g.Meta.ModuleCluster.Members {
+			memberSources[member] = true
+		}
+	}
+	var clusterDefs, outerDefs strings.Builder
+
 	// Define nodes with labels and styles
 	for _, source := range filePaths {
 		sourceNodeKey := nodeNames[source]
@@ -164,14 +177,31 @@ func (f mermaidFormatter) Format(g depgraph.FileDependencyGraph, opts RenderOpti
 
 			// Module nodes use the subroutine shape ([[ ]]) to read as a
 			// collapsed container, distinct from plain file nodes.
+			target := &outerDefs
+			if memberSources[source] {
+				target = &clusterDefs
+			}
 			if isModule {
-				sb.WriteString(fmt.Sprintf("    %s[[\"%s\"]]\n", nodeID, nodeLabel))
+				target.WriteString(fmt.Sprintf("    %s[[\"%s\"]]\n", nodeID, nodeLabel))
 			} else {
-				sb.WriteString(fmt.Sprintf("    %s[\"%s\"]\n", nodeID, nodeLabel))
+				target.WriteString(fmt.Sprintf("    %s[\"%s\"]\n", nodeID, nodeLabel))
 			}
 			definedNodes[sourceNodeKey] = true
 		}
 	}
+
+	// Emit the module boundary subgraph (if any) around its member definitions,
+	// then everything else. The subgraph is drawn only when a cluster was
+	// recorded, which happens solely for the single-module view with crossings.
+	if moduleClusterName != "" && clusterDefs.Len() > 0 {
+		escaped := strings.ReplaceAll(moduleClusterName, "\"", "#quot;")
+		sb.WriteString(fmt.Sprintf("    subgraph moduleCluster[\"%s\"]\n", escaped))
+		sb.WriteString(clusterDefs.String())
+		sb.WriteString("    end\n")
+	} else {
+		sb.WriteString(clusterDefs.String())
+	}
+	sb.WriteString(outerDefs.String())
 
 	phantomIDs := make(map[string]string)
 	var phantomNodes []string
