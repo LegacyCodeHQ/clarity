@@ -20,33 +20,38 @@ import (
 )
 
 type graphOptions struct {
-	outputFormat string
-	repoPath     string
-	commitID     string
-	generateURL  bool
-	orientation  string
-	allowOutside bool
-	includeExt   string
-	includeExts  []string
-	excludeExt   string
-	excludeExts  []string
-	includes     []string
-	excludes     []string
-	betweenFiles []string
-	targetFile   string
-	depthLevel   int
-	scope        string
-	pruneFiles   []string
-	alsoPatterns []string
-	modules      bool
-	moduleSelect string
-	edgeLabels   bool
-	noStats      bool
-	noPhantom    bool
+	outputFormat    string
+	repoPath        string
+	commitID        string
+	generateURL     bool
+	orientation     string
+	allowOutside    bool
+	includeExt      string
+	includeExts     []string
+	excludeExt      string
+	excludeExts     []string
+	includes        []string
+	excludes        []string
+	betweenFiles    []string
+	targetFile      string
+	depthLevel      int
+	scope           string
+	pruneFiles      []string
+	alsoPatterns    []string
+	modules         bool
+	moduleSelect    string
+	moduleDirection string
+	edgeLabels      bool
+	noStats         bool
+	noPhantom       bool
 }
 
 const (
 	scopeDownstream = "downstream"
+
+	moduleDirectionIn   = "in"
+	moduleDirectionOut  = "out"
+	moduleDirectionBoth = "both"
 )
 
 var moduleMajorSuffix = regexp.MustCompile(`^v[0-9]+$`)
@@ -57,10 +62,11 @@ var Cmd = NewCommand()
 // NewCommand returns a new graph command instance.
 func NewCommand() *cobra.Command {
 	opts := &graphOptions{
-		outputFormat: formatters.OutputFormatDOT.String(),
-		orientation:  formatters.DefaultDirection.StringLower(),
-		depthLevel:   1,
-		scope:        scopeDownstream,
+		outputFormat:    formatters.OutputFormatDOT.String(),
+		orientation:     formatters.DefaultDirection.StringLower(),
+		depthLevel:      1,
+		scope:           scopeDownstream,
+		moduleDirection: moduleDirectionBoth,
 	}
 
 	cmd := &cobra.Command{
@@ -111,7 +117,8 @@ func NewCommand() *cobra.Command {
 	cmd.Flags().StringSliceVar(&opts.pruneFiles, "prune", nil, "Show node but skip its subtree (requires --file; shown with dashed border)")
 	cmd.Flags().StringSliceVar(&opts.alsoPatterns, "also", nil, "Include files matching glob patterns that connect to --file graph (requires --file)")
 	cmd.Flags().BoolVar(&opts.modules, "modules", false, "Collapse files into the modules declared in .clarity/modules.json (off by default)")
-	cmd.Flags().StringVar(&opts.moduleSelect, "module", "", "Render only the named module and its immediate boundary (implies --modules; quote names with spaces)")
+	cmd.Flags().StringVar(&opts.moduleSelect, "module", "", "Render the named module's files inside a boundary with its immediate dependents and dependencies (quote names with spaces)")
+	cmd.Flags().StringVarP(&opts.moduleDirection, "direction", "d", opts.moduleDirection, "Boundary to show with --module (in, out, both)")
 	cmd.Flags().BoolVar(&opts.edgeLabels, "label", false, "Add deterministic short labels to edges")
 	cmd.Flags().BoolVar(&opts.noStats, "no-stats", false, "Skip file addition/deletion statistics for faster rendering")
 	cmd.Flags().BoolVar(&opts.noPhantom, "no-phantom", false, "Suppress phantom test nodes (Rust files with #[cfg(test)] regions are rendered as a single node)")
@@ -244,23 +251,25 @@ func runGraph(cmd *cobra.Command, opts *graphOptions) error {
 	renderBasePath := resolveRenderBasePath(opts.repoPath, filePaths)
 
 	var collapse depgraph.Collapse
-	collapseEnabled := opts.modules || opts.moduleSelect != ""
-	modules, err := resolveConfigModules(opts.repoPath, collapseEnabled)
+	var moduleBoundary *moduleBoundaryResult
+	modules, err := resolveConfigModules(opts.repoPath, opts.modules || opts.moduleSelect != "")
 	if err != nil {
 		return err
 	}
-	if len(modules) > 0 {
+	switch {
+	case opts.moduleSelect != "":
+		// Boundary view: keep the module's members expanded inside a drawn box,
+		// surrounded only by its immediate dependents and dependencies.
+		graph, filePaths, moduleBoundary, err = selectModuleBoundary(opts.moduleSelect, opts.moduleDirection, modules, graph)
+		if err != nil {
+			return err
+		}
+	case len(modules) > 0:
 		graph, collapse, err = depgraph.CollapseModules(graph, modules)
 		if err != nil {
 			return err
 		}
 		filePaths = graphFiles(graph)
-	}
-	if opts.moduleSelect != "" {
-		graph, filePaths, err = applyModuleSelect(opts.moduleSelect, modules, graph)
-		if err != nil {
-			return err
-		}
 	}
 
 	format, ok := formatters.ParseOutputFormat(opts.outputFormat)
@@ -288,6 +297,7 @@ func runGraph(cmd *cobra.Command, opts *graphOptions) error {
 		depgraph.AnnotateModule(&fileGraph, moduleNode, members, fileStats)
 	}
 	fileGraph.Meta.EdgeOrigins = collapse.EdgeOrigins
+	applyModuleBoundary(&fileGraph, moduleBoundary)
 
 	if !opts.noPhantom {
 		annotateRustPhantoms(&fileGraph, opts, contentReader, fromCommit, toCommit, isCommitRange)
@@ -453,6 +463,17 @@ func validateGraphOptions(opts *graphOptions) error {
 		if len(opts.betweenFiles) > 0 {
 			return fmt.Errorf("--module cannot be used with --between flag")
 		}
+	}
+
+	moduleDirection := strings.ToLower(strings.TrimSpace(opts.moduleDirection))
+	switch moduleDirection {
+	case moduleDirectionIn, moduleDirectionOut, moduleDirectionBoth:
+		opts.moduleDirection = moduleDirection
+	default:
+		return fmt.Errorf("unknown direction: %s (valid options: in, out, both)", opts.moduleDirection)
+	}
+	if opts.moduleSelect == "" && opts.moduleDirection != moduleDirectionBoth {
+		return fmt.Errorf("--direction requires --module")
 	}
 
 	return nil
@@ -948,74 +969,140 @@ func applyBetweenFilter(opts *graphOptions, pathResolver PathResolver, graph dep
 	return graph, filePaths, nil
 }
 
-// applyModuleSelect narrows a collapsed graph to a single module node and its
-// immediate boundary (the nodes that directly import it or that it imports). It
-// is the engine behind `show --module <name>`: the module must be declared in
-// .clarity/modules.json and have at least one member file present in the current
-// scope, otherwise there is no module node to render.
-func applyModuleSelect(name string, modules []depgraph.Module, graph depgraph.DependencyGraph) (depgraph.DependencyGraph, []string, error) {
-	if err := validateModuleDeclared(name, modules); err != nil {
-		return nil, nil, err
-	}
-	if !depgraph.ContainsNode(graph, name) {
-		return nil, nil, fmt.Errorf("module %q has no files in the current scope", name)
-	}
-	filtered, err := filterGraphToModule(graph, name)
+type moduleBoundaryResult struct {
+	Name     string
+	Members  []string
+	External []string
+}
+
+// selectModuleBoundary keeps the named module's member files expanded and
+// gathers only the immediate dependents and/or dependencies that cross the
+// module boundary, per direction (in, out, both). The module must be declared in
+// .clarity/modules.json and have at least one member present in the current
+// scope. Edges among external neighbors are dropped so the result reads as the
+// module's boundary rather than the full graph. The returned External nodes are
+// what the caller marks pruned (dashed) and frames with a boundary box.
+func selectModuleBoundary(name, direction string, modules []depgraph.Module, graph depgraph.DependencyGraph) (depgraph.DependencyGraph, []string, *moduleBoundaryResult, error) {
+	selected, err := findDeclaredModule(name, modules)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
-	return filtered, graphFiles(filtered), nil
-}
 
-// validateModuleDeclared confirms name matches a module declared in
-// .clarity/modules.json, returning a helpful error listing the available names
-// otherwise. Names may contain spaces, so they are matched verbatim.
-func validateModuleDeclared(name string, modules []depgraph.Module) error {
-	available := make([]string, 0, len(modules))
-	for _, m := range modules {
-		if m.Name == name {
-			return nil
-		}
-		available = append(available, m.Name)
-	}
-	if len(available) == 0 {
-		return fmt.Errorf("unknown module %q: no modules declared in .clarity/modules.json", name)
-	}
-	sort.Strings(available)
-	return fmt.Errorf("unknown module %q (available: %s)", name, strings.Join(available, ", "))
-}
-
-// filterGraphToModule keeps the module node and the nodes directly connected to
-// it, retaining only the edges incident to the module so the result reads as the
-// module's boundary rather than the full graph.
-func filterGraphToModule(graph depgraph.DependencyGraph, moduleNode string) (depgraph.DependencyGraph, error) {
 	adjacency, err := depgraph.AdjacencyList(graph)
 	if err != nil {
-		return nil, fmt.Errorf("failed to build adjacency list: %w", err)
+		return nil, nil, nil, fmt.Errorf("failed to build adjacency list: %w", err)
 	}
 
-	filtered := map[string][]string{moduleNode: nil}
-	// Fan-out: edges from the module to its direct dependencies.
-	for _, dep := range adjacency[moduleNode] {
-		filtered[moduleNode] = append(filtered[moduleNode], dep)
-		if _, ok := filtered[dep]; !ok {
-			filtered[dep] = nil
+	memberSet := make(map[string]bool, len(selected.Files))
+	for _, f := range selected.Files {
+		if _, ok := adjacency[f]; ok {
+			memberSet[f] = true
 		}
 	}
-	// Fan-in: edges from direct dependents into the module.
-	for source, deps := range adjacency {
-		if source == moduleNode {
-			continue
+	if len(memberSet) == 0 {
+		return nil, nil, nil, fmt.Errorf("module %q has no files in the current scope", name)
+	}
+
+	includeIn := direction == moduleDirectionIn || direction == moduleDirectionBoth
+	includeOut := direction == moduleDirectionOut || direction == moduleDirectionBoth
+
+	keep := make(map[string][]string)
+	externalSet := make(map[string]bool)
+	ensure := func(n string) {
+		if _, ok := keep[n]; !ok {
+			keep[n] = nil
 		}
-		for _, dep := range deps {
-			if dep == moduleNode {
-				filtered[source] = append(filtered[source], moduleNode)
-				break
+	}
+
+	// Members, their internal edges, and (when included) outgoing dependencies.
+	for member := range memberSet {
+		ensure(member)
+		for _, dep := range adjacency[member] {
+			switch {
+			case memberSet[dep]:
+				keep[member] = append(keep[member], dep)
+			case includeOut:
+				keep[member] = append(keep[member], dep)
+				externalSet[dep] = true
+				ensure(dep)
 			}
 		}
 	}
 
-	return depgraph.NewDependencyGraphFromAdjacency(filtered)
+	// Incoming dependents: external sources that import a member.
+	if includeIn {
+		for source, deps := range adjacency {
+			if memberSet[source] {
+				continue
+			}
+			for _, dep := range deps {
+				if memberSet[dep] {
+					keep[source] = append(keep[source], dep)
+					externalSet[source] = true
+					ensure(source)
+				}
+			}
+		}
+	}
+
+	filtered, err := depgraph.NewDependencyGraphFromAdjacency(keep)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+
+	return filtered, graphFiles(filtered), &moduleBoundaryResult{
+		Name:     name,
+		Members:  sortedKeys(memberSet),
+		External: sortedKeys(externalSet),
+	}, nil
+}
+
+// findDeclaredModule returns the module declared under name, or a helpful error
+// listing the available names. Names may contain spaces and are matched verbatim.
+func findDeclaredModule(name string, modules []depgraph.Module) (depgraph.Module, error) {
+	available := make([]string, 0, len(modules))
+	for _, m := range modules {
+		if m.Name == name {
+			return m, nil
+		}
+		available = append(available, m.Name)
+	}
+	if len(available) == 0 {
+		return depgraph.Module{}, fmt.Errorf("unknown module %q: no modules declared in .clarity/modules.json", name)
+	}
+	sort.Strings(available)
+	return depgraph.Module{}, fmt.Errorf("unknown module %q (available: %s)", name, strings.Join(available, ", "))
+}
+
+// applyModuleBoundary marks the immediate dependents/dependencies of a selected
+// module as pruned (dashed) and, when any exist, records the module cluster so
+// the renderer draws a labeled boundary around the members. With no externals
+// the cluster is left unset and the members render without a box.
+func applyModuleBoundary(fg *depgraph.FileDependencyGraph, boundary *moduleBoundaryResult) {
+	if boundary == nil {
+		return
+	}
+	for _, ext := range boundary.External {
+		if md, ok := fg.Meta.Files[ext]; ok {
+			md.IsPruned = true
+			fg.Meta.Files[ext] = md
+		}
+	}
+	if len(boundary.External) > 0 {
+		fg.Meta.ModuleCluster = &depgraph.ModuleCluster{
+			Name:    boundary.Name,
+			Members: boundary.Members,
+		}
+	}
+}
+
+func sortedKeys(set map[string]bool) []string {
+	keys := make([]string, 0, len(set))
+	for k := range set {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	return keys
 }
 
 func graphFiles(graph depgraph.DependencyGraph) []string {

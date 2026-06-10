@@ -24,6 +24,19 @@ type FileGraphMetadata struct {
 	// It lets renderers label a collapsed edge by its underlying dependencies
 	// so labels stay stable whether or not modules are applied.
 	EdgeOrigins map[FileEdge][]FileEdge
+	// ModuleCluster, when set, names a module whose Members render inside a drawn
+	// boundary box. It is populated only for the single-module boundary view
+	// (show --module <name>) and only when the module has external dependents or
+	// dependencies worth framing; an isolated module leaves this nil so its files
+	// render exactly as they would without a box.
+	ModuleCluster *ModuleCluster
+}
+
+// ModuleCluster groups a module's member file nodes so a renderer can draw a
+// labeled boundary around them.
+type ModuleCluster struct {
+	Name    string
+	Members []string
 }
 
 // FileState describes whether a rendered file node exists in the current tree

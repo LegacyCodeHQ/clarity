@@ -131,6 +131,19 @@ func (f *dotFormatter) Format(g depgraph.FileDependencyGraph, opts RenderOptions
 	// Track which nodes have been styled to avoid duplicates
 	styledNodes := make(map[string]bool)
 
+	// Group the selected module's member nodes so they render inside a drawn
+	// boundary. Populated only for the single-module boundary view; otherwise
+	// every node declaration flows to outerDecls and no box is drawn.
+	memberNodeKeys := make(map[string]bool)
+	moduleClusterName := ""
+	if g.Meta.ModuleCluster != nil {
+		moduleClusterName = g.Meta.ModuleCluster.Name
+		for _, member := range g.Meta.ModuleCluster.Members {
+			memberNodeKeys[nodeKey(member, opts.BasePath)] = true
+		}
+	}
+	var clusterDecls, outerDecls strings.Builder
+
 	// First, define node styles based on file extensions
 	for _, source := range filePaths {
 		sourceBase := filepath.Base(source)
@@ -203,11 +216,16 @@ func (f *dotFormatter) Format(g depgraph.FileDependencyGraph, opts RenderOptions
 				fileMetadata.Phantom.Stats != nil &&
 				!fileMetadata.Phantom.ProdChanged
 
+			target := &outerDecls
+			if memberNodeKeys[sourceNodeKey] {
+				target = &clusterDecls
+			}
+
 			switch {
 			case isDeleted:
-				sb.WriteString(fmt.Sprintf("  %q [label=%q, style=\"filled,dashed\", fillcolor=\"#ffe6e6\", color=\"#cc3333\", fontcolor=\"#7a0000\"];\n", sourceNodeKey, nodeLabel))
+				target.WriteString(fmt.Sprintf("  %q [label=%q, style=\"filled,dashed\", fillcolor=\"#ffe6e6\", color=\"#cc3333\", fontcolor=\"#7a0000\"];\n", sourceNodeKey, nodeLabel))
 			case isRenamed:
-				sb.WriteString(fmt.Sprintf("  %q [label=%q, style=\"filled,dashed\", fillcolor=\"#fff3e0\", color=\"#cc8800\", fontcolor=\"#7a4d00\"];\n", sourceNodeKey, nodeLabel))
+				target.WriteString(fmt.Sprintf("  %q [label=%q, style=\"filled,dashed\", fillcolor=\"#fff3e0\", color=\"#cc8800\", fontcolor=\"#7a4d00\"];\n", sourceNodeKey, nodeLabel))
 			case isModule:
 				// A module renders as a single component-shaped node; keep the
 				// red cycle border when the collapsed node participates in one.
@@ -215,21 +233,33 @@ func (f *dotFormatter) Format(g depgraph.FileDependencyGraph, opts RenderOptions
 				if cycleNodes[source] {
 					moduleBorder = ", color=red"
 				}
-				sb.WriteString(fmt.Sprintf("  %q [label=%q, shape=component, style=filled, fillcolor=%s%s];\n", sourceNodeKey, nodeLabel, color, moduleBorder))
+				target.WriteString(fmt.Sprintf("  %q [label=%q, shape=component, style=filled, fillcolor=%s%s];\n", sourceNodeKey, nodeLabel, color, moduleBorder))
 			case hasFileMetadata && fileMetadata.IsPruned && cycleNodes[source]:
-				sb.WriteString(fmt.Sprintf("  %q [label=%q, style=\"filled,dashed\", fillcolor=%s, color=red];\n", sourceNodeKey, nodeLabel, color))
+				target.WriteString(fmt.Sprintf("  %q [label=%q, style=\"filled,dashed\", fillcolor=%s, color=red];\n", sourceNodeKey, nodeLabel, color))
 			case hasFileMetadata && fileMetadata.IsPruned:
-				sb.WriteString(fmt.Sprintf("  %q [label=%q, style=\"filled,dashed\", fillcolor=%s, color=gray];\n", sourceNodeKey, nodeLabel, color))
+				target.WriteString(fmt.Sprintf("  %q [label=%q, style=\"filled,dashed\", fillcolor=%s, color=gray];\n", sourceNodeKey, nodeLabel, color))
 			case cycleNodes[source]:
-				sb.WriteString(fmt.Sprintf("  %q [label=%q, style=filled, fillcolor=%s, color=red];\n", sourceNodeKey, nodeLabel, color))
+				target.WriteString(fmt.Sprintf("  %q [label=%q, style=filled, fillcolor=%s, color=red];\n", sourceNodeKey, nodeLabel, color))
 			case prodIsContext:
-				sb.WriteString(fmt.Sprintf("  %q [label=%q, style=\"filled,dashed\", fillcolor=%s];\n", sourceNodeKey, nodeLabel, color))
+				target.WriteString(fmt.Sprintf("  %q [label=%q, style=\"filled,dashed\", fillcolor=%s];\n", sourceNodeKey, nodeLabel, color))
 			default:
-				sb.WriteString(fmt.Sprintf("  %q [label=%q, style=filled, fillcolor=%s];\n", sourceNodeKey, nodeLabel, color))
+				target.WriteString(fmt.Sprintf("  %q [label=%q, style=filled, fillcolor=%s];\n", sourceNodeKey, nodeLabel, color))
 			}
 			styledNodes[sourceNodeKey] = true
 		}
 	}
+	// Emit the module boundary box (if any) around its member declarations,
+	// then everything else. The box is only drawn when a cluster was recorded,
+	// which happens solely for the single-module view with crossing edges.
+	if moduleClusterName != "" && clusterDecls.Len() > 0 {
+		sb.WriteString(fmt.Sprintf("  subgraph cluster_module {\n    label=%q;\n    labeljust=l;\n    style=rounded;\n    color=\"#888888\";\n    fontname=Courier;\n", moduleClusterName))
+		sb.WriteString(clusterDecls.String())
+		sb.WriteString("  }\n")
+	} else {
+		sb.WriteString(clusterDecls.String())
+	}
+	sb.WriteString(outerDecls.String())
+
 	for _, source := range filePaths {
 		meta, ok := g.Meta.Files[source]
 		if !ok || meta.Phantom == nil {
