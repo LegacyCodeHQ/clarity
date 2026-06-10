@@ -34,6 +34,26 @@ func TestMermaidFormatter_BasicFlowchart(t *testing.T) {
 	g.Assert(t, t.Name(), []byte(output))
 }
 
+func TestMermaidFormatter_RenamedNodeShowsMarkerAndStyle(t *testing.T) {
+	// Parity with the DOT formatter: a renamed node carries the "(renamed)"
+	// marker and a dashed style. The Mermaid formatter previously dropped both.
+	graph := testFileGraphMermaid(t, map[string][]string{
+		"/project/old.dart": {},
+		"/project/app.dart": {"/project/old.dart"},
+	}, nil)
+
+	md := graph.Meta.Files["/project/old.dart"]
+	md.State = depgraph.FileStateRenamed
+	graph.Meta.Files["/project/old.dart"] = md
+
+	formatter := mermaidFormatter{}
+	output, err := formatter.Format(graph, RenderOptions{})
+	require.NoError(t, err)
+
+	require.Contains(t, output, "(renamed)")
+	require.Contains(t, output, "classDef renamedFile")
+}
+
 func TestMermaidFormatter_ModuleNodeUsesSubroutineShapeWithFileCountAndChurn(t *testing.T) {
 	graph := testFileGraphMermaid(t, map[string][]string{
 		"X":                   {"/project/util.dart"},

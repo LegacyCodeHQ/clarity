@@ -116,40 +116,9 @@ func (f mermaidFormatter) Format(g depgraph.FileDependencyGraph, opts RenderOpti
 			fileMetadata, hasFileMetadata := g.Meta.Files[source]
 			isModule := hasFileMetadata && fileMetadata.IsModule
 
-			// Build node label with file stats if available
-			nodeLabel := nodeNames[source]
-			if isModule {
-				nodeLabel = moduleNodeLabel(nodeNames[source], fileMetadata, "<br/>")
-			} else if hasFileMetadata && fileMetadata.Stats != nil {
-				stats := *fileMetadata.Stats
-				labelPrefix := nodeLabel
-				if stats.IsNew {
-					labelPrefix = fmt.Sprintf("🪴 %s", labelPrefix)
-				}
-
-				if stats.Additions > 0 || stats.Deletions > 0 {
-					var statsParts []string
-					if stats.Additions > 0 {
-						statsParts = append(statsParts, fmt.Sprintf("+%d", stats.Additions))
-					}
-					if stats.Deletions > 0 {
-						statsParts = append(statsParts, fmt.Sprintf("-%d", stats.Deletions))
-					}
-					if len(statsParts) > 0 {
-						nodeLabel = fmt.Sprintf("%s<br/>%s", labelPrefix, strings.Join(statsParts, " "))
-					} else {
-						nodeLabel = labelPrefix
-					}
-				} else if stats.IsNew {
-					nodeLabel = labelPrefix
-				}
-			}
-			if hasFileMetadata && fileMetadata.State == depgraph.FileStateDeleted {
-				nodeLabel = fmt.Sprintf("%s<br/>(deleted)", nodeLabel)
-			}
-
-			// Escape quotes in labels
-			nodeLabel = strings.ReplaceAll(nodeLabel, "\"", "#quot;")
+			// Node label content is resolved once in the Scene; join its lines
+			// with Mermaid's break and escape quotes.
+			nodeLabel := strings.ReplaceAll(strings.Join(scene.Nodes[source].LabelLines, "<br/>"), "\"", "#quot;")
 
 			// Module nodes use the subroutine shape ([[ ]]) to read as a
 			// collapsed container, distinct from plain file nodes.
@@ -285,6 +254,7 @@ func (f mermaidFormatter) Format(g depgraph.FileDependencyGraph, opts RenderOpti
 	var prunedNodes []string
 	var moduleNodes []string
 	var deletedNodes []string
+	var renamedNodes []string
 
 	// Count unique file extensions to determine if majority styling is meaningful.
 	uniqueExtensions := make(map[string]bool)
@@ -302,6 +272,9 @@ func (f mermaidFormatter) Format(g depgraph.FileDependencyGraph, opts RenderOpti
 		if hasFileMetadata && fileMetadata.State == depgraph.FileStateDeleted {
 			deletedNodes = append(deletedNodes, nodeID)
 		}
+		if hasFileMetadata && fileMetadata.State == depgraph.FileStateRenamed {
+			renamedNodes = append(renamedNodes, nodeID)
+		}
 		if hasFileMetadata && fileMetadata.IsPruned {
 			prunedNodes = append(prunedNodes, nodeID)
 		}
@@ -314,7 +287,7 @@ func (f mermaidFormatter) Format(g depgraph.FileDependencyGraph, opts RenderOpti
 		}
 	}
 
-	hasStyles := len(testNodes) > 0 || len(majorityExtensionNodes) > 0 || len(cycleNodes) > 0 || len(cycleEdgeIndices) > 0 || len(deletedEdgeIndices) > 0 || len(prunedNodes) > 0 || len(phantomNodes) > 0 || len(prodContextNodes) > 0 || len(moduleNodes) > 0 || len(deletedNodes) > 0
+	hasStyles := len(testNodes) > 0 || len(majorityExtensionNodes) > 0 || len(cycleNodes) > 0 || len(cycleEdgeIndices) > 0 || len(deletedEdgeIndices) > 0 || len(prunedNodes) > 0 || len(phantomNodes) > 0 || len(prodContextNodes) > 0 || len(moduleNodes) > 0 || len(deletedNodes) > 0 || len(renamedNodes) > 0
 	var stylesSB strings.Builder
 
 	// Define style classes
@@ -339,6 +312,10 @@ func (f mermaidFormatter) Format(g depgraph.FileDependencyGraph, opts RenderOpti
 	if len(deletedNodes) > 0 {
 		stylesSB.WriteString("    classDef deletedFile fill:#FFE6E6,stroke:#CC3333,stroke-dasharray: 5 5,color:#7A0000\n")
 		stylesSB.WriteString(fmt.Sprintf("    class %s deletedFile\n", strings.Join(deletedNodes, ",")))
+	}
+	if len(renamedNodes) > 0 {
+		stylesSB.WriteString("    classDef renamedFile fill:#FFF3E0,stroke:#CC8800,stroke-dasharray: 5 5,color:#7A4D00\n")
+		stylesSB.WriteString(fmt.Sprintf("    class %s renamedFile\n", strings.Join(renamedNodes, ",")))
 	}
 	if len(prunedNodes) > 0 {
 		stylesSB.WriteString("    classDef prunedFile fill:#FFFFFF,stroke:#999999,stroke-dasharray: 5 5\n")

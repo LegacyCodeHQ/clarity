@@ -146,41 +146,11 @@ func (f *dotFormatter) Format(g depgraph.FileDependencyGraph, opts RenderOptions
 				color = "lightyellow"
 			}
 
-			// Build node label with file stats if available
-			nodeLabel := nodeNames[source]
-			if isModule {
-				nodeLabel = moduleNodeLabel(nodeLabel, fileMetadata, "\n")
-			} else if hasFileMetadata && fileMetadata.Stats != nil {
-				stats := *fileMetadata.Stats
-				labelPrefix := nodeLabel
-				if stats.IsNew {
-					labelPrefix = fmt.Sprintf("🪴 %s", labelPrefix)
-				}
-
-				if stats.Additions > 0 || stats.Deletions > 0 {
-					var statsParts []string
-					if stats.Additions > 0 {
-						statsParts = append(statsParts, fmt.Sprintf("+%d", stats.Additions))
-					}
-					if stats.Deletions > 0 {
-						statsParts = append(statsParts, fmt.Sprintf("-%d", stats.Deletions))
-					}
-					if len(statsParts) > 0 {
-						nodeLabel = fmt.Sprintf("%s\n%s", labelPrefix, strings.Join(statsParts, " "))
-					} else {
-						nodeLabel = labelPrefix
-					}
-				} else if stats.IsNew {
-					nodeLabel = labelPrefix
-				}
-			}
+			// Node label content is resolved once in the Scene; join its lines
+			// with DOT's newline.
+			nodeLabel := strings.Join(scene.Nodes[source].LabelLines, "\n")
 			isDeleted := hasFileMetadata && fileMetadata.State == depgraph.FileStateDeleted
 			isRenamed := hasFileMetadata && fileMetadata.State == depgraph.FileStateRenamed
-			if isDeleted {
-				nodeLabel = fmt.Sprintf("%s\n(deleted)", nodeLabel)
-			} else if isRenamed {
-				nodeLabel = fmt.Sprintf("%s\n(renamed)", nodeLabel)
-			}
 
 			prodIsContext := hasFileMetadata &&
 				fileMetadata.Phantom != nil &&
