@@ -213,11 +213,15 @@ func (f *dotFormatter) Format(g depgraph.FileDependencyGraph, opts RenderOptions
 			edgeMD := g.Meta.Edges[depgraph.FileEdge{From: source, To: dep}]
 
 			var edgeAttrs []string
-			if edgeMD.State == depgraph.EdgeStateDeleted {
+			// Exhaustive over EdgeState: a new state is a build error here until
+			// it is given a style, keeping DOT and Mermaid edge styling in step.
+			switch edgeMD.State {
+			case depgraph.EdgeStateDeleted:
 				edgeAttrs = append(edgeAttrs, "color=\"#cc3333\"", "style=dashed", "fontcolor=\"#7a0000\"")
-			}
-			if edgeMD.State == depgraph.EdgeStateRenamed {
+			case depgraph.EdgeStateRenamed:
 				edgeAttrs = append(edgeAttrs, "color=\"#cc8800\"", "style=dashed")
+			case depgraph.EdgeStatePresent:
+				// no edge-state styling
 			}
 			if edgeMD.InCycle {
 				edgeAttrs = append(edgeAttrs, "color=red", "style=dashed")

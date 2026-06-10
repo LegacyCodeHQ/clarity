@@ -177,11 +177,12 @@ func (f mermaidFormatter) Format(g depgraph.FileDependencyGraph, opts RenderOpti
 				// labels it had without the module.
 				for _, label := range edgeLabels(g, source, dep, opts.BasePath) {
 					edgesSB.WriteString(fmt.Sprintf("    %s -->|%s| %s\n", sourceID, label, depID))
-					if edgeMD.State == depgraph.EdgeStateDeleted {
+					switch edgeMD.State {
+					case depgraph.EdgeStateDeleted:
 						deletedEdgeIndices = append(deletedEdgeIndices, edgeIndex)
-					}
-					if edgeMD.State == depgraph.EdgeStateRenamed {
+					case depgraph.EdgeStateRenamed:
 						renamedEdgeIndices = append(renamedEdgeIndices, edgeIndex)
+					case depgraph.EdgeStatePresent:
 					}
 					if edgeMD.InCycle {
 						cycleEdgeIndices = append(cycleEdgeIndices, edgeIndex)
@@ -192,11 +193,12 @@ func (f mermaidFormatter) Format(g depgraph.FileDependencyGraph, opts RenderOpti
 			}
 
 			edgesSB.WriteString(fmt.Sprintf("    %s --> %s\n", sourceID, depID))
-			if edgeMD.State == depgraph.EdgeStateDeleted {
+			switch edgeMD.State {
+			case depgraph.EdgeStateDeleted:
 				deletedEdgeIndices = append(deletedEdgeIndices, edgeIndex)
-			}
-			if edgeMD.State == depgraph.EdgeStateRenamed {
+			case depgraph.EdgeStateRenamed:
 				renamedEdgeIndices = append(renamedEdgeIndices, edgeIndex)
+			case depgraph.EdgeStatePresent:
 			}
 			if edgeMD.InCycle {
 				cycleEdgeIndices = append(cycleEdgeIndices, edgeIndex)
