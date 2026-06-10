@@ -60,7 +60,7 @@ func (r PathResolver) Resolve(path RawPath) (AbsolutePath, error) {
 				return "", fmt.Errorf("path must be within repository: %q", pathStr)
 			}
 		}
-		return AbsolutePath(absPath), nil
+		return AbsolutePath(resolveSymlinks(absPath)), nil
 	}
 
 	absPath := filepath.Clean(filepath.Join(r.baseDir.String(), pathStr))
@@ -73,7 +73,7 @@ func (r PathResolver) Resolve(path RawPath) (AbsolutePath, error) {
 			return "", fmt.Errorf("path must be within repository: %q", pathStr)
 		}
 	}
-	return AbsolutePath(absPath), nil
+	return AbsolutePath(resolveSymlinks(absPath)), nil
 }
 
 func isWithinBase(baseDir, targetPath string) (bool, error) {
