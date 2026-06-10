@@ -27,7 +27,6 @@ func (f *dotFormatter) Format(g depgraph.FileDependencyGraph, opts RenderOptions
 	r := &dotRenderer{sb: &sb, explicit: scene.Header.TrailingNewline}
 	r.Begin(scene.Header)
 
-	cycleNodes := scene.CycleNodes
 	if len(g.Meta.Cycles) > 0 {
 		sb.WriteString("  // Cyclic paths:\n")
 		for i, cycle := range g.Meta.Cycles {
@@ -45,7 +44,6 @@ func (f *dotFormatter) Format(g depgraph.FileDependencyGraph, opts RenderOptions
 	}
 
 	filePaths := scene.FilePaths
-	nodeNames := scene.NodeNames
 
 	extensionColors := f.assignExtensionColors(filePaths)
 
@@ -72,44 +70,34 @@ func (f *dotFormatter) Format(g depgraph.FileDependencyGraph, opts RenderOptions
 	}
 	var clusterDecls, outerDecls strings.Builder
 
-	// First, define node styles based on file extensions
+	// Define a node line per graph node, reading the node's domain facts.
 	for _, source := range filePaths {
+		node := scene.Nodes[source]
 		sourceNodeKey := nodeKey(source, opts.BasePath)
 
 		if !styledNodes[sourceNodeKey] {
+			// Fill colour by the file's nature: test files green, the majority
+			// type neutral, minority types coloured, modules a fixed fill.
 			var color string
-
-			fileMetadata, hasFileMetadata := g.Meta.Files[source]
-
-			// Priority 1: Test files are always light green
-			if hasFileMetadata && fileMetadata.IsTest {
+			switch {
+			case node.IsTest:
 				color = "lightgreen"
-			} else if scene.FileType[source] == scene.MajorityType {
-				// Priority 2: Files with majority extension count are always white
+			case node.Type == scene.MajorityType:
 				color = "white"
-			} else if scene.HasMultipleTypes {
-				// Priority 3: Color based on extension (only if multiple extensions exist)
-				color = getColorForExtension(scene.FileType[source])
-			} else {
-				// Priority 4: Single extension - use white (no need to differentiate)
+			case scene.HasMultipleTypes:
+				color = getColorForExtension(node.Type)
+			default:
 				color = "white"
 			}
-
-			// Module nodes are synthetic (a collapsed set of files), so give
-			// them a fixed fill rather than an extension-derived one.
-			isModule := hasFileMetadata && fileMetadata.IsModule
-			if isModule {
+			if node.IsModule {
 				color = "lightyellow"
 			}
 
-			// Node label content is resolved once in the Scene; join its lines
-			// with DOT's newline.
-			nodeLabel := strings.Join(scene.Nodes[source].LabelLines, "\n")
+			nodeLabel := strings.Join(node.LabelLines, "\n")
 
-			prodIsContext := hasFileMetadata &&
-				fileMetadata.Phantom != nil &&
-				fileMetadata.Phantom.Stats != nil &&
-				!fileMetadata.Phantom.ProdChanged
+			prodIsContext := node.Phantom != nil &&
+				node.Phantom.Stats != nil &&
+				!node.Phantom.ProdChanged
 
 			target := &outerDecls
 			if memberNodeKeys[sourceNodeKey] {
@@ -119,26 +107,26 @@ func (f *dotFormatter) Format(g depgraph.FileDependencyGraph, opts RenderOptions
 			// Exhaustive over FileState: deleted/renamed are state-driven; present
 			// nodes fall through to role styling. A new state is a build error
 			// until handled, matching the Mermaid formatter.
-			switch fileMetadata.State {
+			switch node.State {
 			case depgraph.FileStateDeleted:
 				target.WriteString(fmt.Sprintf("  %q [label=%q, style=\"filled,dashed\", fillcolor=\"#ffe6e6\", color=\"#cc3333\", fontcolor=\"#7a0000\"];\n", sourceNodeKey, nodeLabel))
 			case depgraph.FileStateRenamed:
 				target.WriteString(fmt.Sprintf("  %q [label=%q, style=\"filled,dashed\", fillcolor=\"#fff3e0\", color=\"#cc8800\", fontcolor=\"#7a4d00\"];\n", sourceNodeKey, nodeLabel))
 			case depgraph.FileStatePresent:
 				switch {
-				case isModule:
+				case node.IsModule:
 					// A module renders as a single component-shaped node; keep the
-					// red cycle border when the collapsed node participates in one.
+					// red cycle border when it participates in one.
 					moduleBorder := ""
-					if cycleNodes[source] {
+					if node.InCycle {
 						moduleBorder = ", color=red"
 					}
 					target.WriteString(fmt.Sprintf("  %q [label=%q, shape=component, style=filled, fillcolor=%s%s];\n", sourceNodeKey, nodeLabel, color, moduleBorder))
-				case hasFileMetadata && fileMetadata.IsPruned && cycleNodes[source]:
+				case node.IsPruned && node.InCycle:
 					target.WriteString(fmt.Sprintf("  %q [label=%q, style=\"filled,dashed\", fillcolor=%s, color=red];\n", sourceNodeKey, nodeLabel, color))
-				case hasFileMetadata && fileMetadata.IsPruned:
+				case node.IsPruned:
 					target.WriteString(fmt.Sprintf("  %q [label=%q, style=\"filled,dashed\", fillcolor=%s, color=gray];\n", sourceNodeKey, nodeLabel, color))
-				case cycleNodes[source]:
+				case node.InCycle:
 					target.WriteString(fmt.Sprintf("  %q [label=%q, style=filled, fillcolor=%s, color=red];\n", sourceNodeKey, nodeLabel, color))
 				case prodIsContext:
 					target.WriteString(fmt.Sprintf("  %q [label=%q, style=\"filled,dashed\", fillcolor=%s];\n", sourceNodeKey, nodeLabel, color))
@@ -162,15 +150,15 @@ func (f *dotFormatter) Format(g depgraph.FileDependencyGraph, opts RenderOptions
 	sb.WriteString(outerDecls.String())
 
 	for _, source := range filePaths {
-		meta, ok := g.Meta.Files[source]
-		if !ok || meta.Phantom == nil {
+		node := scene.Nodes[source]
+		if node.Phantom == nil {
 			continue
 		}
 		sourceKey := nodeKey(source, opts.BasePath)
 		phantomKey := sourceKey + "::tests"
-		phantomLabel := nodeNames[source]
-		if meta.Phantom.Stats != nil {
-			stats := *meta.Phantom.Stats
+		phantomLabel := node.Name
+		if node.Phantom.Stats != nil {
+			stats := *node.Phantom.Stats
 			if stats.IsNew {
 				phantomLabel = fmt.Sprintf("🪴 %s", phantomLabel)
 			}

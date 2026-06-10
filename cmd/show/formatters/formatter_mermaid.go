@@ -77,12 +77,11 @@ func (f mermaidFormatter) Format(g depgraph.FileDependencyGraph, opts RenderOpti
 		nodeID := nodeIDs[sourceNodeKey]
 
 		if !definedNodes[sourceNodeKey] {
-			fileMetadata, hasFileMetadata := g.Meta.Files[source]
-			isModule := hasFileMetadata && fileMetadata.IsModule
+			node := scene.Nodes[source]
 
 			// Node label content is resolved once in the Scene; join its lines
 			// with Mermaid's break and escape quotes.
-			nodeLabel := strings.ReplaceAll(strings.Join(scene.Nodes[source].LabelLines, "<br/>"), "\"", "#quot;")
+			nodeLabel := strings.ReplaceAll(strings.Join(node.LabelLines, "<br/>"), "\"", "#quot;")
 
 			// Module nodes use the subroutine shape ([[ ]]) to read as a
 			// collapsed container, distinct from plain file nodes.
@@ -90,7 +89,7 @@ func (f mermaidFormatter) Format(g depgraph.FileDependencyGraph, opts RenderOpti
 			if memberSources[source] {
 				target = &clusterDefs
 			}
-			if isModule {
+			if node.IsModule {
 				target.WriteString(fmt.Sprintf("    %s[[\"%s\"]]\n", nodeID, nodeLabel))
 			} else {
 				target.WriteString(fmt.Sprintf("    %s[\"%s\"]\n", nodeID, nodeLabel))
@@ -115,17 +114,17 @@ func (f mermaidFormatter) Format(g depgraph.FileDependencyGraph, opts RenderOpti
 	var phantomNodes []string
 	var prodContextNodes []string
 	for _, source := range filePaths {
-		meta, ok := g.Meta.Files[source]
-		if !ok || meta.Phantom == nil {
+		node := scene.Nodes[source]
+		if node.Phantom == nil {
 			continue
 		}
-		prodID := nodeIDs[nodeNames[source]]
+		prodID := nodeIDs[node.Name]
 		phantomID := prodID + "p"
 		phantomIDs[source] = phantomID
 
-		phantomLabel := nodeNames[source]
-		if meta.Phantom.Stats != nil {
-			stats := *meta.Phantom.Stats
+		phantomLabel := node.Name
+		if node.Phantom.Stats != nil {
+			stats := *node.Phantom.Stats
 			if stats.IsNew {
 				phantomLabel = fmt.Sprintf("🪴 %s", phantomLabel)
 			}
@@ -144,7 +143,7 @@ func (f mermaidFormatter) Format(g depgraph.FileDependencyGraph, opts RenderOpti
 		sb.WriteString(fmt.Sprintf("    %s[\"%s\"]\n", phantomID, phantomLabel))
 		phantomNodes = append(phantomNodes, phantomID)
 
-		if meta.Phantom.Stats != nil && !meta.Phantom.ProdChanged {
+		if node.Phantom.Stats != nil && !node.Phantom.ProdChanged {
 			prodContextNodes = append(prodContextNodes, prodID)
 		}
 	}
@@ -229,28 +228,25 @@ func (f mermaidFormatter) Format(g depgraph.FileDependencyGraph, opts RenderOpti
 	var renamedNodes []string
 
 	for _, source := range filePaths {
-		sourceNodeKey := nodeNames[source]
-		nodeID := nodeIDs[sourceNodeKey]
+		node := scene.Nodes[source]
+		nodeID := nodeIDs[node.Name]
 
-		fileMetadata, hasFileMetadata := g.Meta.Files[source]
 		// Exhaustive over FileState so a new state must be handled here too.
-		if hasFileMetadata {
-			switch fileMetadata.State {
-			case depgraph.FileStateDeleted:
-				deletedNodes = append(deletedNodes, nodeID)
-			case depgraph.FileStateRenamed:
-				renamedNodes = append(renamedNodes, nodeID)
-			case depgraph.FileStatePresent:
-			}
+		switch node.State {
+		case depgraph.FileStateDeleted:
+			deletedNodes = append(deletedNodes, nodeID)
+		case depgraph.FileStateRenamed:
+			renamedNodes = append(renamedNodes, nodeID)
+		case depgraph.FileStatePresent:
 		}
-		if hasFileMetadata && fileMetadata.IsPruned {
+		if node.IsPruned {
 			prunedNodes = append(prunedNodes, nodeID)
 		}
-		if hasFileMetadata && fileMetadata.IsModule {
+		if node.IsModule {
 			moduleNodes = append(moduleNodes, nodeID)
-		} else if hasFileMetadata && fileMetadata.IsTest {
+		} else if node.IsTest {
 			testNodes = append(testNodes, nodeID)
-		} else if scene.HasMultipleTypes && scene.FileType[source] == scene.MajorityType {
+		} else if scene.HasMultipleTypes && node.Type == scene.MajorityType {
 			majorityExtensionNodes = append(majorityExtensionNodes, nodeID)
 		}
 	}
@@ -290,11 +286,11 @@ func (f mermaidFormatter) Format(g depgraph.FileDependencyGraph, opts RenderOpti
 		stylesSB.WriteString(fmt.Sprintf("    class %s prunedFile\n", strings.Join(prunedNodes, ",")))
 	}
 	for _, source := range filePaths {
-		if !cycleNodes[source] {
+		node := scene.Nodes[source]
+		if !node.InCycle {
 			continue
 		}
-		sourceNodeKey := nodeNames[source]
-		stylesSB.WriteString(fmt.Sprintf("    style %s stroke:#d62728,stroke-width:3px\n", nodeIDs[sourceNodeKey]))
+		stylesSB.WriteString(fmt.Sprintf("    style %s stroke:#d62728,stroke-width:3px\n", nodeIDs[node.Name]))
 	}
 	for _, idx := range cycleEdgeIndices {
 		stylesSB.WriteString(fmt.Sprintf("    linkStyle %d stroke:#d62728,stroke-width:3px,stroke-dasharray: 5 5\n", idx))

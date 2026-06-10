@@ -49,14 +49,31 @@ type SceneCluster struct {
 	Members []string
 }
 
-// SceneNode is a graph node resolved for rendering. LabelLines is the node's
-// label content as ordered visual rows with no separator, so each formatter
-// joins them with its own line break (DOT "\n", Mermaid "<br/>") and applies its
-// own escaping. Deriving the lines here is what keeps the two label outputs in
-// step — including the trailing "(deleted)"/"(renamed)" markers.
+// SceneNode is the domain view of a graph node for the formatters: a file with
+// its type, lifecycle, role, and cycle membership. Formatters render from these
+// fields and do not reach back into the dependency graph.
+//
+// LabelLines is the node's label as ordered rows with no separator, so each
+// formatter joins them with its own line break (DOT "\n", Mermaid "<br/>") and
+// applies its own escaping — keeping the two label outputs in step.
 type SceneNode struct {
 	Key        string
+	Name       string
 	LabelLines []string
+	// Type is the file type: its extension, or its base name when extensionless.
+	Type string
+	// State is the node's lifecycle: present, deleted, or renamed.
+	State depgraph.FileState
+	// IsTest marks a test file.
+	IsTest bool
+	// IsModule marks a collapsed module node.
+	IsModule bool
+	// IsPruned marks a node whose subtree was elided.
+	IsPruned bool
+	// InCycle marks a node that participates in a dependency cycle.
+	InCycle bool
+	// Phantom describes the node's test-sibling, or nil when it has none.
+	Phantom *depgraph.PhantomMetadata
 }
 
 // GraphHeader carries the graph-level render attributes.
@@ -86,11 +103,31 @@ func BuildScene(g depgraph.FileDependencyGraph, opts RenderOptions) Scene {
 	sort.Strings(filePaths)
 
 	nodeNames := BuildNodeNames(filePaths)
+
+	fileType := make(map[string]string, len(filePaths))
+	typeCounts := make(map[string]int)
+	for _, source := range filePaths {
+		key := fileTypeKey(source)
+		fileType[source] = key
+		typeCounts[key]++
+	}
+
+	cycleNodes := buildCycleNodes(g)
+
 	nodes := make(map[string]SceneNode, len(filePaths))
 	for _, source := range filePaths {
+		md := g.Meta.Files[source]
 		nodes[source] = SceneNode{
 			Key:        source,
+			Name:       nodeNames[source],
 			LabelLines: nodeLabelLines(g, nodeNames[source], source),
+			Type:       fileType[source],
+			State:      md.State,
+			IsTest:     md.IsTest,
+			IsModule:   md.IsModule,
+			IsPruned:   md.IsPruned,
+			InCycle:    cycleNodes[source],
+			Phantom:    md.Phantom,
 		}
 	}
 
@@ -102,14 +139,6 @@ func BuildScene(g depgraph.FileDependencyGraph, opts RenderOptions) Scene {
 		}
 	}
 
-	fileType := make(map[string]string, len(filePaths))
-	typeCounts := make(map[string]int)
-	for _, source := range filePaths {
-		key := fileTypeKey(source)
-		fileType[source] = key
-		typeCounts[key]++
-	}
-
 	return Scene{
 		Header: GraphHeader{
 			Orientation:     orientation,
@@ -118,7 +147,7 @@ func BuildScene(g depgraph.FileDependencyGraph, opts RenderOptions) Scene {
 		},
 		FilePaths:        filePaths,
 		NodeNames:        nodeNames,
-		CycleNodes:       buildCycleNodes(g),
+		CycleNodes:       cycleNodes,
 		Nodes:            nodes,
 		Cluster:          cluster,
 		FileType:         fileType,
