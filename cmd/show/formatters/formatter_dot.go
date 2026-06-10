@@ -199,7 +199,10 @@ func (f *dotFormatter) Format(g depgraph.FileDependencyGraph, opts RenderOptions
 			// no edge-state styling
 		}
 		if edge.InCycle {
-			edgeAttrs = append(edgeAttrs, "color=red", "style=dashed")
+			// Cycle edges are always solid and heavier so they read as present
+			// and emphatic. Appended after the state switch so a deleted/renamed
+			// cycle edge still renders solid red (later attributes win).
+			edgeAttrs = append(edgeAttrs, "color=red", "penwidth=2.0", "style=solid")
 		}
 
 		if opts.EdgeLabels {

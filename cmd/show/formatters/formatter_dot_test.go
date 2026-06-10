@@ -334,13 +334,8 @@ func TestDependencyGraph_ToDOT_HighlightsAllCycleEdgesInSCC(t *testing.T) {
 	output, err := formatter.Format(graph, RenderOptions{})
 	require.NoError(t, err)
 
-	require.Contains(t, output, "\"/project/a.go\" [label=\"a.go\", style=filled, fillcolor=white, color=red];")
-	require.Contains(t, output, "\"/project/b.go\" [label=\"b.go\", style=filled, fillcolor=white, color=red];")
-	require.Contains(t, output, "\"/project/c.go\" [label=\"c.go\", style=filled, fillcolor=white, color=red];")
-	require.Contains(t, output, "\"/project/a.go\" -> \"/project/b.go\" [color=red, style=dashed];")
-	require.Contains(t, output, "\"/project/a.go\" -> \"/project/c.go\" [color=red, style=dashed];")
-	require.Contains(t, output, "\"/project/b.go\" -> \"/project/a.go\" [color=red, style=dashed];")
-	require.Contains(t, output, "\"/project/c.go\" -> \"/project/a.go\" [color=red, style=dashed];")
+	g := testhelpers.DotGoldie(t)
+	g.Assert(t, t.Name(), []byte(output))
 }
 
 func TestDependencyGraph_ToDOT_PrunedNodesHaveDashedBorder(t *testing.T) {

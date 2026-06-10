@@ -3,14 +3,14 @@ digraph dependencies {
   node [shape=box];
 
   // Cyclic paths:
-  // C1: a.go -> b.go -> c.go -> a.go
+  // C1: a.go -> b.go -> a.go
 
   "/project/a.go" [label="a.go", style=filled, fillcolor=white, color=red];
   "/project/b.go" [label="b.go", style=filled, fillcolor=white, color=red];
   "/project/c.go" [label="c.go", style=filled, fillcolor=white, color=red];
-  "/project/d.go" [label="d.go", style=filled, fillcolor=white];
 
   "/project/a.go" -> "/project/b.go" [color=red, penwidth=2.0, style=solid];
-  "/project/b.go" -> "/project/c.go" [color=red, penwidth=2.0, style=solid];
+  "/project/a.go" -> "/project/c.go" [color=red, penwidth=2.0, style=solid];
+  "/project/b.go" -> "/project/a.go" [color=red, penwidth=2.0, style=solid];
   "/project/c.go" -> "/project/a.go" [color=red, penwidth=2.0, style=solid];
 }

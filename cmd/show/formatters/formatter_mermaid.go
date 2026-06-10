@@ -280,14 +280,17 @@ func (f mermaidFormatter) Format(g depgraph.FileDependencyGraph, opts RenderOpti
 		}
 		stylesSB.WriteString(fmt.Sprintf("    style %s stroke:#d62728,stroke-width:3px\n", nodeIDs[node.Name]))
 	}
-	for _, idx := range cycleEdgeIndices {
-		stylesSB.WriteString(fmt.Sprintf("    linkStyle %d stroke:#d62728,stroke-width:3px,stroke-dasharray: 5 5\n", idx))
-	}
 	for _, idx := range deletedEdgeIndices {
 		stylesSB.WriteString(fmt.Sprintf("    linkStyle %d stroke:#CC3333,stroke-width:2px,stroke-dasharray: 5 5\n", idx))
 	}
 	for _, idx := range renamedEdgeIndices {
 		stylesSB.WriteString(fmt.Sprintf("    linkStyle %d stroke:#CC8800,stroke-width:2px,stroke-dasharray: 5 5\n", idx))
+	}
+	// Cycle edges are always solid and heavier so they read as present and
+	// emphatic. Emitted last so the last linkStyle for an index wins: a cycle
+	// edge that is also deleted/renamed still renders solid red.
+	for _, idx := range cycleEdgeIndices {
+		stylesSB.WriteString(fmt.Sprintf("    linkStyle %d stroke:#d62728,stroke-width:3px\n", idx))
 	}
 	if len(phantomNodes) > 0 {
 		stylesSB.WriteString("    classDef phantomTest fill:#90EE90,stroke:#228B22,stroke-dasharray: 1 4,color:#000000\n")

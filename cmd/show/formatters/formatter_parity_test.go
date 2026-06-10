@@ -131,3 +131,33 @@ func TestFormatterParity_EdgeStates(t *testing.T) {
 	require.Contains(t, mermaid, "stroke:#CC3333", "Mermaid missing deleted-edge styling")
 	require.Contains(t, mermaid, "stroke:#CC8800", "Mermaid missing renamed-edge styling")
 }
+
+// TestFormatterParity_CycleEdgeStaysSolidWhenDeleted asserts that a cycle edge
+// renders solid red even when its file is deleted: the cycle styling always wins
+// the line style, so "this is a cycle" reads the same whether or not the edge is
+// also being removed.
+func TestFormatterParity_CycleEdgeStaysSolidWhenDeleted(t *testing.T) {
+	// a <-> b is a 2-cycle, so both edges are InCycle; mark a->b deleted too.
+	g := parityFileGraph(t, map[string][]string{
+		"/p/a.dart": {"/p/b.dart"},
+		"/p/b.dart": {"/p/a.dart"},
+	})
+	edge := depgraph.FileEdge{From: "/p/a.dart", To: "/p/b.dart"}
+	em := g.Meta.Edges[edge]
+	em.State = depgraph.EdgeStateDeleted
+	g.Meta.Edges[edge] = em
+
+	dot, mermaid := renderBoth(t, g)
+
+	// DOT: cycle wins both color and line style (later attributes override).
+	require.Contains(t, dot, `"/p/a.dart" -> "/p/b.dart" [color="#cc3333", style=dashed, fontcolor="#7a0000", color=red, penwidth=2.0, style=solid];`,
+		"DOT deleted cycle edge should render solid red")
+	require.Contains(t, dot, `"/p/b.dart" -> "/p/a.dart" [color=red, penwidth=2.0, style=solid];`,
+		"DOT plain cycle edge should be solid red")
+
+	// Mermaid: cycle edges are solid red; the deleted one is not dashed red.
+	require.Contains(t, mermaid, "stroke:#d62728,stroke-width:3px\n",
+		"Mermaid cycle edge should be solid")
+	require.NotContains(t, mermaid, "stroke:#d62728,stroke-width:3px,stroke-dasharray: 5 5",
+		"Mermaid cycle edge should not be dashed even when deleted")
+}
