@@ -24,7 +24,7 @@ type graphOptions struct {
 	repoPath     string
 	commitID     string
 	generateURL  bool
-	direction    string
+	orientation  string
 	allowOutside bool
 	includeExt   string
 	includeExts  []string
@@ -58,7 +58,7 @@ var Cmd = NewCommand()
 func NewCommand() *cobra.Command {
 	opts := &graphOptions{
 		outputFormat: formatters.OutputFormatDOT.String(),
-		direction:    formatters.DefaultDirection.StringLower(),
+		orientation:  formatters.DefaultDirection.StringLower(),
 		depthLevel:   1,
 		scope:        scopeDownstream,
 	}
@@ -88,11 +88,11 @@ func NewCommand() *cobra.Command {
 	// Add URL flag
 	cmd.Flags().BoolVarP(&opts.generateURL, "url", "u", false, "Generate visualization URL (supported formats: dot, mermaid)")
 	cmd.Flags().StringVarP(
-		&opts.direction,
-		"direction",
-		"d",
-		opts.direction,
-		fmt.Sprintf("Graph direction (%s)", formatters.SupportedDirections()))
+		&opts.orientation,
+		"orientation",
+		"o",
+		opts.orientation,
+		fmt.Sprintf("Graph layout orientation (%s)", formatters.SupportedDirections()))
 	// Add input flag for explicit files/directories
 	cmd.Flags().StringSliceVarP(&opts.includes, "input", "i", nil, "Build graph from specific files and/or directories (comma-separated)")
 	// Add exclude flag for removing explicit files/directories from graph inputs
@@ -298,10 +298,10 @@ func runGraph(cmd *cobra.Command, opts *graphOptions) error {
 		return err
 	}
 
-	direction, _ := formatters.ParseDirection(opts.direction)
+	orientation, _ := formatters.ParseDirection(opts.orientation)
 	renderOpts := formatters.RenderOptions{
 		Label:      label,
-		Direction:  direction,
+		Direction:  orientation,
 		BasePath:   renderBasePath,
 		EdgeLabels: opts.edgeLabels,
 	}
@@ -392,11 +392,11 @@ func commonPathPrefix(paths []string) string {
 }
 
 func validateGraphOptions(opts *graphOptions) error {
-	direction, ok := formatters.ParseDirection(opts.direction)
+	orientation, ok := formatters.ParseDirection(opts.orientation)
 	if !ok {
-		return fmt.Errorf("unknown direction: %s (valid options: %s)", opts.direction, formatters.SupportedDirections())
+		return fmt.Errorf("unknown orientation: %s (valid options: %s)", opts.orientation, formatters.SupportedDirections())
 	}
-	opts.direction = direction.StringLower()
+	opts.orientation = orientation.StringLower()
 
 	if opts.includeExt != "" {
 		includeExts, err := normalizeExtensions("--include-ext", opts.includeExt)
