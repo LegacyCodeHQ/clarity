@@ -13,7 +13,6 @@ import (
 	"github.com/LegacyCodeHQ/clarity/cmd/show/formatters"
 	"github.com/LegacyCodeHQ/clarity/depgraph"
 	"github.com/LegacyCodeHQ/clarity/depgraph/registry"
-	"github.com/LegacyCodeHQ/clarity/internal/mcplogdlog"
 	"github.com/LegacyCodeHQ/clarity/vcs"
 	"github.com/LegacyCodeHQ/clarity/vcs/git"
 
@@ -119,15 +118,7 @@ func NewCommand() *cobra.Command {
 }
 
 func runGraph(cmd *cobra.Command, opts *graphOptions) error {
-	mcplogdlog.Info("show: build graph", map[string]any{
-		"repo":      opts.repoPath,
-		"input":     opts.includes,
-		"exclude":   opts.excludes,
-		"commit":    opts.commitID,
-		"direction": opts.direction,
-	})
 	if err := validateGraphOptions(opts); err != nil {
-		mcplogdlog.Error("show: invalid options", map[string]any{"error": err.Error()})
 		return err
 	}
 
@@ -195,7 +186,6 @@ func runGraph(cmd *cobra.Command, opts *graphOptions) error {
 
 	graph, err := depgraph.BuildDependencyGraph(filePaths, contentReader)
 	if err != nil {
-		mcplogdlog.Error("show: build dependency graph failed", map[string]any{"error": err.Error()})
 		return fmt.Errorf("failed to build dependency graph: %w", err)
 	}
 

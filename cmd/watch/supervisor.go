@@ -13,7 +13,6 @@ import (
 
 	"github.com/LegacyCodeHQ/clarity/cmd/show/formatters"
 	"github.com/LegacyCodeHQ/clarity/cmd/watch/protocol"
-	"github.com/LegacyCodeHQ/clarity/internal/mcplogdlog"
 	"github.com/LegacyCodeHQ/clarity/vcs/git"
 	"github.com/fsnotify/fsnotify"
 )
@@ -143,17 +142,14 @@ func runSupervisor(ctx context.Context, cwd string, opts *watchOptions, b *broke
 	// watchers so a `git worktree add` racing with startup is never missed.
 	var metaDone <-chan struct{}
 	if mode == modePrimary {
-		commonDir, err := git.GetCommonDir(cwd)
-		if err != nil {
-			mcplogdlog.Error("watch: common-dir resolution failed", map[string]any{"error": err.Error()})
-		} else {
+		// Meta-watching is best-effort; if the common dir can't be resolved or the
+		// watcher fails, fall back to running without it.
+		if commonDir, err := git.GetCommonDir(cwd); err == nil {
 			sup.commonDir = commonDir
 			ready := make(chan struct{})
 			done := make(chan struct{})
 			go func() {
-				if err := sup.runMetaWatcher(ctx, ready); err != nil {
-					mcplogdlog.Error("watch: meta-watcher failed", map[string]any{"error": err.Error()})
-				}
+				_ = sup.runMetaWatcher(ctx, ready)
 				close(done)
 			}()
 			<-ready
