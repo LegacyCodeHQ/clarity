@@ -84,17 +84,16 @@ func (f *dotFormatter) Format(g depgraph.FileDependencyGraph, opts RenderOptions
 
 			fileMetadata, hasFileMetadata := g.Meta.Files[source]
 
-			// Priority 1: Test files are always light green
-			if hasFileMetadata && fileMetadata.IsTest {
+			// Fill is resolved in the Scene; map it to a DOT color. Exhaustive so
+			// a new fill must be colored here.
+			switch scene.Nodes[source].Fill {
+			case NodeFillTest:
 				color = "lightgreen"
-			} else if scene.FileType[source] == scene.MajorityType {
-				// Priority 2: Files with majority extension count are always white
+			case NodeFillMajority:
 				color = "white"
-			} else if scene.HasMultipleTypes {
-				// Priority 3: Color based on extension (only if multiple extensions exist)
+			case NodeFillTypeColored:
 				color = getColorForExtension(scene.FileType[source])
-			} else {
-				// Priority 4: Single extension - use white (no need to differentiate)
+			case NodeFillNeutral:
 				color = "white"
 			}
 
