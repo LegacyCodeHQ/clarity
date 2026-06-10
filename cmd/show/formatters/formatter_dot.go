@@ -27,7 +27,7 @@ func (f *dotFormatter) Format(g depgraph.FileDependencyGraph, opts RenderOptions
 	r := &dotRenderer{sb: &sb, explicit: scene.Header.TrailingNewline}
 	r.Begin(scene.Header)
 
-	cycleNodes := make(map[string]bool)
+	cycleNodes := scene.CycleNodes
 	if len(g.Meta.Cycles) > 0 {
 		sb.WriteString("  // Cyclic paths:\n")
 		for i, cycle := range g.Meta.Cycles {
@@ -37,29 +37,15 @@ func (f *dotFormatter) Format(g depgraph.FileDependencyGraph, opts RenderOptions
 			var cycleParts []string
 			for _, node := range cycle.Path {
 				cycleParts = append(cycleParts, filepath.Base(node))
-				cycleNodes[node] = true
 			}
 			cycleParts = append(cycleParts, filepath.Base(cycle.Path[0]))
 			sb.WriteString(fmt.Sprintf("  // C%d: %s\n", i+1, strings.Join(cycleParts, " -> ")))
 		}
 		sb.WriteString("\n")
 	}
-	for edge, md := range g.Meta.Edges {
-		if !md.InCycle {
-			continue
-		}
-		cycleNodes[edge.From] = true
-		cycleNodes[edge.To] = true
-	}
 
-	// Collect all file paths from the graph to determine extension colors
-	// Sort for deterministic output
-	filePaths := make([]string, 0, len(adjacency))
-	for source := range adjacency {
-		filePaths = append(filePaths, source)
-	}
-	sort.Strings(filePaths)
-	nodeNames := BuildNodeNames(filePaths)
+	filePaths := scene.FilePaths
+	nodeNames := scene.NodeNames
 
 	extensionColors := f.assignExtensionColors(filePaths)
 

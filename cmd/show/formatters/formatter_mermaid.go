@@ -26,7 +26,7 @@ func (f mermaidFormatter) Format(g depgraph.FileDependencyGraph, opts RenderOpti
 	r := &mermaidRenderer{sb: &sb, explicit: scene.Header.TrailingNewline}
 	r.Begin(scene.Header)
 
-	cycleNodes := make(map[string]bool)
+	cycleNodes := scene.CycleNodes
 	if len(g.Meta.Cycles) > 0 {
 		for i, cycle := range g.Meta.Cycles {
 			if len(cycle.Path) == 0 {
@@ -36,27 +36,14 @@ func (f mermaidFormatter) Format(g depgraph.FileDependencyGraph, opts RenderOpti
 			var cycleParts []string
 			for _, node := range cycle.Path {
 				cycleParts = append(cycleParts, filepath.Base(node))
-				cycleNodes[node] = true
 			}
 			cycleParts = append(cycleParts, filepath.Base(cycle.Path[0]))
 			sb.WriteString(fmt.Sprintf("%%%% C%d: %s\n", i+1, strings.Join(cycleParts, " -> ")))
 		}
 	}
-	for edge, md := range g.Meta.Edges {
-		if !md.InCycle {
-			continue
-		}
-		cycleNodes[edge.From] = true
-		cycleNodes[edge.To] = true
-	}
 
-	// Collect and sort file paths for deterministic output
-	filePaths := make([]string, 0, len(adjacency))
-	for source := range adjacency {
-		filePaths = append(filePaths, source)
-	}
-	sort.Strings(filePaths)
-	nodeNames := BuildNodeNames(filePaths)
+	filePaths := scene.FilePaths
+	nodeNames := scene.NodeNames
 
 	// Create a mapping from node keys to valid Mermaid node IDs.
 	// Mermaid node IDs can't have dots or special characters.
