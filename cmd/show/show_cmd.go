@@ -277,7 +277,7 @@ func runGraph(cmd *cobra.Command, opts *graphOptions) error {
 		return fmt.Errorf("unknown format: %s (valid options: %s)", opts.outputFormat, formatters.SupportedFormats())
 	}
 	fileStats := collectFileStats(cmd, opts, format, fromCommit, toCommit, isCommitRange)
-	label := buildGraphLabel(opts, format, fromCommit, toCommit, isCommitRange, filePaths)
+	label := buildGraphLabel(opts, format, fromCommit, toCommit, isCommitRange, filePaths, len(collapse.Members))
 	fileGraph, err := depgraph.NewFileDependencyGraph(graph, fileStats, contentReader)
 	if err != nil {
 		return fmt.Errorf("failed to build file graph metadata: %w", err)
@@ -1149,7 +1149,7 @@ func collectFileStats(cmd *cobra.Command, opts *graphOptions, format formatters.
 	return fileStats
 }
 
-func buildGraphLabel(opts *graphOptions, format formatters.OutputFormat, fromCommit, toCommit string, isCommitRange bool, filePaths []string) string {
+func buildGraphLabel(opts *graphOptions, format formatters.OutputFormat, fromCommit, toCommit string, isCommitRange bool, filePaths []string, moduleCount int) string {
 	if format != formatters.OutputFormatDOT && format != formatters.OutputFormatMermaid {
 		return ""
 	}
@@ -1185,14 +1185,31 @@ func buildGraphLabel(opts *graphOptions, format formatters.OutputFormat, fromCom
 		}
 	}
 
-	fileCount := len(filePaths)
-	if fileCount == 1 {
-		label += fmt.Sprintf(" • %d file", fileCount)
-	} else {
-		label += fmt.Sprintf(" • %d files", fileCount)
-	}
+	label += " • " + nodeCountLabel(moduleCount, len(filePaths)-moduleCount)
 
 	return label
+}
+
+// nodeCountLabel summarizes the graph's node composition for the title. With
+// --modules the graph is a mix of collapsed module nodes and plain file nodes,
+// so we report each present count rather than mislabeling every node as a
+// "file". Zero-valued terms are dropped; an all-files graph reads "N files".
+func nodeCountLabel(moduleCount, fileCount int) string {
+	var parts []string
+	if moduleCount > 0 {
+		parts = append(parts, pluralize(moduleCount, "module"))
+	}
+	if fileCount > 0 || moduleCount == 0 {
+		parts = append(parts, pluralize(fileCount, "file"))
+	}
+	return strings.Join(parts, ", ")
+}
+
+func pluralize(n int, noun string) string {
+	if n == 1 {
+		return fmt.Sprintf("%d %s", n, noun)
+	}
+	return fmt.Sprintf("%d %ss", n, noun)
 }
 
 func repoLabelName(repoPath string) string {

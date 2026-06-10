@@ -1013,13 +1013,38 @@ func TestBuildGraphLabel_UsesGoModuleNamePrefix(t *testing.T) {
 	gitRun(t, repoDir, "add", ".")
 	gitRun(t, repoDir, "commit", "-m", "add main.go")
 
-	label := buildGraphLabel(&graphOptions{repoPath: repoDir}, formatters.OutputFormatMermaid, "", "", false, []string{filePath})
+	label := buildGraphLabel(&graphOptions{repoPath: repoDir}, formatters.OutputFormatMermaid, "", "", false, []string{filePath}, 0)
 
 	if !strings.HasPrefix(label, "clarity • ") {
 		t.Fatalf("buildGraphLabel() = %q, want prefix %q", label, "clarity • ")
 	}
 	if !strings.Contains(label, " • 1 file") {
 		t.Fatalf("buildGraphLabel() = %q, want file count suffix", label)
+	}
+}
+
+func TestNodeCountLabel(t *testing.T) {
+	tests := []struct {
+		name        string
+		moduleCount int
+		fileCount   int
+		want        string
+	}{
+		{name: "files only", moduleCount: 0, fileCount: 5, want: "5 files"},
+		{name: "single file", moduleCount: 0, fileCount: 1, want: "1 file"},
+		{name: "no nodes", moduleCount: 0, fileCount: 0, want: "0 files"},
+		{name: "mixed", moduleCount: 3, fileCount: 5, want: "3 modules, 5 files"},
+		{name: "mixed singulars", moduleCount: 1, fileCount: 1, want: "1 module, 1 file"},
+		{name: "all collapsed", moduleCount: 4, fileCount: 0, want: "4 modules"},
+		{name: "single module", moduleCount: 1, fileCount: 0, want: "1 module"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := nodeCountLabel(tt.moduleCount, tt.fileCount); got != tt.want {
+				t.Fatalf("nodeCountLabel(%d, %d) = %q, want %q", tt.moduleCount, tt.fileCount, got, tt.want)
+			}
+		})
 	}
 }
 
