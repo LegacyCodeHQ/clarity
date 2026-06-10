@@ -39,6 +39,7 @@ type graphOptions struct {
 	pruneFiles   []string
 	alsoPatterns []string
 	modules      bool
+	moduleSelect string
 	edgeLabels   bool
 	noStats      bool
 	noPhantom    bool
@@ -110,6 +111,7 @@ func NewCommand() *cobra.Command {
 	cmd.Flags().StringSliceVar(&opts.pruneFiles, "prune", nil, "Show node but skip its subtree (requires --file; shown with dashed border)")
 	cmd.Flags().StringSliceVar(&opts.alsoPatterns, "also", nil, "Include files matching glob patterns that connect to --file graph (requires --file)")
 	cmd.Flags().BoolVar(&opts.modules, "modules", false, "Collapse files into the modules declared in .clarity/modules.json (off by default)")
+	cmd.Flags().StringVar(&opts.moduleSelect, "module", "", "Render only the named module and its immediate boundary (implies --modules; quote names with spaces)")
 	cmd.Flags().BoolVar(&opts.edgeLabels, "label", false, "Add deterministic short labels to edges")
 	cmd.Flags().BoolVar(&opts.noStats, "no-stats", false, "Skip file addition/deletion statistics for faster rendering")
 	cmd.Flags().BoolVar(&opts.noPhantom, "no-phantom", false, "Suppress phantom test nodes (Rust files with #[cfg(test)] regions are rendered as a single node)")
@@ -242,7 +244,8 @@ func runGraph(cmd *cobra.Command, opts *graphOptions) error {
 	renderBasePath := resolveRenderBasePath(opts.repoPath, filePaths)
 
 	var collapse depgraph.Collapse
-	modules, err := resolveConfigModules(opts.repoPath, opts.modules)
+	collapseEnabled := opts.modules || opts.moduleSelect != ""
+	modules, err := resolveConfigModules(opts.repoPath, collapseEnabled)
 	if err != nil {
 		return err
 	}
@@ -252,6 +255,12 @@ func runGraph(cmd *cobra.Command, opts *graphOptions) error {
 			return err
 		}
 		filePaths = graphFiles(graph)
+	}
+	if opts.moduleSelect != "" {
+		graph, filePaths, err = applyModuleSelect(opts.moduleSelect, modules, graph)
+		if err != nil {
+			return err
+		}
 	}
 
 	format, ok := formatters.ParseOutputFormat(opts.outputFormat)
@@ -435,6 +444,15 @@ func validateGraphOptions(opts *graphOptions) error {
 
 	if len(opts.alsoPatterns) > 0 && opts.targetFile == "" {
 		return fmt.Errorf("--also requires --file flag")
+	}
+
+	if opts.moduleSelect != "" {
+		if opts.targetFile != "" {
+			return fmt.Errorf("--module cannot be used with --file flag")
+		}
+		if len(opts.betweenFiles) > 0 {
+			return fmt.Errorf("--module cannot be used with --between flag")
+		}
 	}
 
 	return nil
@@ -928,6 +946,76 @@ func applyBetweenFilter(opts *graphOptions, pathResolver PathResolver, graph dep
 	filePaths = graphFiles(graph)
 
 	return graph, filePaths, nil
+}
+
+// applyModuleSelect narrows a collapsed graph to a single module node and its
+// immediate boundary (the nodes that directly import it or that it imports). It
+// is the engine behind `show --module <name>`: the module must be declared in
+// .clarity/modules.json and have at least one member file present in the current
+// scope, otherwise there is no module node to render.
+func applyModuleSelect(name string, modules []depgraph.Module, graph depgraph.DependencyGraph) (depgraph.DependencyGraph, []string, error) {
+	if err := validateModuleDeclared(name, modules); err != nil {
+		return nil, nil, err
+	}
+	if !depgraph.ContainsNode(graph, name) {
+		return nil, nil, fmt.Errorf("module %q has no files in the current scope", name)
+	}
+	filtered, err := filterGraphToModule(graph, name)
+	if err != nil {
+		return nil, nil, err
+	}
+	return filtered, graphFiles(filtered), nil
+}
+
+// validateModuleDeclared confirms name matches a module declared in
+// .clarity/modules.json, returning a helpful error listing the available names
+// otherwise. Names may contain spaces, so they are matched verbatim.
+func validateModuleDeclared(name string, modules []depgraph.Module) error {
+	available := make([]string, 0, len(modules))
+	for _, m := range modules {
+		if m.Name == name {
+			return nil
+		}
+		available = append(available, m.Name)
+	}
+	if len(available) == 0 {
+		return fmt.Errorf("unknown module %q: no modules declared in .clarity/modules.json", name)
+	}
+	sort.Strings(available)
+	return fmt.Errorf("unknown module %q (available: %s)", name, strings.Join(available, ", "))
+}
+
+// filterGraphToModule keeps the module node and the nodes directly connected to
+// it, retaining only the edges incident to the module so the result reads as the
+// module's boundary rather than the full graph.
+func filterGraphToModule(graph depgraph.DependencyGraph, moduleNode string) (depgraph.DependencyGraph, error) {
+	adjacency, err := depgraph.AdjacencyList(graph)
+	if err != nil {
+		return nil, fmt.Errorf("failed to build adjacency list: %w", err)
+	}
+
+	filtered := map[string][]string{moduleNode: nil}
+	// Fan-out: edges from the module to its direct dependencies.
+	for _, dep := range adjacency[moduleNode] {
+		filtered[moduleNode] = append(filtered[moduleNode], dep)
+		if _, ok := filtered[dep]; !ok {
+			filtered[dep] = nil
+		}
+	}
+	// Fan-in: edges from direct dependents into the module.
+	for source, deps := range adjacency {
+		if source == moduleNode {
+			continue
+		}
+		for _, dep := range deps {
+			if dep == moduleNode {
+				filtered[source] = append(filtered[source], moduleNode)
+				break
+			}
+		}
+	}
+
+	return depgraph.NewDependencyGraphFromAdjacency(filtered)
 }
 
 func graphFiles(graph depgraph.DependencyGraph) []string {

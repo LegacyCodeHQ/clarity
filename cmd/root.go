@@ -9,6 +9,7 @@ import (
 	cyclescmd "github.com/LegacyCodeHQ/clarity/cmd/cycles"
 	extensionscmd "github.com/LegacyCodeHQ/clarity/cmd/extensions"
 	"github.com/LegacyCodeHQ/clarity/cmd/languages"
+	modulescmd "github.com/LegacyCodeHQ/clarity/cmd/modules"
 	setupcmd "github.com/LegacyCodeHQ/clarity/cmd/setup"
 	"github.com/LegacyCodeHQ/clarity/cmd/show"
 	watchcmd "github.com/LegacyCodeHQ/clarity/cmd/watch"
@@ -88,6 +89,7 @@ func init() {
 	rootCmd.AddCommand(cyclescmd.Cmd)
 	rootCmd.AddCommand(workspacecmd.Cmd)
 	rootCmd.AddCommand(languages.Cmd)
+	rootCmd.AddCommand(modulescmd.Cmd)
 	rootCmd.AddCommand(extensionscmd.Cmd)
 	rootCmd.AddCommand(setupcmd.Cmd)
 	rootCmd.AddCommand(watchcmd.Cmd)
