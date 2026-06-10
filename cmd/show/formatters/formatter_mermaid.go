@@ -12,6 +12,8 @@ import (
 	"github.com/LegacyCodeHQ/clarity/depgraph"
 )
 
+type mermaidFormatter struct{}
+
 // Format converts the dependency graph to Mermaid.js flowchart format.
 func (f mermaidFormatter) Format(g depgraph.FileDependencyGraph, opts RenderOptions) (string, error) {
 	adjacency, err := depgraph.AdjacencyList(g.Graph)

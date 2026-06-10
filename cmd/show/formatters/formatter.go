@@ -1,17 +1,6 @@
 package formatters
 
-import (
-	"fmt"
-
-	"github.com/LegacyCodeHQ/clarity/depgraph"
-)
-
-type dotFormatter struct {
-	extensionColors   map[string]string
-	nextColorPaletteI int
-}
-
-type mermaidFormatter struct{}
+import "github.com/LegacyCodeHQ/clarity/depgraph"
 
 // Formatter is the interface that all graph formatters must implement.
 type Formatter interface {
@@ -20,25 +9,6 @@ type Formatter interface {
 	// GenerateURL creates a shareable URL for the formatted output.
 	// Returns the URL and true if supported, or ("", false) if not.
 	GenerateURL(output string) (string, bool)
-}
-
-// NewFormatter creates a Formatter for the provided output format string.
-func NewFormatter(format string) (Formatter, error) {
-	f, ok := ParseOutputFormat(format)
-	if !ok {
-		return nil, fmt.Errorf("unknown format: %s (valid options: %s)", format, SupportedFormats())
-	}
-
-	switch f {
-	case OutputFormatDOT:
-		return &dotFormatter{}, nil
-	case OutputFormatMermaid:
-		return mermaidFormatter{}, nil
-	case endOfSupportedFormatsMarker:
-		return nil, fmt.Errorf("unknown format: %s (valid options: %s)", format, SupportedFormats())
-	default:
-		return nil, fmt.Errorf("unknown format: %s (valid options: %s)", format, SupportedFormats())
-	}
 }
 
 // RenderOptions contains output-specific rendering options.

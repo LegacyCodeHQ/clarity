@@ -10,6 +10,11 @@ import (
 	"github.com/LegacyCodeHQ/clarity/depgraph"
 )
 
+type dotFormatter struct {
+	extensionColors   map[string]string
+	nextColorPaletteI int
+}
+
 // Format converts the dependency graph to Graphviz DOT format.
 func (f *dotFormatter) Format(g depgraph.FileDependencyGraph, opts RenderOptions) (string, error) {
 	adjacency, err := depgraph.AdjacencyList(g.Graph)
