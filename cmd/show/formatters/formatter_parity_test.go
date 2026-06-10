@@ -98,7 +98,8 @@ func TestFormatterParity_MajorityTypeKeying(t *testing.T) {
 		"/p/y.go":       {},
 	})
 
-	scene := BuildScene(g, RenderOptions{})
+	scene, err := BuildScene(g, RenderOptions{})
+	require.NoError(t, err)
 
 	require.Equal(t, ".go", scene.MajorityType, "majority should be .go (2 files), not the extensionless bucket")
 	require.Equal(t, "Makefile", scene.FileType["/p/Makefile"], "extensionless files key by base name")

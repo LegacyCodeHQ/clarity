@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"net/url"
 	"path/filepath"
-	"sort"
 	"strings"
 
 	"github.com/LegacyCodeHQ/clarity/depgraph"
@@ -16,12 +15,11 @@ type mermaidFormatter struct{}
 
 // Format converts the dependency graph to Mermaid.js flowchart format.
 func (f mermaidFormatter) Format(g depgraph.FileDependencyGraph, opts RenderOptions) (string, error) {
-	adjacency, err := depgraph.AdjacencyList(g.Graph)
+	scene, err := BuildScene(g, opts)
 	if err != nil {
 		return "", err
 	}
 
-	scene := BuildScene(g, opts)
 	var sb strings.Builder
 	r := &mermaidRenderer{sb: &sb, explicit: scene.Header.TrailingNewline}
 	r.Begin(scene.Header)
@@ -156,54 +154,44 @@ func (f mermaidFormatter) Format(g depgraph.FileDependencyGraph, opts RenderOpti
 	var deletedEdgeIndices []int
 	var renamedEdgeIndices []int
 	var phantomEdgeIndices []int
-	for _, source := range filePaths {
-		deps := adjacency[source]
-		sortedDeps := make([]string, len(deps))
-		copy(sortedDeps, deps)
-		sort.Strings(sortedDeps)
+	for _, edge := range scene.Edges {
+		sourceID := nodeIDs[nodeNames[edge.From]]
+		depID := nodeIDs[nodeNames[edge.To]]
+		hasEdges = true
 
-		sourceNodeKey := nodeNames[source]
-		sourceID := nodeIDs[sourceNodeKey]
-		for _, dep := range sortedDeps {
-			depNodeKey := nodeNames[dep]
-			depID := nodeIDs[depNodeKey]
-			hasEdges = true
-			edgeMD := g.Meta.Edges[depgraph.FileEdge{From: source, To: dep}]
-
-			if opts.EdgeLabels {
-				// One arrow per underlying dependency, each labeled by its
-				// original endpoints, so a collapsed module edge keeps the
-				// labels it had without the module.
-				for _, label := range edgeLabels(g, source, dep, opts.BasePath) {
-					edgesSB.WriteString(fmt.Sprintf("    %s -->|%s| %s\n", sourceID, label, depID))
-					switch edgeMD.State {
-					case depgraph.EdgeStateDeleted:
-						deletedEdgeIndices = append(deletedEdgeIndices, edgeIndex)
-					case depgraph.EdgeStateRenamed:
-						renamedEdgeIndices = append(renamedEdgeIndices, edgeIndex)
-					case depgraph.EdgeStatePresent:
-					}
-					if edgeMD.InCycle {
-						cycleEdgeIndices = append(cycleEdgeIndices, edgeIndex)
-					}
-					edgeIndex++
+		if opts.EdgeLabels {
+			// One arrow per underlying dependency, each labeled by its
+			// original endpoints, so a collapsed module edge keeps the
+			// labels it had without the module.
+			for _, label := range edge.Labels {
+				edgesSB.WriteString(fmt.Sprintf("    %s -->|%s| %s\n", sourceID, label, depID))
+				switch edge.State {
+				case depgraph.EdgeStateDeleted:
+					deletedEdgeIndices = append(deletedEdgeIndices, edgeIndex)
+				case depgraph.EdgeStateRenamed:
+					renamedEdgeIndices = append(renamedEdgeIndices, edgeIndex)
+				case depgraph.EdgeStatePresent:
 				}
-				continue
+				if edge.InCycle {
+					cycleEdgeIndices = append(cycleEdgeIndices, edgeIndex)
+				}
+				edgeIndex++
 			}
-
-			edgesSB.WriteString(fmt.Sprintf("    %s --> %s\n", sourceID, depID))
-			switch edgeMD.State {
-			case depgraph.EdgeStateDeleted:
-				deletedEdgeIndices = append(deletedEdgeIndices, edgeIndex)
-			case depgraph.EdgeStateRenamed:
-				renamedEdgeIndices = append(renamedEdgeIndices, edgeIndex)
-			case depgraph.EdgeStatePresent:
-			}
-			if edgeMD.InCycle {
-				cycleEdgeIndices = append(cycleEdgeIndices, edgeIndex)
-			}
-			edgeIndex++
+			continue
 		}
+
+		edgesSB.WriteString(fmt.Sprintf("    %s --> %s\n", sourceID, depID))
+		switch edge.State {
+		case depgraph.EdgeStateDeleted:
+			deletedEdgeIndices = append(deletedEdgeIndices, edgeIndex)
+		case depgraph.EdgeStateRenamed:
+			renamedEdgeIndices = append(renamedEdgeIndices, edgeIndex)
+		case depgraph.EdgeStatePresent:
+		}
+		if edge.InCycle {
+			cycleEdgeIndices = append(cycleEdgeIndices, edgeIndex)
+		}
+		edgeIndex++
 	}
 
 	for _, source := range filePaths {

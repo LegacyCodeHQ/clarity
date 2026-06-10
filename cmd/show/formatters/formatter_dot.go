@@ -17,12 +17,11 @@ type dotFormatter struct {
 
 // Format converts the dependency graph to Graphviz DOT format.
 func (f *dotFormatter) Format(g depgraph.FileDependencyGraph, opts RenderOptions) (string, error) {
-	adjacency, err := depgraph.AdjacencyList(g.Graph)
+	scene, err := BuildScene(g, opts)
 	if err != nil {
 		return "", err
 	}
 
-	scene := BuildScene(g, opts)
 	var sb strings.Builder
 	r := &dotRenderer{sb: &sb, explicit: scene.Header.TrailingNewline}
 	r.Begin(scene.Header)
@@ -178,60 +177,46 @@ func (f *dotFormatter) Format(g depgraph.FileDependencyGraph, opts RenderOptions
 	}
 
 	// Determine whether we have any edges before writing the section separator.
-	hasEdges := false
-	for _, deps := range adjacency {
-		if len(deps) > 0 {
-			hasEdges = true
-			break
-		}
-	}
+	hasEdges := len(scene.Edges) > 0
 	if len(styledNodes) > 0 && hasEdges {
 		sb.WriteString("\n")
 	}
 
 	// Write edges (nodes are already declared above with styling)
-	for _, source := range filePaths {
-		deps := adjacency[source]
-		sortedDeps := make([]string, len(deps))
-		copy(sortedDeps, deps)
-		sort.Strings(sortedDeps)
+	for _, edge := range scene.Edges {
+		sourceNodeKey := nodeKey(edge.From, opts.BasePath)
+		depNodeKey := nodeKey(edge.To, opts.BasePath)
 
-		sourceNodeKey := nodeKey(source, opts.BasePath)
-		for _, dep := range sortedDeps {
-			depNodeKey := nodeKey(dep, opts.BasePath)
-			edgeMD := g.Meta.Edges[depgraph.FileEdge{From: source, To: dep}]
+		var edgeAttrs []string
+		// Exhaustive over EdgeState: a new state is a build error here until
+		// it is given a style, keeping DOT and Mermaid edge styling in step.
+		switch edge.State {
+		case depgraph.EdgeStateDeleted:
+			edgeAttrs = append(edgeAttrs, "color=\"#cc3333\"", "style=dashed", "fontcolor=\"#7a0000\"")
+		case depgraph.EdgeStateRenamed:
+			edgeAttrs = append(edgeAttrs, "color=\"#cc8800\"", "style=dashed")
+		case depgraph.EdgeStatePresent:
+			// no edge-state styling
+		}
+		if edge.InCycle {
+			edgeAttrs = append(edgeAttrs, "color=red", "style=dashed")
+		}
 
-			var edgeAttrs []string
-			// Exhaustive over EdgeState: a new state is a build error here until
-			// it is given a style, keeping DOT and Mermaid edge styling in step.
-			switch edgeMD.State {
-			case depgraph.EdgeStateDeleted:
-				edgeAttrs = append(edgeAttrs, "color=\"#cc3333\"", "style=dashed", "fontcolor=\"#7a0000\"")
-			case depgraph.EdgeStateRenamed:
-				edgeAttrs = append(edgeAttrs, "color=\"#cc8800\"", "style=dashed")
-			case depgraph.EdgeStatePresent:
-				// no edge-state styling
+		if opts.EdgeLabels {
+			// One arrow per underlying dependency: a collapsed module edge
+			// keeps a distinct labeled arrow for each original edge it
+			// represents, so labels are unchanged by collapsing.
+			for _, label := range edge.Labels {
+				attrs := append([]string{fmt.Sprintf("label=%q", label)}, edgeAttrs...)
+				sb.WriteString(fmt.Sprintf("  %q -> %q [%s];\n", sourceNodeKey, depNodeKey, strings.Join(attrs, ", ")))
 			}
-			if edgeMD.InCycle {
-				edgeAttrs = append(edgeAttrs, "color=red", "style=dashed")
-			}
+			continue
+		}
 
-			if opts.EdgeLabels {
-				// One arrow per underlying dependency: a collapsed module edge
-				// keeps a distinct labeled arrow for each original edge it
-				// represents, so labels are unchanged by collapsing.
-				for _, label := range edgeLabels(g, source, dep, opts.BasePath) {
-					attrs := append([]string{fmt.Sprintf("label=%q", label)}, edgeAttrs...)
-					sb.WriteString(fmt.Sprintf("  %q -> %q [%s];\n", sourceNodeKey, depNodeKey, strings.Join(attrs, ", ")))
-				}
-				continue
-			}
-
-			if len(edgeAttrs) > 0 {
-				sb.WriteString(fmt.Sprintf("  %q -> %q [%s];\n", sourceNodeKey, depNodeKey, strings.Join(edgeAttrs, ", ")))
-			} else {
-				sb.WriteString(fmt.Sprintf("  %q -> %q;\n", sourceNodeKey, depNodeKey))
-			}
+		if len(edgeAttrs) > 0 {
+			sb.WriteString(fmt.Sprintf("  %q -> %q [%s];\n", sourceNodeKey, depNodeKey, strings.Join(edgeAttrs, ", ")))
+		} else {
+			sb.WriteString(fmt.Sprintf("  %q -> %q;\n", sourceNodeKey, depNodeKey))
 		}
 	}
 

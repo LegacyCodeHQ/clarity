@@ -28,6 +28,8 @@ type Scene struct {
 	// Nodes holds the resolved presentation for each graph node, keyed by node
 	// key. Built once here so both formatters render identical content.
 	Nodes map[string]SceneNode
+	// Edges are the dependency edges in deterministic render order.
+	Edges []SceneEdge
 	// Cluster, when set, is the labeled module boundary to draw around its
 	// member nodes; nil when no boundary is rendered.
 	Cluster *SceneCluster
@@ -76,6 +78,20 @@ type SceneNode struct {
 	Phantom *depgraph.PhantomMetadata
 }
 
+// SceneEdge is the domain view of a dependency edge for the formatters: a
+// directed dependency with its lifecycle and cycle membership.
+type SceneEdge struct {
+	From string
+	To   string
+	// State is the edge's lifecycle: present, deleted, or renamed.
+	State depgraph.EdgeState
+	// InCycle marks an edge that participates in a dependency cycle.
+	InCycle bool
+	// Labels are the underlying dependency labels, used when edge labels are on
+	// (a collapsed module edge keeps one labeled arrow per original dependency).
+	Labels []string
+}
+
 // GraphHeader carries the graph-level render attributes.
 type GraphHeader struct {
 	// Orientation is the resolved layout direction (already defaulted).
@@ -90,7 +106,7 @@ type GraphHeader struct {
 // BuildScene resolves a dependency graph and render options into a
 // renderer-agnostic Scene. Formatter-specific syntax is applied later by a
 // Renderer; this function owns all of the shared derivation.
-func BuildScene(g depgraph.FileDependencyGraph, opts RenderOptions) Scene {
+func BuildScene(g depgraph.FileDependencyGraph, opts RenderOptions) (Scene, error) {
 	orientation := opts.Direction
 	if orientation == "" {
 		orientation = DefaultDirection
@@ -139,6 +155,26 @@ func BuildScene(g depgraph.FileDependencyGraph, opts RenderOptions) Scene {
 		}
 	}
 
+	adjacency, err := depgraph.AdjacencyList(g.Graph)
+	if err != nil {
+		return Scene{}, err
+	}
+	var edges []SceneEdge
+	for _, source := range filePaths {
+		deps := append([]string(nil), adjacency[source]...)
+		sort.Strings(deps)
+		for _, dep := range deps {
+			md := g.Meta.Edges[depgraph.FileEdge{From: source, To: dep}]
+			edges = append(edges, SceneEdge{
+				From:    source,
+				To:      dep,
+				State:   md.State,
+				InCycle: md.InCycle,
+				Labels:  edgeLabels(g, source, dep, opts.BasePath),
+			})
+		}
+	}
+
 	return Scene{
 		Header: GraphHeader{
 			Orientation:     orientation,
@@ -149,11 +185,12 @@ func BuildScene(g depgraph.FileDependencyGraph, opts RenderOptions) Scene {
 		NodeNames:        nodeNames,
 		CycleNodes:       cycleNodes,
 		Nodes:            nodes,
+		Edges:            edges,
 		Cluster:          cluster,
 		FileType:         fileType,
 		MajorityType:     majorityType(typeCounts),
 		HasMultipleTypes: len(typeCounts) > 1,
-	}
+	}, nil
 }
 
 // majorityType returns the most common type key, breaking ties by sort order so
