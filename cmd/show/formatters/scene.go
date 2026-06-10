@@ -60,19 +60,32 @@ type SceneNode struct {
 	LabelLines []string
 	// Type is the file type: its extension, or its base name when extensionless.
 	Type string
+	// Kind is what the node fundamentally is: a regular file, a test file, or a
+	// collapsed module. These are mutually exclusive.
+	Kind NodeKind
 	// State is the node's lifecycle: present, deleted, or renamed.
 	State depgraph.FileState
-	// IsTest marks a test file.
-	IsTest bool
-	// IsModule marks a collapsed module node.
-	IsModule bool
-	// IsPruned marks a node whose subtree was elided.
+	// IsPruned marks a node whose subtree was elided — orthogonal to Kind.
 	IsPruned bool
-	// InCycle marks a node that participates in a dependency cycle.
+	// InCycle marks a node in a dependency cycle — orthogonal to Kind.
 	InCycle bool
 	// Phantom describes the node's test-sibling, or nil when it has none.
 	Phantom *depgraph.PhantomMetadata
 }
+
+// NodeKind is what a graph node fundamentally is. The kinds are mutually
+// exclusive; cycle membership, prune state, and lifecycle apply independently
+// and are modeled separately.
+type NodeKind int
+
+const (
+	// NodeKindFile is a regular (non-test) source file.
+	NodeKindFile NodeKind = iota
+	// NodeKindTest is a test file.
+	NodeKindTest
+	// NodeKindModule is a collapsed module node.
+	NodeKindModule
+)
 
 // SceneEdge is the domain view of a dependency edge for the formatters: a
 // directed dependency with its lifecycle and cycle membership.
@@ -134,9 +147,8 @@ func BuildScene(g depgraph.FileDependencyGraph, opts RenderOptions) (Scene, erro
 			Name:       nodeNames[source],
 			LabelLines: nodeLabelLines(g, nodeNames[source], source),
 			Type:       fileType[source],
+			Kind:       nodeKind(md),
 			State:      md.State,
-			IsTest:     md.IsTest,
-			IsModule:   md.IsModule,
 			IsPruned:   md.IsPruned,
 			InCycle:    cycleNodes[source],
 			Phantom:    md.Phantom,
@@ -186,6 +198,19 @@ func BuildScene(g depgraph.FileDependencyGraph, opts RenderOptions) (Scene, erro
 		MajorityType:     majorityType(typeCounts),
 		HasMultipleTypes: len(typeCounts) > 1,
 	}, nil
+}
+
+// nodeKind classifies a node as a module, a test file, or a regular file. A
+// module takes precedence: its synthetic node is never itself a test file.
+func nodeKind(md depgraph.FileMetadata) NodeKind {
+	switch {
+	case md.IsModule:
+		return NodeKindModule
+	case md.IsTest:
+		return NodeKindTest
+	default:
+		return NodeKindFile
+	}
 }
 
 // majorityType returns the most common type key, breaking ties by sort order so

@@ -79,7 +79,7 @@ func (f *dotFormatter) Format(g depgraph.FileDependencyGraph, opts RenderOptions
 			// type neutral, minority types coloured, modules a fixed fill.
 			var color string
 			switch {
-			case node.IsTest:
+			case node.Kind == NodeKindTest:
 				color = "lightgreen"
 			case node.Type == scene.MajorityType:
 				color = "white"
@@ -88,7 +88,7 @@ func (f *dotFormatter) Format(g depgraph.FileDependencyGraph, opts RenderOptions
 			default:
 				color = "white"
 			}
-			if node.IsModule {
+			if node.Kind == NodeKindModule {
 				color = "lightyellow"
 			}
 
@@ -113,7 +113,7 @@ func (f *dotFormatter) Format(g depgraph.FileDependencyGraph, opts RenderOptions
 				target.WriteString(fmt.Sprintf("  %q [label=%q, style=\"filled,dashed\", fillcolor=\"#fff3e0\", color=\"#cc8800\", fontcolor=\"#7a4d00\"];\n", sourceNodeKey, nodeLabel))
 			case depgraph.FileStatePresent:
 				switch {
-				case node.IsModule:
+				case node.Kind == NodeKindModule:
 					// A module renders as a single component-shaped node; keep the
 					// red cycle border when it participates in one.
 					moduleBorder := ""

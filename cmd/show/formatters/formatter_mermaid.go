@@ -87,7 +87,7 @@ func (f mermaidFormatter) Format(g depgraph.FileDependencyGraph, opts RenderOpti
 			if memberSources[source] {
 				target = &clusterDefs
 			}
-			if node.IsModule {
+			if node.Kind == NodeKindModule {
 				target.WriteString(fmt.Sprintf("    %s[[\"%s\"]]\n", nodeID, nodeLabel))
 			} else {
 				target.WriteString(fmt.Sprintf("    %s[\"%s\"]\n", nodeID, nodeLabel))
@@ -230,9 +230,9 @@ func (f mermaidFormatter) Format(g depgraph.FileDependencyGraph, opts RenderOpti
 		if node.IsPruned {
 			prunedNodes = append(prunedNodes, nodeID)
 		}
-		if node.IsModule {
+		if node.Kind == NodeKindModule {
 			moduleNodes = append(moduleNodes, nodeID)
-		} else if node.IsTest {
+		} else if node.Kind == NodeKindTest {
 			testNodes = append(testNodes, nodeID)
 		} else if scene.HasMultipleTypes && node.Type == scene.MajorityType {
 			majorityExtensionNodes = append(majorityExtensionNodes, nodeID)
