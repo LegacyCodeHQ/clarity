@@ -108,8 +108,6 @@ func (f *dotFormatter) Format(g depgraph.FileDependencyGraph, opts RenderOptions
 			// Node label content is resolved once in the Scene; join its lines
 			// with DOT's newline.
 			nodeLabel := strings.Join(scene.Nodes[source].LabelLines, "\n")
-			isDeleted := hasFileMetadata && fileMetadata.State == depgraph.FileStateDeleted
-			isRenamed := hasFileMetadata && fileMetadata.State == depgraph.FileStateRenamed
 
 			prodIsContext := hasFileMetadata &&
 				fileMetadata.Phantom != nil &&
@@ -121,29 +119,35 @@ func (f *dotFormatter) Format(g depgraph.FileDependencyGraph, opts RenderOptions
 				target = &clusterDecls
 			}
 
-			switch {
-			case isDeleted:
+			// Exhaustive over FileState: deleted/renamed are state-driven; present
+			// nodes fall through to role styling. A new state is a build error
+			// until handled, matching the Mermaid formatter.
+			switch fileMetadata.State {
+			case depgraph.FileStateDeleted:
 				target.WriteString(fmt.Sprintf("  %q [label=%q, style=\"filled,dashed\", fillcolor=\"#ffe6e6\", color=\"#cc3333\", fontcolor=\"#7a0000\"];\n", sourceNodeKey, nodeLabel))
-			case isRenamed:
+			case depgraph.FileStateRenamed:
 				target.WriteString(fmt.Sprintf("  %q [label=%q, style=\"filled,dashed\", fillcolor=\"#fff3e0\", color=\"#cc8800\", fontcolor=\"#7a4d00\"];\n", sourceNodeKey, nodeLabel))
-			case isModule:
-				// A module renders as a single component-shaped node; keep the
-				// red cycle border when the collapsed node participates in one.
-				moduleBorder := ""
-				if cycleNodes[source] {
-					moduleBorder = ", color=red"
+			case depgraph.FileStatePresent:
+				switch {
+				case isModule:
+					// A module renders as a single component-shaped node; keep the
+					// red cycle border when the collapsed node participates in one.
+					moduleBorder := ""
+					if cycleNodes[source] {
+						moduleBorder = ", color=red"
+					}
+					target.WriteString(fmt.Sprintf("  %q [label=%q, shape=component, style=filled, fillcolor=%s%s];\n", sourceNodeKey, nodeLabel, color, moduleBorder))
+				case hasFileMetadata && fileMetadata.IsPruned && cycleNodes[source]:
+					target.WriteString(fmt.Sprintf("  %q [label=%q, style=\"filled,dashed\", fillcolor=%s, color=red];\n", sourceNodeKey, nodeLabel, color))
+				case hasFileMetadata && fileMetadata.IsPruned:
+					target.WriteString(fmt.Sprintf("  %q [label=%q, style=\"filled,dashed\", fillcolor=%s, color=gray];\n", sourceNodeKey, nodeLabel, color))
+				case cycleNodes[source]:
+					target.WriteString(fmt.Sprintf("  %q [label=%q, style=filled, fillcolor=%s, color=red];\n", sourceNodeKey, nodeLabel, color))
+				case prodIsContext:
+					target.WriteString(fmt.Sprintf("  %q [label=%q, style=\"filled,dashed\", fillcolor=%s];\n", sourceNodeKey, nodeLabel, color))
+				default:
+					target.WriteString(fmt.Sprintf("  %q [label=%q, style=filled, fillcolor=%s];\n", sourceNodeKey, nodeLabel, color))
 				}
-				target.WriteString(fmt.Sprintf("  %q [label=%q, shape=component, style=filled, fillcolor=%s%s];\n", sourceNodeKey, nodeLabel, color, moduleBorder))
-			case hasFileMetadata && fileMetadata.IsPruned && cycleNodes[source]:
-				target.WriteString(fmt.Sprintf("  %q [label=%q, style=\"filled,dashed\", fillcolor=%s, color=red];\n", sourceNodeKey, nodeLabel, color))
-			case hasFileMetadata && fileMetadata.IsPruned:
-				target.WriteString(fmt.Sprintf("  %q [label=%q, style=\"filled,dashed\", fillcolor=%s, color=gray];\n", sourceNodeKey, nodeLabel, color))
-			case cycleNodes[source]:
-				target.WriteString(fmt.Sprintf("  %q [label=%q, style=filled, fillcolor=%s, color=red];\n", sourceNodeKey, nodeLabel, color))
-			case prodIsContext:
-				target.WriteString(fmt.Sprintf("  %q [label=%q, style=\"filled,dashed\", fillcolor=%s];\n", sourceNodeKey, nodeLabel, color))
-			default:
-				target.WriteString(fmt.Sprintf("  %q [label=%q, style=filled, fillcolor=%s];\n", sourceNodeKey, nodeLabel, color))
 			}
 			styledNodes[sourceNodeKey] = true
 		}

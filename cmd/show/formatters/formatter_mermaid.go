@@ -233,11 +233,15 @@ func (f mermaidFormatter) Format(g depgraph.FileDependencyGraph, opts RenderOpti
 		nodeID := nodeIDs[sourceNodeKey]
 
 		fileMetadata, hasFileMetadata := g.Meta.Files[source]
-		if hasFileMetadata && fileMetadata.State == depgraph.FileStateDeleted {
-			deletedNodes = append(deletedNodes, nodeID)
-		}
-		if hasFileMetadata && fileMetadata.State == depgraph.FileStateRenamed {
-			renamedNodes = append(renamedNodes, nodeID)
+		// Exhaustive over FileState so a new state must be handled here too.
+		if hasFileMetadata {
+			switch fileMetadata.State {
+			case depgraph.FileStateDeleted:
+				deletedNodes = append(deletedNodes, nodeID)
+			case depgraph.FileStateRenamed:
+				renamedNodes = append(renamedNodes, nodeID)
+			case depgraph.FileStatePresent:
+			}
 		}
 		if hasFileMetadata && fileMetadata.IsPruned {
 			prunedNodes = append(prunedNodes, nodeID)
