@@ -18,10 +18,9 @@ func runShowErr(t *testing.T, args ...string) error {
 	return cmd.Execute()
 }
 
-func TestShowCommand_ModuleSelectDrawsBoundary(t *testing.T) {
+func TestShowCommand_ModuleSelectBoxesMembers(t *testing.T) {
 	repoDir, srcDir := writeJavaPair(t)
-	// App.java imports Helper.java; "support" contains Helper.java, so App is an
-	// incoming dependent crossing the module boundary.
+	// "support" contains Helper.java; App.java (also in scope) is not a member.
 	writeModulesConfig(t, repoDir, `{
   "modules": [
     { "name": "support", "files": ["src/main/java/com/example/util/Helper.java"] }
@@ -34,15 +33,14 @@ func TestShowCommand_ModuleSelectDrawsBoundary(t *testing.T) {
 		t.Fatalf("expected a boundary box (subgraph cluster) for the module:\n%s", out)
 	}
 	if !strings.Contains(out, `label="support"`) {
-		t.Fatalf("expected the boundary labeled with the module name:\n%s", out)
+		t.Fatalf("expected the box labeled with the module name:\n%s", out)
 	}
-	// The member stays expanded inside the box (not collapsed into one node).
 	if !strings.Contains(out, "Helper.java") {
-		t.Fatalf("expected the member Helper.java rendered inside the boundary:\n%s", out)
+		t.Fatalf("expected the member Helper.java boxed:\n%s", out)
 	}
-	// The incoming dependent is shown, dashed (pruned/incomplete styling).
-	if !strings.Contains(out, "App.java") || !strings.Contains(out, "dashed") {
-		t.Fatalf("expected App.java shown as a dashed incoming dependent:\n%s", out)
+	// Everything else in scope renders too — the box frames, it does not filter.
+	if !strings.Contains(out, "App.java") {
+		t.Fatalf("expected non-member App.java still rendered (union scope):\n%s", out)
 	}
 }
 
@@ -58,48 +56,11 @@ func TestShowCommand_ModuleSelectMermaidSubgraph(t *testing.T) {
 	if !strings.Contains(out, `subgraph moduleCluster["support"]`) {
 		t.Fatalf("expected a mermaid subgraph boundary labeled with the module name:\n%s", out)
 	}
-	if !strings.Contains(out, "prunedFile") {
-		t.Fatalf("expected the incoming dependent styled as pruned (dashed):\n%s", out)
-	}
 }
 
-func TestShowCommand_ModuleSelectDirectionIn(t *testing.T) {
+func TestShowCommand_ModuleSelectBoxesEvenWhenIsolated(t *testing.T) {
 	repoDir, srcDir := writeJavaPair(t)
-	writeModulesConfig(t, repoDir, `{
-  "modules": [
-    { "name": "support", "files": ["src/main/java/com/example/util/Helper.java"] }
-  ]
-}`)
-
-	out := runShow(t, "-i", srcDir, "-r", repoDir, "-f", "dot", "--module", "support", "-d", "in")
-	if !strings.Contains(out, "App.java") {
-		t.Fatalf("expected the incoming dependent App.java with -d in:\n%s", out)
-	}
-}
-
-func TestShowCommand_ModuleSelectDirectionOutExcludesIncoming(t *testing.T) {
-	repoDir, srcDir := writeJavaPair(t)
-	writeModulesConfig(t, repoDir, `{
-  "modules": [
-    { "name": "support", "files": ["src/main/java/com/example/util/Helper.java"] }
-  ]
-}`)
-
-	// Helper has no outgoing dependencies, and App is incoming only — so -d out
-	// must drop App entirely while keeping the member.
-	out := runShow(t, "-i", srcDir, "-r", repoDir, "-f", "dot", "--module", "support", "-d", "out")
-	if strings.Contains(out, "App.java") {
-		t.Fatalf("expected -d out to exclude the incoming dependent App.java:\n%s", out)
-	}
-	if !strings.Contains(out, "Helper.java") {
-		t.Fatalf("expected the member Helper.java still rendered with -d out:\n%s", out)
-	}
-}
-
-func TestShowCommand_ModuleSelectIsolatedDrawsNoBoundary(t *testing.T) {
-	repoDir, srcDir := writeJavaPair(t)
-	// Both files are members, so App->Helper is internal and nothing crosses the
-	// boundary. With no dependents or dependencies, no box is drawn.
+	// Both files are members, so nothing crosses a boundary — the box still draws.
 	writeModulesConfig(t, repoDir, `{
   "modules": [
     { "name": "bundle", "files": ["src/main/java/com/example/App.java", "src/main/java/com/example/util/Helper.java"] }
@@ -107,11 +68,33 @@ func TestShowCommand_ModuleSelectIsolatedDrawsNoBoundary(t *testing.T) {
 }`)
 
 	out := runShow(t, "-i", srcDir, "-r", repoDir, "-f", "dot", "--module", "bundle")
-	if strings.Contains(out, "subgraph cluster") {
-		t.Fatalf("expected no boundary box for an isolated module:\n%s", out)
+	if !strings.Contains(out, "subgraph cluster") {
+		t.Fatalf("expected the module box to draw even when isolated:\n%s", out)
 	}
 	if !strings.Contains(out, "App.java") || !strings.Contains(out, "Helper.java") {
-		t.Fatalf("expected the module's files still rendered without a box:\n%s", out)
+		t.Fatalf("expected both members rendered inside the box:\n%s", out)
+	}
+}
+
+func TestShowCommand_ModuleSelectSelfScopesOnCleanTree(t *testing.T) {
+	repoDir, _ := writeJavaPair(t)
+	writeModulesConfig(t, repoDir, `{
+  "modules": [
+    { "name": "support", "files": ["src/main/java/com/example/util/Helper.java"] }
+  ]
+}`)
+	gitInitRepo(t, repoDir)
+	gitRun(t, repoDir, "add", ".")
+	gitRun(t, repoDir, "commit", "-m", "seed")
+
+	// No -i and a clean tree: the module supplies its own scope rather than
+	// printing the "working directory is clean" hint.
+	out := runShow(t, "-r", repoDir, "-f", "dot", "--module", "support")
+	if strings.Contains(out, "Working directory is clean") {
+		t.Fatalf("expected --module to self-scope on a clean tree, got:\n%s", out)
+	}
+	if !strings.Contains(out, "subgraph cluster") || !strings.Contains(out, "Helper.java") {
+		t.Fatalf("expected the module rendered from its own files:\n%s", out)
 	}
 }
 
@@ -144,7 +127,7 @@ func TestShowCommand_ModuleSelectThroughSymlinkedRepo(t *testing.T) {
 
 	out := runShow(t, "-i", filepath.Join(linkRepo, "src"), "-r", linkRepo, "-f", "dot", "--module", "support")
 	if !strings.Contains(out, "subgraph cluster") {
-		t.Fatalf("expected the boundary to draw through a symlinked repo path, got:\n%s", out)
+		t.Fatalf("expected the box to draw through a symlinked repo path, got:\n%s", out)
 	}
 	if !strings.Contains(out, "Helper.java") {
 		t.Fatalf("expected the member resolved through a symlinked path:\n%s", out)
@@ -168,9 +151,9 @@ func TestShowCommand_ModuleSelectUnknownName(t *testing.T) {
 	}
 }
 
-func TestShowCommand_ModuleSelectNoMembersInScope(t *testing.T) {
+func TestShowCommand_ModuleSelectResolvesToNoFiles(t *testing.T) {
 	repoDir, srcDir := writeJavaPair(t)
-	// "ghost" is declared but its file is not in the rendered scope.
+	// The declared file does not exist, so the module resolves to nothing.
 	writeModulesConfig(t, repoDir, `{
   "modules": [
     { "name": "ghost", "files": ["src/main/java/com/example/Missing.java"] }
@@ -179,10 +162,10 @@ func TestShowCommand_ModuleSelectNoMembersInScope(t *testing.T) {
 
 	err := runShowErr(t, "-i", srcDir, "-r", repoDir, "-f", "dot", "--module", "ghost")
 	if err == nil {
-		t.Fatal("expected an error when the module has no files in scope, got nil")
+		t.Fatal("expected an error when the module resolves to no files, got nil")
 	}
-	if !strings.Contains(err.Error(), "no files in the current scope") {
-		t.Fatalf("expected a scope error, got: %v", err)
+	if !strings.Contains(err.Error(), "resolves to no files") {
+		t.Fatalf("expected a no-files error, got: %v", err)
 	}
 }
 
