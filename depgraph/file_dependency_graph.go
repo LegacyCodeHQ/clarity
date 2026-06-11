@@ -53,8 +53,9 @@ const (
 type FileMetadata struct {
 	Stats *vcs.FileStats
 	State FileState
-	// RenamedTo is the new path when State is FileStateRenamed.
-	RenamedTo       string
+	// RenamedFrom is the old path when this node is a rename target (the rename
+	// is collapsed onto this single node; the old path is removed from the graph).
+	RenamedFrom     string
 	IsTest          bool
 	IsPruned        bool
 	IsModule        bool
@@ -177,23 +178,29 @@ func MarkDeletedFiles(fg *FileDependencyGraph, deletedFiles []string) {
 	}
 }
 
-// MarkRenamedFiles marks each rename source (old path) as renamed to its new
-// path and tags the synthetic old->new edge so renderers can show the move
-// distinctly from a deletion. The old->new edge must already exist in the graph.
-func MarkRenamedFiles(fg *FileDependencyGraph, renames map[string]string) {
+// MarkRenamedFiles collapses each rename onto its new-path node: the new node
+// records the old path it came from and takes churn computed from the old vs
+// new content (a pure move reads as +0 -0). The old path is expected to have
+// been removed from the graph by CollapseRenames, so a rename renders as a
+// single node rather than an old->new pair. oldContent maps each old path to
+// its pre-rename bytes; reader yields the new node's current content.
+func MarkRenamedFiles(fg *FileDependencyGraph, renames map[string]string, oldContent map[string][]byte, reader vcs.ContentReader) {
 	for oldPath, newPath := range renames {
-		md := fg.Meta.Files[oldPath]
-		md.State = FileStateRenamed
-		md.RenamedTo = newPath
-		if md.Extension == "" {
-			md.Extension = filepath.Ext(filepath.Base(oldPath))
+		md, ok := fg.Meta.Files[newPath]
+		if !ok {
+			continue
 		}
-		fg.Meta.Files[oldPath] = md
-
-		edge := FileEdge{From: oldPath, To: newPath}
-		em := fg.Meta.Edges[edge]
-		em.State = EdgeStateRenamed
-		fg.Meta.Edges[edge] = em
+		md.RenamedFrom = oldPath
+		if md.Extension == "" {
+			md.Extension = filepath.Ext(filepath.Base(newPath))
+		}
+		var newBytes []byte
+		if reader != nil {
+			newBytes, _ = reader(newPath)
+		}
+		stats := renameChurn(oldContent[oldPath], newBytes)
+		md.Stats = &stats
+		fg.Meta.Files[newPath] = md
 	}
 }
 

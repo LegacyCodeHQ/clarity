@@ -694,30 +694,51 @@ func TestBuildGraph_DeletedIsolatedFileStillRendered(t *testing.T) {
 	assert.Contains(t, dot, "(deleted)")
 }
 
-func TestBuildGraph_RenameRendersAsRenamedWithEdge(t *testing.T) {
-	// A rename = old path deleted + new path added with identical content. Show
-	// the old path distinctly as "(renamed)" with an edge to the new path, rather
-	// than hiding it or mislabeling it as a plain deletion.
-	dir := t.TempDir()
-	initGitRepo(t, dir)
-	oldPath := filepath.Join(dir, "chart.ts")
-	require.NoError(t, os.WriteFile(oldPath, []byte("export const x = 1;\n"), 0o644))
-	runGit(t, dir, "add", ".")
-	runGit(t, dir, "commit", "-m", "seed")
-	newPath := filepath.Join(dir, "ScatterPlot.ts")
-	require.NoError(t, os.Rename(oldPath, newPath))
+func TestBuildGraph_RenameRendersAsSingleNode(t *testing.T) {
+	// A rename is one file that moved. Collapse it onto the new path, annotated
+	// "renamed from <old>" — no separate old node, no rename edge, no seedling,
+	// and not a plain deletion. Staged and unstaged must render identically.
+	seed := func(t *testing.T) (dir, oldPath, newPath string) {
+		t.Helper()
+		dir = t.TempDir()
+		initGitRepo(t, dir)
+		oldPath = filepath.Join(dir, "chart.ts")
+		require.NoError(t, os.WriteFile(oldPath, []byte("export const x = 1;\n"), 0o644))
+		runGit(t, dir, "add", ".")
+		runGit(t, dir, "commit", "-m", "seed")
+		newPath = filepath.Join(dir, "ScatterPlot.ts")
+		require.NoError(t, os.Rename(oldPath, newPath))
+		return dir, oldPath, newPath
+	}
 
-	opts := &watchOptions{}
+	assertCollapsed := func(t *testing.T, dot string) {
+		t.Helper()
+		assert.Contains(t, dot, "ScatterPlot.ts")
+		assert.Contains(t, dot, "(renamed from chart.ts)")
+		// No separate old node, no rename edge, no seedling, no deletion marker.
+		assert.NotContains(t, dot, "(renamed)")
+		assert.NotContains(t, dot, `"chart.ts" -> "ScatterPlot.ts"`)
+		assert.NotContains(t, dot, "(deleted)")
+		assert.NotContains(t, dot, "🪴")
+	}
+
 	formatter, err := formatters.NewFormatter("dot")
 	require.NoError(t, err)
-	dot, err := buildGraph(dir, opts, formatter)
-	require.NoError(t, err)
 
-	assert.Contains(t, dot, "ScatterPlot.ts")
-	assert.Contains(t, dot, "(renamed)")
-	assert.Contains(t, dot, `"chart.ts" -> "ScatterPlot.ts"`)
-	// A rename source is not a plain deletion.
-	assert.NotContains(t, dot, "chart.ts\\n-1\\n(deleted)")
+	t.Run("unstaged", func(t *testing.T) {
+		dir, _, _ := seed(t)
+		dot, err := buildGraph(dir, &watchOptions{}, formatter)
+		require.NoError(t, err)
+		assertCollapsed(t, dot)
+	})
+
+	t.Run("staged", func(t *testing.T) {
+		dir, _, _ := seed(t)
+		runGit(t, dir, "add", "-A") // git now reports a rename (status R)
+		dot, err := buildGraph(dir, &watchOptions{}, formatter)
+		require.NoError(t, err)
+		assertCollapsed(t, dot)
+	})
 }
 
 func TestPublishCurrentGraph_NoUncommittedChangesClearsWorkingSnapshots(t *testing.T) {
@@ -821,10 +842,11 @@ func TestWatchAndRebuild_DetectsFileRename(t *testing.T) {
 	snap, ok := latestSnapshot(b)
 	require.True(t, ok, "no graph published after rename")
 	assert.Contains(t, snap, "ScatterPlot.ts", "post-rename graph missing new file name")
-	// The rename source stays visible, rendered distinctly as a rename to the
-	// new path rather than hidden or shown as a plain deletion.
-	assert.Contains(t, snap, "chart.ts", "post-rename graph dropped the rename source")
-	assert.Contains(t, snap, "(renamed)", "rename source not marked as renamed")
+	// The rename collapses onto the new path, annotated with its origin — no
+	// separate old node, no rename edge, no deletion marker.
+	assert.Contains(t, snap, "(renamed from chart.ts)", "rename not annotated on the new node")
+	assert.NotContains(t, snap, `"chart.ts" [`, "rename source should not be a separate node")
+	assert.NotContains(t, snap, `"chart.ts" -> "ScatterPlot.ts"`, "rename should not draw an old->new edge")
 }
 
 // TestWatchAndRebuild_DebounceFiresOnEverySaveCycle reproduces a watcher bug

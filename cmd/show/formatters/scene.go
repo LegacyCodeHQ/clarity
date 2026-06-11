@@ -2,6 +2,7 @@ package formatters
 
 import (
 	"fmt"
+	"path/filepath"
 	"sort"
 	"strings"
 
@@ -277,6 +278,12 @@ func nodeLabelLines(g depgraph.FileDependencyGraph, name, source string) []strin
 		lines = append(lines, "(renamed)")
 	case depgraph.FileStatePresent:
 		// no marker
+	}
+
+	// A collapsed rename renders as the single new-path node, annotated with the
+	// path it came from (the old node is removed from the graph).
+	if md.RenamedFrom != "" {
+		lines = append(lines, fmt.Sprintf("(renamed from %s)", filepath.Base(md.RenamedFrom)))
 	}
 
 	return lines

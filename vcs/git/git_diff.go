@@ -73,6 +73,51 @@ func GetUncommittedDeletedFiles(repoPath string) ([]string, error) {
 	return deleted, nil
 }
 
+// GetUncommittedRenames returns staged renames that git itself detected, as a
+// map of old absolute path -> new absolute path. Git reports these as status
+// "R" ("old -> new"); using its result avoids re-deriving the match and handles
+// renames with edits, which content hashing would miss.
+func GetUncommittedRenames(repoPath string) (map[string]string, error) {
+	if _, err := os.Stat(repoPath); os.IsNotExist(err) {
+		return nil, fmt.Errorf("repository path does not exist: %s", repoPath)
+	}
+	if !isGitRepository(repoPath) {
+		return nil, fmt.Errorf("%s is not a git repository (use 'git init' to initialize)", repoPath)
+	}
+
+	repoRoot, err := GetRepositoryRoot(repoPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get repository root: %w", err)
+	}
+
+	stdout, stderr, err := runGitCommand(repoPath, "status", "--porcelain", "--untracked-files=all")
+	if err != nil {
+		return nil, gitCommandError(err, stderr)
+	}
+
+	renames := make(map[string]string)
+	for _, line := range strings.Split(string(stdout), "\n") {
+		if len(line) < 3 {
+			continue
+		}
+		// Porcelain "XY old -> new"; a rename is R in the index or working tree.
+		if line[0] != 'R' && line[1] != 'R' {
+			continue
+		}
+		parts := strings.Split(strings.TrimSpace(line[3:]), " -> ")
+		if len(parts) != 2 {
+			continue
+		}
+		oldPath := filepath.Join(repoRoot, strings.TrimSpace(parts[0]))
+		newPath := filepath.Join(repoRoot, strings.TrimSpace(parts[1]))
+		renames[oldPath] = newPath
+	}
+	if len(renames) == 0 {
+		return nil, nil
+	}
+	return renames, nil
+}
+
 // getUncommittedFiles returns a list of all uncommitted files (relative to repo root)
 func getUncommittedFiles(repoPath string) ([]string, error) {
 	stdout, stderr, err := runGitCommand(repoPath, "status", "--porcelain", "--untracked-files=all")

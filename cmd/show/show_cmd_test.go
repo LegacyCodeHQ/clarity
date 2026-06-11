@@ -233,7 +233,7 @@ func TestGraphCommit_DeletedFileKeepsPreDeletionIncomingEdge(t *testing.T) {
 	}
 }
 
-func TestGraphCommit_RendersRenameAsMoveNotDeletion(t *testing.T) {
+func TestGraphCommit_RendersRenameAsSingleNode(t *testing.T) {
 	repoDir := t.TempDir()
 	gitInitRepo(t, repoDir)
 
@@ -267,12 +267,20 @@ func TestGraphCommit_RendersRenameAsMoveNotDeletion(t *testing.T) {
 		t.Fatalf("cmd.Execute() error = %v", err)
 	}
 
+	// A rename collapses to a single new-path node annotated with its origin —
+	// no separate old node, no rename edge, no deletion marker.
 	output := stdout.String()
-	if !strings.Contains(output, "(renamed)") {
-		t.Fatalf("expected old.ts to be marked (renamed), got:\n%s", output)
+	if !strings.Contains(output, "(renamed from old.ts)") {
+		t.Fatalf("expected new.ts annotated (renamed from old.ts), got:\n%s", output)
 	}
-	if strings.Contains(output, "(deleted)") {
-		t.Fatalf("expected a rename not to render as (deleted), got:\n%s", output)
+	if strings.Contains(output, `"old.ts"`) {
+		t.Fatalf("expected no separate old.ts node, got:\n%s", output)
+	}
+	if strings.Contains(output, "(renamed)") || strings.Contains(output, "(deleted)") {
+		t.Fatalf("expected no (renamed)/(deleted) markers, got:\n%s", output)
+	}
+	if strings.Contains(output, `"old.ts" -> "new.ts"`) {
+		t.Fatalf("expected no rename edge, got:\n%s", output)
 	}
 }
 

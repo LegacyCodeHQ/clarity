@@ -199,13 +199,16 @@ func runGraph(cmd *cobra.Command, opts *graphOptions) error {
 	}
 
 	// A rename surfaces as an old path deleted + a new path added with identical
-	// content. Detect those so they render as a move instead of a duplicated
-	// subtree, leaving only genuine removals marked as deletions.
+	// content. Detect those and collapse the move onto the single new-path node,
+	// leaving only genuine removals marked as deletions.
 	renames := depgraph.DetectRenames(deletedFiles, deletedContent, filePaths, contentReader)
-	graph, err = depgraph.AddRenameEdges(graph, renames)
+	graph, err = depgraph.CollapseRenames(graph, renames)
 	if err != nil {
 		return err
 	}
+	// CollapseRenames dropped the old-path nodes; resync filePaths to the graph
+	// so downstream steps and the title count see one node per rename.
+	filePaths = graphFiles(graph)
 	deletedFiles = filterRenamed(deletedFiles, renames)
 
 	// Reconstruct each deleted file's pre-deletion edges (who imported it, what it
@@ -283,7 +286,7 @@ func runGraph(cmd *cobra.Command, opts *graphOptions) error {
 	}
 
 	depgraph.MarkDeletedFiles(&fileGraph, deletedFiles)
-	depgraph.MarkRenamedFiles(&fileGraph, renames)
+	depgraph.MarkRenamedFiles(&fileGraph, renames, deletedContent, contentReader)
 
 	for node := range prunedNodes {
 		if md, ok := fileGraph.Meta.Files[node]; ok {
@@ -308,7 +311,8 @@ func runGraph(cmd *cobra.Command, opts *graphOptions) error {
 	}
 
 	// Built here (not earlier) so the deleted count is read from the marked
-	// graph, reflecting exactly what renders as deleted.
+	// graph; filePaths already tracks the post-collapse graph, so a rename
+	// counts as one file rather than an old+new pair.
 	label := buildGraphLabel(opts, format, fromCommit, toCommit, isCommitRange, filePaths, len(collapse.Members), countDeletedFiles(fileGraph))
 
 	orientation, _ := formatters.ParseDirection(opts.orientation)

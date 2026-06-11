@@ -32,6 +32,19 @@ func buildGraph(repoPath string, opts *watchOptions, formatter formatters.Format
 	if err != nil {
 		return "", err
 	}
+	// Staged renames are reported by git as status R: it has already matched old
+	// to new (including renames with edits, which a content hash would miss).
+	// Unstaged renames surface as a deletion + an untracked add and are matched
+	// by content below. Both feed the same collapse so staging never changes the
+	// rendering.
+	gitRenames, err := git.GetUncommittedRenames(repoPath)
+	if err != nil {
+		return "", fmt.Errorf("failed to get renamed uncommitted files: %w", err)
+	}
+	renameOldContent, err := loadDeletedFileContent(repoPath, renameSources(gitRenames))
+	if err != nil {
+		return "", err
+	}
 	filePaths = append(filePaths, deletedFiles...)
 
 	if len(filePaths) == 0 {
@@ -57,11 +70,17 @@ func buildGraph(repoPath string, opts *watchOptions, formatter formatters.Format
 		return "", fmt.Errorf("failed to build dependency graph: %w", err)
 	}
 
-	// A rename is an old path deleted + a new path added with identical content.
-	// Detect those, add the old->new edge, and render them distinctly from plain
-	// deletions. Every removed file stays visible either way.
+	// A rename is one file that moved. Detect it (content hash for unstaged,
+	// git's own R status for staged), then collapse it onto a single new-path
+	// node and drop the old node. Pure deletions stay visible.
 	renames := depgraph.DetectRenames(deletedFiles, deletedContent, filePaths, contentReader)
-	graph, err = depgraph.AddRenameEdges(graph, renames)
+	if renames == nil && len(gitRenames) > 0 {
+		renames = make(map[string]string, len(gitRenames))
+	}
+	for oldPath, newPath := range gitRenames {
+		renames[oldPath] = newPath
+	}
+	graph, err = depgraph.CollapseRenames(graph, renames)
 	if err != nil {
 		return "", err
 	}
@@ -90,7 +109,7 @@ func buildGraph(repoPath string, opts *watchOptions, formatter formatters.Format
 		return "", fmt.Errorf("failed to build file graph metadata: %w", err)
 	}
 	depgraph.MarkDeletedFiles(&fileGraph, pureDeleted)
-	depgraph.MarkRenamedFiles(&fileGraph, renames)
+	depgraph.MarkRenamedFiles(&fileGraph, renames, mergeContent(deletedContent, renameOldContent), contentReader)
 
 	if !opts.noPhantom {
 		if diffs, diffErr := git.GetUncommittedFileDiffs(repoPath); diffErr == nil {
@@ -111,6 +130,29 @@ func buildGraph(repoPath string, opts *watchOptions, formatter formatters.Format
 }
 
 var errNoUncommittedChanges = fmt.Errorf("no uncommitted changes")
+
+// renameSources returns the old paths (rename sources) of a renames map.
+func renameSources(renames map[string]string) []string {
+	if len(renames) == 0 {
+		return nil
+	}
+	sources := make([]string, 0, len(renames))
+	for oldPath := range renames {
+		sources = append(sources, oldPath)
+	}
+	return sources
+}
+
+// mergeContent unions several path->content maps into one.
+func mergeContent(maps ...map[string][]byte) map[string][]byte {
+	merged := make(map[string][]byte)
+	for _, m := range maps {
+		for path, content := range m {
+			merged[path] = content
+		}
+	}
+	return merged
+}
 
 func loadDeletedFileContent(repoPath string, deletedFiles []string) (map[string][]byte, error) {
 	if len(deletedFiles) == 0 {

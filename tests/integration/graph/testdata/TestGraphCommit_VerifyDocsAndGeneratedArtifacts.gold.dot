@@ -1,7 +1,7 @@
 digraph dependencies {
   rankdir=LR;
   node [shape=box];
-  label="clarity • e1a0ef9 • 11 files • 2 deleted";
+  label="clarity • e1a0ef9 • 8 files • 2 deleted";
   labelloc=t;
   labeljust=l;
   fontsize=10;
@@ -12,25 +12,17 @@ digraph dependencies {
   "parsers/dart/dart_parser.go" [label="dart_parser.go\n+3 -3", style=filled, fillcolor=white];
   "tree_sitter_dart/binding.go" [label="tree_sitter_dart/binding.go\n(deleted)", style="filled,dashed", fillcolor="#ffe6e6", color="#cc3333", fontcolor="#7a0000"];
   "tree_sitter_dart/binding_test.go" [label="tree_sitter_dart/binding_test.go\n(deleted)", style="filled,dashed", fillcolor="#ffe6e6", color="#cc3333", fontcolor="#7a0000"];
-  "tree_sitter_dart/parser.c" [label="tree_sitter_dart/parser.c\n(renamed)", style="filled,dashed", fillcolor="#fff3e0", color="#cc8800", fontcolor="#7a4d00"];
-  "tree_sitter_dart/parser.h" [label="tree_sitter_dart/parser.h\n(renamed)", style="filled,dashed", fillcolor="#fff3e0", color="#cc8800", fontcolor="#7a4d00"];
-  "tree_sitter_dart/scanner.c" [label="tree_sitter_dart/scanner.c\n(renamed)", style="filled,dashed", fillcolor="#fff3e0", color="#cc8800", fontcolor="#7a4d00"];
   "tree_sitter_external/dart/binding.go" [label="dart/binding.go\n+1 -1", style=filled, fillcolor=white];
   "tree_sitter_external/dart/binding_test.go" [label="dart/binding_test.go\n+3 -3", style=filled, fillcolor=lightgreen];
-  "tree_sitter_external/dart/parser.c" [label="dart/parser.c", style=filled, fillcolor=lightblue];
-  "tree_sitter_external/dart/parser.h" [label="dart/parser.h", style=filled, fillcolor=lightsalmon];
-  "tree_sitter_external/dart/scanner.c" [label="dart/scanner.c", style=filled, fillcolor=lightblue];
+  "tree_sitter_external/dart/parser.c" [label="parser.c\n(renamed from parser.c)", style=filled, fillcolor=lightblue];
+  "tree_sitter_external/dart/parser.h" [label="parser.h\n(renamed from parser.h)", style=filled, fillcolor=lightsalmon];
+  "tree_sitter_external/dart/scanner.c" [label="scanner.c\n(renamed from scanner.c)", style=filled, fillcolor=lightblue];
 
   "parsers/dart/dart_parser.go" -> "tree_sitter_dart/binding.go" [color="#cc3333", style=dashed, fontcolor="#7a0000"];
   "parsers/dart/dart_parser.go" -> "tree_sitter_external/dart/binding.go";
-  "tree_sitter_dart/binding.go" -> "tree_sitter_dart/parser.c" [color="#cc3333", style=dashed, fontcolor="#7a0000"];
-  "tree_sitter_dart/binding.go" -> "tree_sitter_dart/scanner.c" [color="#cc3333", style=dashed, fontcolor="#7a0000"];
+  "tree_sitter_dart/binding.go" -> "tree_sitter_external/dart/parser.c" [color="#cc3333", style=dashed, fontcolor="#7a0000"];
+  "tree_sitter_dart/binding.go" -> "tree_sitter_external/dart/scanner.c" [color="#cc3333", style=dashed, fontcolor="#7a0000"];
   "tree_sitter_dart/binding_test.go" -> "tree_sitter_dart/binding.go" [color="#cc3333", style=dashed, fontcolor="#7a0000"];
-  "tree_sitter_dart/parser.c" -> "tree_sitter_dart/parser.h";
-  "tree_sitter_dart/parser.c" -> "tree_sitter_external/dart/parser.c" [color="#cc8800", style=dashed];
-  "tree_sitter_dart/parser.h" -> "tree_sitter_external/dart/parser.h" [color="#cc8800", style=dashed];
-  "tree_sitter_dart/scanner.c" -> "tree_sitter_dart/parser.h";
-  "tree_sitter_dart/scanner.c" -> "tree_sitter_external/dart/scanner.c" [color="#cc8800", style=dashed];
   "tree_sitter_external/dart/binding.go" -> "tree_sitter_external/dart/parser.c";
   "tree_sitter_external/dart/binding.go" -> "tree_sitter_external/dart/scanner.c";
   "tree_sitter_external/dart/binding_test.go" -> "tree_sitter_external/dart/binding.go";
