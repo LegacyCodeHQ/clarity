@@ -56,6 +56,11 @@ func TestShowCommand_ModuleSelectMermaidSubgraph(t *testing.T) {
 	if !strings.Contains(out, `subgraph moduleCluster["support"]`) {
 		t.Fatalf("expected a mermaid subgraph boundary labeled with the module name:\n%s", out)
 	}
+	// The subgraph sets its own direction so it lays out like DOT (rankdir=LR),
+	// not Mermaid's default top-to-bottom.
+	if !strings.Contains(out, "direction LR") {
+		t.Fatalf("expected the subgraph to set direction LR for layout consistency:\n%s", out)
+	}
 }
 
 func TestShowCommand_ModuleSelectBoxesEvenWhenIsolated(t *testing.T) {

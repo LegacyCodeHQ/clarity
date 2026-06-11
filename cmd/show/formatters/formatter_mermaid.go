@@ -320,8 +320,9 @@ func (f mermaidFormatter) Format(g depgraph.FileDependencyGraph, opts RenderOpti
 // only the output builder and trailing-newline flag; all graph derivation lives
 // in the Scene.
 type mermaidRenderer struct {
-	sb       *strings.Builder
-	explicit bool
+	sb          *strings.Builder
+	explicit    bool
+	orientation string
 }
 
 func (r *mermaidRenderer) Begin(h GraphHeader) {
@@ -330,12 +331,16 @@ func (r *mermaidRenderer) Begin(h GraphHeader) {
 		r.sb.WriteString(fmt.Sprintf("title: %s\n", h.Title))
 		r.sb.WriteString("---\n")
 	}
-	r.sb.WriteString(fmt.Sprintf("flowchart %s\n", h.Orientation.String()))
+	r.orientation = h.Orientation.String()
+	r.sb.WriteString(fmt.Sprintf("flowchart %s\n", r.orientation))
 }
 
 func (r *mermaidRenderer) OpenCluster(c SceneCluster) {
 	escaped := strings.ReplaceAll(c.Name, "\"", "#quot;")
 	r.sb.WriteString(fmt.Sprintf("    subgraph moduleCluster[\"%s\"]\n", escaped))
+	// Subgraphs default to top-to-bottom regardless of the flowchart direction,
+	// so set it explicitly to keep the box consistent with DOT's rankdir.
+	r.sb.WriteString(fmt.Sprintf("    direction %s\n", r.orientation))
 }
 
 func (r *mermaidRenderer) CloseCluster() {
