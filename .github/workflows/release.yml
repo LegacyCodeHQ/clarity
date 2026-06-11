@@ -43,7 +43,7 @@ jobs:
       # Cache the apt packages so they restore instead of re-downloading each run.
       # Cross-compilers for the Windows and Linux-arm64 targets.
       - name: Install cross-compilation toolchains
-        uses: awalsh128/cache-apt-pkgs-action@v1
+        uses: awalsh128/cache-apt-pkgs-action@2c09a5e66da6c8016428a2172bd76e5e4f14bb17 # v1
         with:
           packages: gcc-mingw-w64-x86-64 gcc-aarch64-linux-gnu
           version: 1.0
@@ -52,7 +52,7 @@ jobs:
       # unconditionally (restored from cache) since they are needed on a cache hit
       # to use the toolchain and on a miss to build it.
       - name: Install OSXCross dependencies
-        uses: awalsh128/cache-apt-pkgs-action@v1
+        uses: awalsh128/cache-apt-pkgs-action@2c09a5e66da6c8016428a2172bd76e5e4f14bb17 # v1
         with:
           packages: clang llvm-dev libxml2-dev uuid-dev libssl-dev bash patch make tar xz-utils bzip2 gzip sed cpio libbz2-dev
           version: 1.0
