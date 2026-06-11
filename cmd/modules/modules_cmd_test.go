@@ -80,6 +80,53 @@ func TestModules_SplitsTestFromNonTest(t *testing.T) {
 	}
 }
 
+func TestModules_SortBySizeOrdersLargestFirst(t *testing.T) {
+	repoDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(repoDir, "alpha.go"), []byte("package alpha\n"), 0o644); err != nil {
+		t.Fatalf("os.WriteFile() error = %v", err)
+	}
+	zetaDir := filepath.Join(repoDir, "zeta")
+	if err := os.MkdirAll(zetaDir, 0o755); err != nil {
+		t.Fatalf("os.MkdirAll() error = %v", err)
+	}
+	for _, f := range []string{"z1.go", "z2.go", "z3.go"} {
+		if err := os.WriteFile(filepath.Join(zetaDir, f), []byte("package zeta\n"), 0o644); err != nil {
+			t.Fatalf("os.WriteFile() error = %v", err)
+		}
+	}
+	writeModulesConfig(t, repoDir, `{
+  "modules": [
+    { "name": "alpha", "files": ["alpha.go"] },
+    { "name": "zeta", "files": ["zeta/*.go"] }
+  ]
+}`)
+
+	// alpha (1 file) sorts before zeta by name, so --sort-by size must reverse it.
+	out := runModulesCmd(t, "--repo", repoDir, "--sort-by", "size")
+	zIdx := strings.Index(out, "zeta")
+	aIdx := strings.Index(out, "alpha")
+	if zIdx == -1 || aIdx == -1 {
+		t.Fatalf("expected both modules listed, got:\n%s", out)
+	}
+	if zIdx > aIdx {
+		t.Fatalf("expected zeta (larger) before alpha with --sort-by size, got:\n%s", out)
+	}
+}
+
+func TestModules_SortByRejectsUnknownValue(t *testing.T) {
+	repoDir := t.TempDir()
+	writeModulesConfig(t, repoDir, `{ "modules": [ { "name": "a", "files": ["a.go"] } ] }`)
+
+	cmd := NewCommand()
+	cmd.SetArgs([]string{"--repo", repoDir, "--sort-by", "bogus"})
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+	if err := cmd.Execute(); err == nil {
+		t.Fatalf("expected an error for unknown --sort-by value, got:\n%s", out.String())
+	}
+}
+
 func TestModules_EmptyWhenConfigAbsent(t *testing.T) {
 	repoDir := t.TempDir()
 	out := runModulesCmd(t, "--repo", repoDir)

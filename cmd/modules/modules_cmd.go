@@ -23,6 +23,7 @@ func (m moduleInfo) Total() int { return m.NonTest + m.Test }
 
 type options struct {
 	repoPath string
+	sortBy   string
 }
 
 // Cmd represents the modules command.
@@ -30,7 +31,7 @@ var Cmd = NewCommand()
 
 // NewCommand returns a new modules command instance.
 func NewCommand() *cobra.Command {
-	opts := &options{}
+	opts := &options{sortBy: "name"}
 
 	cmd := &cobra.Command{
 		Use:   "modules",
@@ -43,6 +44,7 @@ listed name to "clarity show --module <name>" to render that module.
 
 Examples:
   clarity modules
+  clarity modules --sort-by size
   clarity modules --repo path/to/repo`,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			return runModules(cmd, opts)
@@ -50,10 +52,16 @@ Examples:
 	}
 
 	cmd.Flags().StringVarP(&opts.repoPath, "repo", "r", "", "Git repository path (default: current directory)")
+	cmd.Flags().StringVar(&opts.sortBy, "sort-by", opts.sortBy, "Order modules by: name (A→Z) or size (largest first)")
 	return cmd
 }
 
 func runModules(cmd *cobra.Command, opts *options) error {
+	sortBy := strings.ToLower(opts.sortBy)
+	if sortBy != "name" && sortBy != "size" {
+		return fmt.Errorf("unknown sort-by: %s (valid options: name, size)", opts.sortBy)
+	}
+
 	repoPath := opts.repoPath
 	if repoPath == "" {
 		repoPath = "."
@@ -83,7 +91,18 @@ func runModules(cmd *cobra.Command, opts *options) error {
 		}
 		infos = append(infos, info)
 	}
-	sort.Slice(infos, func(i, j int) bool { return infos[i].Name < infos[j].Name })
+	switch sortBy {
+	case "size":
+		// Largest first; ties fall back to name so output stays deterministic.
+		sort.Slice(infos, func(i, j int) bool {
+			if infos[i].Total() != infos[j].Total() {
+				return infos[i].Total() > infos[j].Total()
+			}
+			return infos[i].Name < infos[j].Name
+		})
+	default:
+		sort.Slice(infos, func(i, j int) bool { return infos[i].Name < infos[j].Name })
+	}
 
 	return renderModulesText(cmd, infos)
 }
