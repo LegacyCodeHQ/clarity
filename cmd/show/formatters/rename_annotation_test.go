@@ -32,7 +32,7 @@ func TestRenameAnnotation(t *testing.T) {
 			name:    "move and rename change both",
 			oldPath: "/repo/parser/foo.go",
 			newPath: "/repo/parsers/bar.go",
-			want:    "(🚚✏️ parser/foo.go)",
+			want:    "(🚚 ✏️ parser/foo.go)",
 		},
 	}
 

@@ -303,7 +303,7 @@ func renameAnnotation(oldPath, newPath, basePath string) string {
 	case filepath.Base(oldRel) == filepath.Base(newRel):
 		return fmt.Sprintf("(🚚 %s/)", filepath.Dir(oldRel))
 	default:
-		return fmt.Sprintf("(🚚✏️ %s)", oldRel)
+		return fmt.Sprintf("(🚚 ✏️ %s)", oldRel)
 	}
 }
 
