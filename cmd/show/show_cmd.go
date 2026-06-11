@@ -49,6 +49,7 @@ type graphOptions struct {
 const (
 	scopeDownstream = "downstream"
 
+	moduleDirectionNone = "none"
 	moduleDirectionIn   = "in"
 	moduleDirectionOut  = "out"
 	moduleDirectionBoth = "both"
@@ -66,7 +67,7 @@ func NewCommand() *cobra.Command {
 		orientation:     formatters.DefaultDirection.StringLower(),
 		depthLevel:      1,
 		scope:           scopeDownstream,
-		moduleDirection: moduleDirectionBoth,
+		moduleDirection: moduleDirectionNone,
 	}
 
 	cmd := &cobra.Command{
@@ -118,10 +119,7 @@ func NewCommand() *cobra.Command {
 	cmd.Flags().StringSliceVar(&opts.alsoPatterns, "also", nil, "Include files matching glob patterns that connect to --file graph (requires --file)")
 	cmd.Flags().BoolVar(&opts.modules, "modules", false, "Collapse files into the modules declared in .clarity/modules.json (off by default)")
 	cmd.Flags().StringVar(&opts.moduleSelect, "module", "", "Render the named module's files inside a box, alongside any files already in scope such as working-set changes (quote names with spaces)")
-	cmd.Flags().StringVarP(&opts.moduleDirection, "direction", "d", opts.moduleDirection, "Module boundary direction (in, out, both) — not currently applied; reserved")
-	// Hidden until the boundary direction is actually implemented, so a released
-	// build does not advertise a no-op flag. The flag still parses and validates.
-	_ = cmd.Flags().MarkHidden("direction")
+	cmd.Flags().StringVarP(&opts.moduleDirection, "direction", "d", opts.moduleDirection, "With --module, also show the module's immediate dependents/dependencies as context: none (default), in, out, both")
 	cmd.Flags().BoolVar(&opts.edgeLabels, "label", false, "Add deterministic short labels to edges")
 	cmd.Flags().BoolVar(&opts.noStats, "no-stats", false, "Skip file addition/deletion statistics for faster rendering")
 	cmd.Flags().BoolVar(&opts.noPhantom, "no-phantom", false, "Suppress phantom test nodes (Rust files with #[cfg(test)] regions are rendered as a single node)")
@@ -201,7 +199,10 @@ func runGraph(cmd *cobra.Command, opts *graphOptions) error {
 		return err
 	}
 	// --module is a scope: the module's own files render (inside a box) alongside
-	// whatever else is in scope, so union them in before building the graph.
+	// whatever else is in scope. With -d, also bring in the module's immediate
+	// dependents/dependencies as context, which requires parsing the wider repo so
+	// they are discoverable; the graph is subset back down after it is built.
+	changeFiles := filePaths
 	var moduleMembers []string
 	if opts.moduleSelect != "" {
 		selected, selErr := findDeclaredModule(opts.moduleSelect, modules)
@@ -212,7 +213,15 @@ func runGraph(cmd *cobra.Command, opts *graphOptions) error {
 		if len(moduleMembers) == 0 {
 			return fmt.Errorf("module %q resolves to no files", opts.moduleSelect)
 		}
-		filePaths = unionPaths(filePaths, moduleMembers)
+		if opts.moduleDirection == moduleDirectionNone {
+			filePaths = unionPaths(filePaths, moduleMembers)
+		} else {
+			repoFiles, repoErr := expandPaths([]string{opts.repoPath}, false)
+			if repoErr != nil {
+				return fmt.Errorf("failed to expand repository for --direction: %w", repoErr)
+			}
+			filePaths = unionPaths(repoFiles, changeFiles)
+		}
 	}
 
 	graph, err := depgraph.BuildDependencyGraph(filePaths, contentReader)
@@ -282,12 +291,20 @@ func runGraph(cmd *cobra.Command, opts *graphOptions) error {
 	var moduleBoundary *moduleBoundaryResult
 	switch {
 	case opts.moduleSelect != "":
-		// Module scope: the module's members render inside a drawn box, alongside
-		// every file already in scope (e.g. the working-set changes). Nothing is
-		// filtered out — the box just frames the module within that wider view.
-		moduleBoundary = &moduleBoundaryResult{
-			Name:    opts.moduleSelect,
-			Members: membersInGraph(graph, moduleMembers),
+		if opts.moduleDirection == moduleDirectionNone {
+			// Just the module's members boxed, alongside every file already in
+			// scope (e.g. working-set changes). Nothing is filtered out.
+			moduleBoundary = &moduleBoundaryResult{
+				Name:    opts.moduleSelect,
+				Members: membersInGraph(graph, moduleMembers),
+			}
+		} else {
+			// Boundary view: subset the repo graph to the members, their
+			// immediate dependents/dependencies (per -d), and the changes.
+			graph, filePaths, moduleBoundary, err = selectModuleBoundary(graph, moduleMembers, changeFiles, opts.moduleSelect, opts.moduleDirection)
+			if err != nil {
+				return err
+			}
 		}
 	case len(modules) > 0:
 		graph, collapse, err = depgraph.CollapseModules(graph, modules)
@@ -496,12 +513,12 @@ func validateGraphOptions(opts *graphOptions) error {
 
 	moduleDirection := strings.ToLower(strings.TrimSpace(opts.moduleDirection))
 	switch moduleDirection {
-	case moduleDirectionIn, moduleDirectionOut, moduleDirectionBoth:
+	case moduleDirectionNone, moduleDirectionIn, moduleDirectionOut, moduleDirectionBoth:
 		opts.moduleDirection = moduleDirection
 	default:
-		return fmt.Errorf("unknown direction: %s (valid options: in, out, both)", opts.moduleDirection)
+		return fmt.Errorf("unknown direction: %s (valid options: none, in, out, both)", opts.moduleDirection)
 	}
-	if opts.moduleSelect == "" && opts.moduleDirection != moduleDirectionBoth {
+	if opts.moduleSelect == "" && opts.moduleDirection != moduleDirectionNone {
 		return fmt.Errorf("--direction requires --module")
 	}
 
@@ -1019,6 +1036,114 @@ func applyBetweenFilter(opts *graphOptions, pathResolver PathResolver, graph dep
 type moduleBoundaryResult struct {
 	Name    string
 	Members []string
+	// External are neighbor nodes drawn as pruned context. Neighbors that also
+	// changed are excluded so they keep their change styling (changed beats pruned).
+	External []string
+}
+
+// selectModuleBoundary subsets a repo-wide graph to the module's members, their
+// immediate dependents and/or dependencies (per direction), and the changes.
+// Members stay boxed; non-changed neighbors are returned as External so the
+// caller can style them as pruned context; every change is kept, related or not.
+func selectModuleBoundary(graph depgraph.DependencyGraph, members, changes []string, name, direction string) (depgraph.DependencyGraph, []string, *moduleBoundaryResult, error) {
+	adjacency, err := depgraph.AdjacencyList(graph)
+	if err != nil {
+		return nil, nil, nil, fmt.Errorf("failed to build adjacency list: %w", err)
+	}
+
+	memberSet := make(map[string]bool, len(members))
+	for _, f := range members {
+		if _, ok := adjacency[f]; ok {
+			memberSet[f] = true
+		}
+	}
+	if len(memberSet) == 0 {
+		return nil, nil, nil, fmt.Errorf("module %q has no files in the current scope", name)
+	}
+
+	includeIn := direction == moduleDirectionIn || direction == moduleDirectionBoth
+	includeOut := direction == moduleDirectionOut || direction == moduleDirectionBoth
+
+	neighborSet := make(map[string]bool)
+	if includeOut {
+		for member := range memberSet {
+			for _, dep := range adjacency[member] {
+				if !memberSet[dep] {
+					neighborSet[dep] = true
+				}
+			}
+		}
+	}
+	if includeIn {
+		for source, deps := range adjacency {
+			if memberSet[source] {
+				continue
+			}
+			for _, dep := range deps {
+				if memberSet[dep] {
+					neighborSet[source] = true
+					break
+				}
+			}
+		}
+	}
+
+	changeSet := make(map[string]bool, len(changes))
+	for _, c := range changes {
+		changeSet[c] = true
+	}
+
+	// Keep members, neighbors, and every change in the graph (even unrelated ones).
+	keep := make(map[string]bool, len(memberSet)+len(neighborSet)+len(changeSet))
+	for n := range memberSet {
+		keep[n] = true
+	}
+	for n := range neighborSet {
+		keep[n] = true
+	}
+	for c := range changeSet {
+		if _, ok := adjacency[c]; ok {
+			keep[c] = true
+		}
+	}
+
+	kept := make(map[string][]string, len(keep))
+	for node := range keep {
+		var deps []string
+		for _, dep := range adjacency[node] {
+			if keep[dep] {
+				deps = append(deps, dep)
+			}
+		}
+		kept[node] = deps
+	}
+	filtered, err := depgraph.NewDependencyGraphFromAdjacency(kept)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+
+	prune := make(map[string]bool, len(neighborSet))
+	for n := range neighborSet {
+		if !changeSet[n] {
+			prune[n] = true
+		}
+	}
+
+	return filtered, graphFiles(filtered), &moduleBoundaryResult{
+		Name:     name,
+		Members:  sortedSet(memberSet),
+		External: sortedSet(prune),
+	}, nil
+}
+
+// sortedSet returns a set's keys in sorted order for deterministic output.
+func sortedSet(set map[string]bool) []string {
+	out := make([]string, 0, len(set))
+	for k := range set {
+		out = append(out, k)
+	}
+	sort.Strings(out)
+	return out
 }
 
 // existingFiles keeps only paths that exist as regular files, dropping declared
@@ -1091,6 +1216,14 @@ func findDeclaredModule(name string, modules []depgraph.Module) (depgraph.Module
 func applyModuleBoundary(fg *depgraph.FileDependencyGraph, boundary *moduleBoundaryResult) {
 	if boundary == nil || len(boundary.Members) == 0 {
 		return
+	}
+	// Neighbor context renders as pruned (dashed) — but only the ones that did
+	// not change; changed neighbors are absent from External and keep their stats.
+	for _, ext := range boundary.External {
+		if md, ok := fg.Meta.Files[ext]; ok {
+			md.IsPruned = true
+			fg.Meta.Files[ext] = md
+		}
 	}
 	fg.Meta.ModuleCluster = &depgraph.ModuleCluster{
 		Name:    boundary.Name,

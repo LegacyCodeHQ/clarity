@@ -174,6 +174,77 @@ func TestShowCommand_ModuleSelectResolvesToNoFiles(t *testing.T) {
 	}
 }
 
+func seedCommittedJavaRepo(t *testing.T, modulesConfig string) string {
+	t.Helper()
+	repoDir, _ := writeJavaPair(t)
+	writeModulesConfig(t, repoDir, modulesConfig)
+	gitInitRepo(t, repoDir)
+	gitRun(t, repoDir, "add", ".")
+	gitRun(t, repoDir, "commit", "-m", "seed")
+	return repoDir
+}
+
+func TestShowCommand_ModuleSelectDirectionInShowsDependentsPruned(t *testing.T) {
+	repoDir := seedCommittedJavaRepo(t, `{
+  "modules": [ { "name": "support", "files": ["src/main/java/com/example/util/Helper.java"] } ]
+}`)
+
+	// App.java imports Helper (the module), so -d in surfaces it as a pruned
+	// dependent on a clean tree (it is context, not a change).
+	out := runShow(t, "-r", repoDir, "-f", "dot", "--module", "support", "-d", "in")
+	if !strings.Contains(out, "subgraph cluster") || !strings.Contains(out, "App.java") {
+		t.Fatalf("expected the box and the incoming dependent App.java:\n%s", out)
+	}
+	if !strings.Contains(out, "dashed") {
+		t.Fatalf("expected the dependent styled as pruned (dashed):\n%s", out)
+	}
+}
+
+func TestShowCommand_ModuleSelectDirectionOutShowsDependenciesPruned(t *testing.T) {
+	repoDir := seedCommittedJavaRepo(t, `{
+  "modules": [ { "name": "app", "files": ["src/main/java/com/example/App.java"] } ]
+}`)
+
+	// App imports Helper, so -d out surfaces Helper as a pruned dependency.
+	out := runShow(t, "-r", repoDir, "-f", "dot", "--module", "app", "-d", "out")
+	if !strings.Contains(out, "Helper.java") || !strings.Contains(out, "dashed") {
+		t.Fatalf("expected Helper.java as a pruned out-dependency:\n%s", out)
+	}
+}
+
+func TestShowCommand_ModuleSelectDefaultShowsNoNeighbors(t *testing.T) {
+	repoDir := seedCommittedJavaRepo(t, `{
+  "modules": [ { "name": "support", "files": ["src/main/java/com/example/util/Helper.java"] } ]
+}`)
+
+	// Default (none): just the module box, no dependents/dependencies, nothing pruned.
+	out := runShow(t, "-r", repoDir, "-f", "dot", "--module", "support")
+	if strings.Contains(out, "App.java") || strings.Contains(out, "dashed") {
+		t.Fatalf("expected no neighbors and nothing pruned by default:\n%s", out)
+	}
+}
+
+func TestShowCommand_ModuleSelectChangedNeighborKeepsChangeStyling(t *testing.T) {
+	repoDir := seedCommittedJavaRepo(t, `{
+  "modules": [ { "name": "support", "files": ["src/main/java/com/example/util/Helper.java"] } ]
+}`)
+	// Edit the dependent so it is both an incoming neighbor and a working-set change.
+	appPath := filepath.Join(repoDir, "src", "main", "java", "com", "example", "App.java")
+	edited := "package com.example;\n\nimport com.example.util.Helper;\n\npublic class App { /* edit */ }\n"
+	if err := os.WriteFile(appPath, []byte(edited), 0o644); err != nil {
+		t.Fatalf("os.WriteFile() error = %v", err)
+	}
+
+	out := runShow(t, "-r", repoDir, "-f", "dot", "--module", "support", "-d", "in")
+	if !strings.Contains(out, "App.java") {
+		t.Fatalf("expected the changed dependent App.java rendered:\n%s", out)
+	}
+	// Changed beats pruned: App is a neighbor but also changed, so nothing is pruned.
+	if strings.Contains(out, "dashed") {
+		t.Fatalf("expected a changed neighbor to keep change styling, not pruned:\n%s", out)
+	}
+}
+
 func TestShowCommand_ModuleDirectionRequiresModule(t *testing.T) {
 	repoDir, srcDir := writeJavaPair(t)
 	err := runShowErr(t, "-i", srcDir, "-r", repoDir, "-f", "dot", "-d", "in")
