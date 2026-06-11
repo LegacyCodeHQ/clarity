@@ -54,6 +54,9 @@ func TestModules_ListsDeclaredModulesText(t *testing.T) {
 	if !strings.Contains(out, "Module") || !strings.Contains(out, "Non-test") || !strings.Contains(out, "Total") {
 		t.Fatalf("expected the table header, got:\n%s", out)
 	}
+	if !strings.Contains(out, "─") {
+		t.Fatalf("expected a rule separating the header from the rows, got:\n%s", out)
+	}
 }
 
 func TestModules_SplitsTestFromNonTest(t *testing.T) {

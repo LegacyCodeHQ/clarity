@@ -117,8 +117,9 @@ func renderModulesText(cmd *cobra.Command, infos []moduleInfo) error {
 	}
 
 	header := fmt.Sprintf("%-*s  %*s  %*s  %*s", numW+2+nameW, "Module", nonW, "Non-test", testW, "Test", totalW, "Total")
+	rule := strings.Repeat("─", len([]rune(header)))
 	lines := make([]string, 0, len(infos)+3)
-	lines = append(lines, header, "")
+	lines = append(lines, header, rule)
 	for i, info := range infos {
 		row := fmt.Sprintf("%*d. %-*s  %*d  %*d  %*d", numW, i+1, nameW, info.Name, nonW, info.NonTest, testW, info.Test, totalW, info.Total())
 		lines = append(lines, row)
