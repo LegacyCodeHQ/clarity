@@ -4,16 +4,22 @@ import (
 	"fmt"
 	"path/filepath"
 	"sort"
-	"text/tabwriter"
+	"strconv"
+	"strings"
 
 	"github.com/LegacyCodeHQ/clarity/clarityconfig"
+	"github.com/LegacyCodeHQ/clarity/depgraph/registry"
+	"github.com/LegacyCodeHQ/clarity/vcs"
 	"github.com/spf13/cobra"
 )
 
 type moduleInfo struct {
-	Name      string
-	FileCount int
+	Name    string
+	NonTest int
+	Test    int
 }
+
+func (m moduleInfo) Total() int { return m.NonTest + m.Test }
 
 type options struct {
 	repoPath string
@@ -31,9 +37,9 @@ func NewCommand() *cobra.Command {
 		Short: "List the modules declared for this project",
 		Long: `List the modules declared in .clarity/modules.json.
 
-Each module reports the number of files it resolves to after expanding globs, so
-empty or mistyped patterns surface as a count of 0. Pass a listed name to
-"clarity show --module <name>" to render that module and its boundary.
+Each module reports the files it resolves to after expanding globs, split into
+test and non-test files (mistyped patterns surface as a count of 0). Pass a
+listed name to "clarity show --module <name>" to render that module.
 
 Examples:
   clarity modules
@@ -62,12 +68,20 @@ func runModules(cmd *cobra.Command, opts *options) error {
 		return err
 	}
 
+	// Test vs non-test is computed live with the same detector the graph uses,
+	// rather than stored — nothing in .clarity/modules.json records it.
+	reader := vcs.FilesystemContentReader()
 	infos := make([]moduleInfo, 0, len(modules))
 	for _, m := range modules {
-		infos = append(infos, moduleInfo{
-			Name:      m.Name,
-			FileCount: len(m.Files),
-		})
+		info := moduleInfo{Name: m.Name}
+		for _, file := range m.Files {
+			if registry.IsTestFile(file, reader) {
+				info.Test++
+			} else {
+				info.NonTest++
+			}
+		}
+		infos = append(infos, info)
 	}
 	sort.Slice(infos, func(i, j int) bool { return infos[i].Name < infos[j].Name })
 
@@ -75,19 +89,43 @@ func runModules(cmd *cobra.Command, opts *options) error {
 }
 
 func renderModulesText(cmd *cobra.Command, infos []moduleInfo) error {
+	out := cmd.OutOrStdout()
 	if len(infos) == 0 {
-		_, err := fmt.Fprintln(cmd.OutOrStdout(), "No modules declared (.clarity/modules.json not found or empty).")
+		_, err := fmt.Fprintln(out, "No modules declared (.clarity/modules.json not found or empty).")
 		return err
 	}
 
-	writer := tabwriter.NewWriter(cmd.OutOrStdout(), 0, 0, 2, ' ', 0)
-	if _, err := fmt.Fprintln(writer, "MODULE\tFILES"); err != nil {
-		return err
-	}
+	numW := len(strconv.Itoa(len(infos)))
+	nameW := len("Module")
+	nonW, testW, totalW := len("Non-test"), len("Test"), len("Total")
+	var sumNon, sumTest int
 	for _, info := range infos {
-		if _, err := fmt.Fprintf(writer, "%s\t%d\n", info.Name, info.FileCount); err != nil {
-			return err
+		sumNon += info.NonTest
+		sumTest += info.Test
+		if l := len(info.Name); l > nameW {
+			nameW = l
+		}
+		if l := len(strconv.Itoa(info.NonTest)); l > nonW {
+			nonW = l
+		}
+		if l := len(strconv.Itoa(info.Test)); l > testW {
+			testW = l
+		}
+		if l := len(strconv.Itoa(info.Total())); l > totalW {
+			totalW = l
 		}
 	}
-	return writer.Flush()
+
+	header := fmt.Sprintf("%-*s  %*s  %*s  %*s", numW+2+nameW, "Module", nonW, "Non-test", testW, "Test", totalW, "Total")
+	lines := make([]string, 0, len(infos)+3)
+	lines = append(lines, header, "")
+	for i, info := range infos {
+		row := fmt.Sprintf("%*d. %-*s  %*d  %*d  %*d", numW, i+1, nameW, info.Name, nonW, info.NonTest, testW, info.Test, totalW, info.Total())
+		lines = append(lines, row)
+	}
+	footer := fmt.Sprintf("%d modules · %d non-test · %d test · %d files", len(infos), sumNon, sumTest, sumNon+sumTest)
+	lines = append(lines, "", footer)
+
+	_, err := fmt.Fprintln(out, strings.Join(lines, "\n"))
+	return err
 }
