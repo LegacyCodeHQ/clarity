@@ -91,7 +91,7 @@ test-web:
 
 # Update golden test fixtures (only packages using goldie)
 test-update-golden:
-	go test ./tests/litmus/... ./tests/integration/graph/... ./tests/languagespecs/java/tests/... ./cmd/graph/formatters/dot/... ./cmd/graph/formatters/mermaid/... -args -update
+	go test ./tests/litmus/... ./tests/integration/graph/... ./tests/languagespecs/java/tests/... ./cmd/show/formatters/... -args -update
 
 # Run tests with coverage percentage (excludes cmd packages which have no tests)
 test-coverage:
