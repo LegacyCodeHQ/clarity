@@ -10,11 +10,11 @@ digraph dependencies {
   ".gitattributes" [label=".gitattributes\n+3 -3", style=filled, fillcolor=lightyellow];
   "docs/development/language-parsing.md" [label="language-parsing.md\n+11 -7", style=filled, fillcolor=lightpink];
   "parsers/dart/dart_parser.go" [label="dart_parser.go\n+3 -3", style=filled, fillcolor=white];
-  "tree_sitter_external/dart/binding.go" [label="binding.go\n+1 -1\n🚚 moved from tree_sitter_dart/", style=filled, fillcolor=white];
-  "tree_sitter_external/dart/binding_test.go" [label="binding_test.go\n+3 -3\n🚚 moved from tree_sitter_dart/", style=filled, fillcolor=lightgreen];
-  "tree_sitter_external/dart/parser.c" [label="parser.c\n🚚 moved from tree_sitter_dart/", style=filled, fillcolor=lightblue];
-  "tree_sitter_external/dart/parser.h" [label="parser.h\n🚚 moved from tree_sitter_dart/", style=filled, fillcolor=lightsalmon];
-  "tree_sitter_external/dart/scanner.c" [label="scanner.c\n🚚 moved from tree_sitter_dart/", style=filled, fillcolor=lightblue];
+  "tree_sitter_external/dart/binding.go" [label="binding.go\n+1 -1\n(🚚 tree_sitter_dart/)", style=filled, fillcolor=white];
+  "tree_sitter_external/dart/binding_test.go" [label="binding_test.go\n+3 -3\n(🚚 tree_sitter_dart/)", style=filled, fillcolor=lightgreen];
+  "tree_sitter_external/dart/parser.c" [label="parser.c\n(🚚 tree_sitter_dart/)", style=filled, fillcolor=lightblue];
+  "tree_sitter_external/dart/parser.h" [label="parser.h\n(🚚 tree_sitter_dart/)", style=filled, fillcolor=lightsalmon];
+  "tree_sitter_external/dart/scanner.c" [label="scanner.c\n(🚚 tree_sitter_dart/)", style=filled, fillcolor=lightblue];
 
   "parsers/dart/dart_parser.go" -> "tree_sitter_external/dart/binding.go";
   "tree_sitter_external/dart/binding.go" -> "tree_sitter_external/dart/parser.c";

@@ -14,25 +14,25 @@ func TestRenameAnnotation(t *testing.T) {
 			name:    "rename keeps directory, changes basename",
 			oldPath: "/repo/cmd/graph_cmd.go",
 			newPath: "/repo/cmd/show_cmd.go",
-			want:    "✏️ renamed from graph_cmd.go",
+			want:    "(✏️ graph_cmd.go)",
 		},
 		{
 			name:    "rename at repo root",
 			oldPath: "/repo/usage_clarity.md",
 			newPath: "/repo/usage-clarity.md",
-			want:    "✏️ renamed from usage_clarity.md",
+			want:    "(✏️ usage_clarity.md)",
 		},
 		{
 			name:    "move keeps basename, changes directory",
 			oldPath: "/repo/tree_sitter_external/dart/binding.go",
 			newPath: "/repo/internal/tree_sitter/dart/binding.go",
-			want:    "🚚 moved from tree_sitter_external/dart/",
+			want:    "(🚚 tree_sitter_external/dart/)",
 		},
 		{
 			name:    "move and rename change both",
 			oldPath: "/repo/parser/foo.go",
 			newPath: "/repo/parsers/bar.go",
-			want:    "🚚✏️ moved & renamed from parser/foo.go",
+			want:    "(🚚✏️ parser/foo.go)",
 		},
 	}
 

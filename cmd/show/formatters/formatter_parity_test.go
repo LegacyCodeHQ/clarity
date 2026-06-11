@@ -95,9 +95,9 @@ func TestFormatterParity_RenameAnnotation(t *testing.T) {
 	require.NoError(t, err)
 
 	for _, want := range []string{
-		"✏️ renamed from graph_cmd.go",
-		"🚚 moved from external/",
-		"🚚✏️ moved & renamed from parser/foo.go",
+		"(✏️ graph_cmd.go)",
+		"(🚚 external/)",
+		"(🚚✏️ parser/foo.go)",
 	} {
 		require.Containsf(t, dot, want, "DOT missing %q", want)
 		require.Containsf(t, mermaid, want, "Mermaid missing %q", want)

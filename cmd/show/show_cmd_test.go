@@ -270,7 +270,7 @@ func TestGraphCommit_RendersRenameAsSingleNode(t *testing.T) {
 	// A rename collapses to a single new-path node annotated with its origin —
 	// no separate old node, no rename edge, no deletion marker.
 	output := stdout.String()
-	if !strings.Contains(output, "✏️ renamed from old.ts") {
+	if !strings.Contains(output, "(✏️ old.ts)") {
 		t.Fatalf("expected new.ts annotated as renamed from old.ts, got:\n%s", output)
 	}
 	if strings.Contains(output, `"old.ts"`) {
