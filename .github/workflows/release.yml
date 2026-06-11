@@ -40,16 +40,22 @@ jobs:
           npm ci
           npm run build
 
+      # Cache the apt packages so they restore instead of re-downloading each run.
+      # Cross-compilers for the Windows and Linux-arm64 targets.
       - name: Install cross-compilation toolchains
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y gcc-mingw-w64-x86-64 gcc-aarch64-linux-gnu
+        uses: awalsh128/cache-apt-pkgs-action@v1
+        with:
+          packages: gcc-mingw-w64-x86-64 gcc-aarch64-linux-gnu
+          version: 1.0
 
-      # Runtime libs the cross clang links against — needed whether or not the
-      # toolchain itself was rebuilt, so install them unconditionally (cheap).
+      # Build tools + the runtime libs the OSXCross clang links against. Installed
+      # unconditionally (restored from cache) since they are needed on a cache hit
+      # to use the toolchain and on a miss to build it.
       - name: Install OSXCross dependencies
-        run: |
-          sudo apt-get install -y clang llvm-dev libxml2-dev uuid-dev libssl-dev bash patch make tar xz-utils bzip2 gzip sed cpio libbz2-dev
+        uses: awalsh128/cache-apt-pkgs-action@v1
+        with:
+          packages: clang llvm-dev libxml2-dev uuid-dev libssl-dev bash patch make tar xz-utils bzip2 gzip sed cpio libbz2-dev
+          version: 1.0
 
       # The built toolchain (clang wrappers + cctools/ld64 + the extracted SDK)
       # is identical run-to-run, so cache it on the pinned OSXCross ref + SDK.
