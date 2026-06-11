@@ -118,6 +118,73 @@ func GetUncommittedRenames(repoPath string) (map[string]string, error) {
 	return renames, nil
 }
 
+// GetCommitRenames returns git's own rename detection for a single commit (old
+// path -> new path, absolute), mirroring `git diff -M`. Old content lives in the
+// commit's first parent.
+func GetCommitRenames(repoPath, commitID string) (map[string]string, error) {
+	if !isGitRepository(repoPath) {
+		return nil, fmt.Errorf("%s is not a git repository (use 'git init' to initialize)", repoPath)
+	}
+	if err := validateCommit(repoPath, commitID); err != nil {
+		return nil, err
+	}
+	repoRoot, err := GetRepositoryRoot(repoPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get repository root: %w", err)
+	}
+
+	stdout, stderr, err := runGitCommand(repoPath, "diff-tree", "-M", "--no-commit-id", "-r", "--root", "--diff-filter=R", "--name-status", commitID)
+	if err != nil {
+		return nil, gitCommandError(err, stderr)
+	}
+	return parseRenameNameStatus(stdout, repoRoot), nil
+}
+
+// GetCommitRangeRenames returns git's rename detection between two commits.
+func GetCommitRangeRenames(repoPath, fromCommit, toCommit string) (map[string]string, error) {
+	if !isGitRepository(repoPath) {
+		return nil, fmt.Errorf("%s is not a git repository (use 'git init' to initialize)", repoPath)
+	}
+	if err := validateCommit(repoPath, fromCommit); err != nil {
+		return nil, err
+	}
+	if err := validateCommit(repoPath, toCommit); err != nil {
+		return nil, err
+	}
+	repoRoot, err := GetRepositoryRoot(repoPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get repository root: %w", err)
+	}
+
+	stdout, stderr, err := runGitCommand(repoPath, "diff", "-M", "--diff-filter=R", "--name-status", fromCommit, toCommit)
+	if err != nil {
+		return nil, gitCommandError(err, stderr)
+	}
+	return parseRenameNameStatus(stdout, repoRoot), nil
+}
+
+// parseRenameNameStatus parses `--name-status` rename rows ("R<score>\told\tnew")
+// into an absolute old->new map, or nil when there are none.
+func parseRenameNameStatus(stdout []byte, repoRoot string) map[string]string {
+	renames := make(map[string]string)
+	for _, line := range strings.Split(string(stdout), "\n") {
+		if line == "" || line[0] != 'R' {
+			continue
+		}
+		fields := strings.Split(line, "\t")
+		if len(fields) != 3 {
+			continue
+		}
+		oldPath := filepath.Join(repoRoot, strings.TrimSpace(fields[1]))
+		newPath := filepath.Join(repoRoot, strings.TrimSpace(fields[2]))
+		renames[oldPath] = newPath
+	}
+	if len(renames) == 0 {
+		return nil
+	}
+	return renames
+}
+
 // getUncommittedFiles returns a list of all uncommitted files (relative to repo root)
 func getUncommittedFiles(repoPath string) ([]string, error) {
 	stdout, stderr, err := runGitCommand(repoPath, "status", "--porcelain", "--untracked-files=all")

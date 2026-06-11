@@ -198,10 +198,13 @@ func runGraph(cmd *cobra.Command, opts *graphOptions) error {
 		return fmt.Errorf("failed to build dependency graph: %w", err)
 	}
 
-	// A rename surfaces as an old path deleted + a new path added with identical
-	// content. Detect those and collapse the move onto the single new-path node,
-	// leaving only genuine removals marked as deletions.
-	renames := depgraph.DetectRenames(deletedFiles, deletedContent, filePaths, contentReader)
+	// Use git's own rename detection (`git diff -M`) and collapse each move onto
+	// the single new-path node, leaving only genuine removals marked as deletions.
+	// Reflecting git keeps the graph honest to what the developer sees in git.
+	renames, err := collectCommitRenames(opts, fromCommit, toCommit, isCommitRange)
+	if err != nil {
+		return err
+	}
 	graph, err = depgraph.CollapseRenames(graph, renames)
 	if err != nil {
 		return err
@@ -738,6 +741,19 @@ func collectCommitDeletedFiles(opts *graphOptions, fromCommit, toCommit string, 
 	}
 	paths, err = git.GetCommitDeletedFiles(opts.repoPath, toCommit)
 	return paths, parent, err
+}
+
+// collectCommitRenames returns git's own rename detection (old path -> new path,
+// absolute) for the commit or range, mirroring `git diff -M`. It is empty
+// outside a plain commit view, where there are no deleted files to pair.
+func collectCommitRenames(opts *graphOptions, fromCommit, toCommit string, isCommitRange bool) (map[string]string, error) {
+	if !isPlainCommitView(opts) {
+		return nil, nil
+	}
+	if isCommitRange {
+		return git.GetCommitRangeRenames(opts.repoPath, fromCommit, toCommit)
+	}
+	return git.GetCommitRenames(opts.repoPath, toCommit)
 }
 
 // loadDeletedFileContent reads each deleted file's content from baseRef so the

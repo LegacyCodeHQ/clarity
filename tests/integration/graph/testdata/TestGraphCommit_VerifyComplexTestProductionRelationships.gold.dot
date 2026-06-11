@@ -1,36 +1,22 @@
 digraph dependencies {
   rankdir=LR;
   node [shape=box];
-  label="clarity • 051a1b8 • 8 files • 7 deleted";
+  label="clarity • 051a1b8 • 8 files";
   labelloc=t;
   labeljust=l;
   fontsize=10;
   fontname=Courier;
 
   "cmd/graph.go" [label="graph.go\n+2 -2", style=filled, fillcolor=white];
-  "parser/dart_parser.go" [label="parser/dart_parser.go\n(deleted)", style="filled,dashed", fillcolor="#ffe6e6", color="#cc3333", fontcolor="#7a0000"];
-  "parser/dart_parser_test.go" [label="parser/dart_parser_test.go\n(deleted)", style="filled,dashed", fillcolor="#ffe6e6", color="#cc3333", fontcolor="#7a0000"];
-  "parser/dependency_graph.go" [label="parser/dependency_graph.go\n(deleted)", style="filled,dashed", fillcolor="#ffe6e6", color="#cc3333", fontcolor="#7a0000"];
-  "parser/dependency_graph_test.go" [label="parser/dependency_graph_test.go\n(deleted)", style="filled,dashed", fillcolor="#ffe6e6", color="#cc3333", fontcolor="#7a0000"];
-  "parser/go_parser.go" [label="parser/go_parser.go\n(deleted)", style="filled,dashed", fillcolor="#ffe6e6", color="#cc3333", fontcolor="#7a0000"];
-  "parser/go_parser_test.go" [label="parser/go_parser_test.go\n(deleted)", style="filled,dashed", fillcolor="#ffe6e6", color="#cc3333", fontcolor="#7a0000"];
-  "parser/go_symbols.go" [label="parser/go_symbols.go\n(deleted)", style="filled,dashed", fillcolor="#ffe6e6", color="#cc3333", fontcolor="#7a0000"];
-  "parsers/dart_parser.go" [label="parsers/dart_parser.go\n+1 -1", style=filled, fillcolor=white];
-  "parsers/dart_parser_test.go" [label="parsers/dart_parser_test.go\n+1 -1", style=filled, fillcolor=lightgreen];
-  "parsers/dependency_graph.go" [label="parsers/dependency_graph.go\n+1 -1", style=filled, fillcolor=white];
-  "parsers/dependency_graph_test.go" [label="parsers/dependency_graph_test.go\n+1 -1", style=filled, fillcolor=lightgreen];
-  "parsers/go_parser.go" [label="parsers/go_parser.go\n+2 -2", style=filled, fillcolor=white];
-  "parsers/go_parser_test.go" [label="parsers/go_parser_test.go\n+5 -5", style=filled, fillcolor=lightgreen];
-  "parsers/go_symbols.go" [label="parsers/go_symbols.go\n+1 -1", style=filled, fillcolor=white];
+  "parsers/dart_parser.go" [label="dart_parser.go\n+1 -1\n(renamed from dart_parser.go)", style=filled, fillcolor=white];
+  "parsers/dart_parser_test.go" [label="dart_parser_test.go\n+1 -1\n(renamed from dart_parser_test.go)", style=filled, fillcolor=lightgreen];
+  "parsers/dependency_graph.go" [label="dependency_graph.go\n+1 -1\n(renamed from dependency_graph.go)", style=filled, fillcolor=white];
+  "parsers/dependency_graph_test.go" [label="dependency_graph_test.go\n+1 -1\n(renamed from dependency_graph_test.go)", style=filled, fillcolor=lightgreen];
+  "parsers/go_parser.go" [label="go_parser.go\n+1 -1\n(renamed from go_parser.go)", style=filled, fillcolor=white];
+  "parsers/go_parser_test.go" [label="go_parser_test.go\n+5 -5\n(renamed from go_parser_test.go)", style=filled, fillcolor=lightgreen];
+  "parsers/go_symbols.go" [label="go_symbols.go\n+1 -1\n(renamed from go_symbols.go)", style=filled, fillcolor=white];
 
-  "cmd/graph.go" -> "parser/dependency_graph.go" [color="#cc3333", style=dashed, fontcolor="#7a0000"];
   "cmd/graph.go" -> "parsers/dependency_graph.go";
-  "parser/dart_parser_test.go" -> "parser/dart_parser.go" [color="#cc3333", style=dashed, fontcolor="#7a0000"];
-  "parser/dependency_graph.go" -> "parser/dart_parser.go" [color="#cc3333", style=dashed, fontcolor="#7a0000"];
-  "parser/dependency_graph.go" -> "parser/go_parser.go" [color="#cc3333", style=dashed, fontcolor="#7a0000"];
-  "parser/dependency_graph.go" -> "parser/go_symbols.go" [color="#cc3333", style=dashed, fontcolor="#7a0000"];
-  "parser/dependency_graph_test.go" -> "parser/dependency_graph.go" [color="#cc3333", style=dashed, fontcolor="#7a0000"];
-  "parser/go_parser_test.go" -> "parser/go_parser.go" [color="#cc3333", style=dashed, fontcolor="#7a0000"];
   "parsers/dart_parser_test.go" -> "parsers/dart_parser.go";
   "parsers/dependency_graph.go" -> "parsers/dart_parser.go";
   "parsers/dependency_graph.go" -> "parsers/go_parser.go";

@@ -694,10 +694,11 @@ func TestBuildGraph_DeletedIsolatedFileStillRendered(t *testing.T) {
 	assert.Contains(t, dot, "(deleted)")
 }
 
-func TestBuildGraph_RenameRendersAsSingleNode(t *testing.T) {
-	// A rename is one file that moved. Collapse it onto the new path, annotated
-	// "renamed from <old>" — no separate old node, no rename edge, no seedling,
-	// and not a plain deletion. Staged and unstaged must render identically.
+func TestBuildGraph_RenameReflectsGitState(t *testing.T) {
+	// Mirror git rather than guessing. An unstaged move is a deletion plus an
+	// untracked add — git has not called it a rename, so render delete + create.
+	// Staging makes git report a rename (status R), so collapse it onto a single
+	// "renamed from <old>" node.
 	seed := func(t *testing.T) (dir, oldPath, newPath string) {
 		t.Helper()
 		dir = t.TempDir()
@@ -711,33 +712,30 @@ func TestBuildGraph_RenameRendersAsSingleNode(t *testing.T) {
 		return dir, oldPath, newPath
 	}
 
-	assertCollapsed := func(t *testing.T, dot string) {
-		t.Helper()
-		assert.Contains(t, dot, "ScatterPlot.ts")
-		assert.Contains(t, dot, "(renamed from chart.ts)")
-		// No separate old node, no rename edge, no seedling, no deletion marker.
-		assert.NotContains(t, dot, "(renamed)")
-		assert.NotContains(t, dot, `"chart.ts" -> "ScatterPlot.ts"`)
-		assert.NotContains(t, dot, "(deleted)")
-		assert.NotContains(t, dot, "🪴")
-	}
-
 	formatter, err := formatters.NewFormatter("dot")
 	require.NoError(t, err)
 
-	t.Run("unstaged", func(t *testing.T) {
+	t.Run("unstaged renders as delete plus create", func(t *testing.T) {
 		dir, _, _ := seed(t)
 		dot, err := buildGraph(dir, &watchOptions{}, formatter)
 		require.NoError(t, err)
-		assertCollapsed(t, dot)
+		// git sees a deletion and an untracked add — show both, not a rename.
+		assert.Contains(t, dot, "chart.ts")
+		assert.Contains(t, dot, "(deleted)")
+		assert.Contains(t, dot, "ScatterPlot.ts")
+		assert.NotContains(t, dot, "renamed from")
+		assert.NotContains(t, dot, "(renamed)")
 	})
 
-	t.Run("staged", func(t *testing.T) {
+	t.Run("staged collapses to a renamed node", func(t *testing.T) {
 		dir, _, _ := seed(t)
 		runGit(t, dir, "add", "-A") // git now reports a rename (status R)
 		dot, err := buildGraph(dir, &watchOptions{}, formatter)
 		require.NoError(t, err)
-		assertCollapsed(t, dot)
+		assert.Contains(t, dot, "ScatterPlot.ts")
+		assert.Contains(t, dot, "(renamed from chart.ts)")
+		assert.NotContains(t, dot, "(deleted)")
+		assert.NotContains(t, dot, `"chart.ts" -> "ScatterPlot.ts"`)
 	})
 }
 
@@ -823,9 +821,9 @@ func TestWatchAndRebuild_DetectsFileRename(t *testing.T) {
 	snap, _ := latestSnapshot(b)
 	require.Contains(t, snap, "consumer.ts", "watcher never published initial graph")
 
-	// Rename the importee. Update the importer to point at the new name so the
-	// edge stays valid. Both ops mirror what `git mv` + a re-import would do
-	// in real editor flow.
+	// Rename the importee (unstaged) and update the importer to point at the new
+	// name, mirroring an editor rename before staging. Git sees this as a deletion
+	// plus an untracked add, not a rename, until it is staged.
 	renamedPath := filepath.Join(dir, "ScatterPlot.ts")
 	require.NoError(t, os.Rename(originalPath, renamedPath))
 	require.NoError(t, os.WriteFile(consumerPath, []byte("import './ScatterPlot';\n"), 0o644))
@@ -842,11 +840,10 @@ func TestWatchAndRebuild_DetectsFileRename(t *testing.T) {
 	snap, ok := latestSnapshot(b)
 	require.True(t, ok, "no graph published after rename")
 	assert.Contains(t, snap, "ScatterPlot.ts", "post-rename graph missing new file name")
-	// The rename collapses onto the new path, annotated with its origin — no
-	// separate old node, no rename edge, no deletion marker.
-	assert.Contains(t, snap, "(renamed from chart.ts)", "rename not annotated on the new node")
-	assert.NotContains(t, snap, `"chart.ts" [`, "rename source should not be a separate node")
-	assert.NotContains(t, snap, `"chart.ts" -> "ScatterPlot.ts"`, "rename should not draw an old->new edge")
+	// Unstaged: git reports a deletion plus an untracked add, not a rename, so the
+	// graph shows both faithfully rather than guessing a rename.
+	assert.Contains(t, snap, "(deleted)", "old path should render as deleted while unstaged")
+	assert.NotContains(t, snap, "(renamed from", "an unstaged move must not be reported as a rename")
 }
 
 // TestWatchAndRebuild_DebounceFiresOnEverySaveCycle reproduces a watcher bug

@@ -32,11 +32,11 @@ func buildGraph(repoPath string, opts *watchOptions, formatter formatters.Format
 	if err != nil {
 		return "", err
 	}
-	// Staged renames are reported by git as status R: it has already matched old
-	// to new (including renames with edits, which a content hash would miss).
-	// Unstaged renames surface as a deletion + an untracked add and are matched
-	// by content below. Both feed the same collapse so staging never changes the
-	// rendering.
+	// Reflect git's own rename detection. A staged rename is reported as status R
+	// (git has matched old to new, edits included), so we collapse it onto the new
+	// path. An unstaged move is a deletion plus an untracked add — git has not
+	// called it a rename, so neither do we; it stays delete + create. This keeps
+	// the graph honest to `git status` instead of guessing via content hashes.
 	gitRenames, err := git.GetUncommittedRenames(repoPath)
 	if err != nil {
 		return "", fmt.Errorf("failed to get renamed uncommitted files: %w", err)
@@ -70,16 +70,9 @@ func buildGraph(repoPath string, opts *watchOptions, formatter formatters.Format
 		return "", fmt.Errorf("failed to build dependency graph: %w", err)
 	}
 
-	// A rename is one file that moved. Detect it (content hash for unstaged,
-	// git's own R status for staged), then collapse it onto a single new-path
-	// node and drop the old node. Pure deletions stay visible.
-	renames := depgraph.DetectRenames(deletedFiles, deletedContent, filePaths, contentReader)
-	if renames == nil && len(gitRenames) > 0 {
-		renames = make(map[string]string, len(gitRenames))
-	}
-	for oldPath, newPath := range gitRenames {
-		renames[oldPath] = newPath
-	}
+	// Collapse git's staged renames onto a single new-path node, dropping the old
+	// node. Unstaged moves are not in this map, so they stay delete + create.
+	renames := gitRenames
 	graph, err = depgraph.CollapseRenames(graph, renames)
 	if err != nil {
 		return "", err
