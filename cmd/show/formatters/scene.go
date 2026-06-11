@@ -291,18 +291,18 @@ func nodeLabelLines(g depgraph.FileDependencyGraph, name, source, basePath strin
 
 // renameAnnotation describes a path change the way a developer thinks of it,
 // from the old and new paths git reported: changing only the basename is a
-// rename, changing only the directory is a move, and changing both is a move +
-// rename. Paths are shown relative to basePath, matching the node names.
+// rename (✏️), changing only the directory is a move (🚚), and changing both is
+// a move + rename. Paths are shown relative to basePath, matching the node names.
 func renameAnnotation(oldPath, newPath, basePath string) string {
 	oldRel := nodeKey(oldPath, basePath)
 	newRel := nodeKey(newPath, basePath)
 	switch {
 	case filepath.Dir(oldRel) == filepath.Dir(newRel):
-		return fmt.Sprintf("(renamed from %s)", filepath.Base(oldRel))
+		return fmt.Sprintf("✏️ renamed from %s", filepath.Base(oldRel))
 	case filepath.Base(oldRel) == filepath.Base(newRel):
-		return fmt.Sprintf("(moved from %s/)", filepath.Dir(oldRel))
+		return fmt.Sprintf("🚚 moved from %s/", filepath.Dir(oldRel))
 	default:
-		return fmt.Sprintf("(moved & renamed from %s)", oldRel)
+		return fmt.Sprintf("🚚✏️ moved & renamed from %s", oldRel)
 	}
 }
 

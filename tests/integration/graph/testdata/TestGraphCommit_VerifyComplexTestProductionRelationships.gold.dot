@@ -8,13 +8,13 @@ digraph dependencies {
   fontname=Courier;
 
   "cmd/graph.go" [label="graph.go\n+2 -2", style=filled, fillcolor=white];
-  "parsers/dart_parser.go" [label="dart_parser.go\n+1 -1\n(moved from parser/)", style=filled, fillcolor=white];
-  "parsers/dart_parser_test.go" [label="dart_parser_test.go\n+1 -1\n(moved from parser/)", style=filled, fillcolor=lightgreen];
-  "parsers/dependency_graph.go" [label="dependency_graph.go\n+1 -1\n(moved from parser/)", style=filled, fillcolor=white];
-  "parsers/dependency_graph_test.go" [label="dependency_graph_test.go\n+1 -1\n(moved from parser/)", style=filled, fillcolor=lightgreen];
-  "parsers/go_parser.go" [label="go_parser.go\n+1 -1\n(moved from parser/)", style=filled, fillcolor=white];
-  "parsers/go_parser_test.go" [label="go_parser_test.go\n+5 -5\n(moved from parser/)", style=filled, fillcolor=lightgreen];
-  "parsers/go_symbols.go" [label="go_symbols.go\n+1 -1\n(moved from parser/)", style=filled, fillcolor=white];
+  "parsers/dart_parser.go" [label="dart_parser.go\n+1 -1\n🚚 moved from parser/", style=filled, fillcolor=white];
+  "parsers/dart_parser_test.go" [label="dart_parser_test.go\n+1 -1\n🚚 moved from parser/", style=filled, fillcolor=lightgreen];
+  "parsers/dependency_graph.go" [label="dependency_graph.go\n+1 -1\n🚚 moved from parser/", style=filled, fillcolor=white];
+  "parsers/dependency_graph_test.go" [label="dependency_graph_test.go\n+1 -1\n🚚 moved from parser/", style=filled, fillcolor=lightgreen];
+  "parsers/go_parser.go" [label="go_parser.go\n+1 -1\n🚚 moved from parser/", style=filled, fillcolor=white];
+  "parsers/go_parser_test.go" [label="go_parser_test.go\n+5 -5\n🚚 moved from parser/", style=filled, fillcolor=lightgreen];
+  "parsers/go_symbols.go" [label="go_symbols.go\n+1 -1\n🚚 moved from parser/", style=filled, fillcolor=white];
 
   "cmd/graph.go" -> "parsers/dependency_graph.go";
   "parsers/dart_parser_test.go" -> "parsers/dart_parser.go";

@@ -733,7 +733,7 @@ func TestBuildGraph_RenameReflectsGitState(t *testing.T) {
 		dot, err := buildGraph(dir, &watchOptions{}, formatter)
 		require.NoError(t, err)
 		assert.Contains(t, dot, "ScatterPlot.ts")
-		assert.Contains(t, dot, "(renamed from chart.ts)")
+		assert.Contains(t, dot, "✏️ renamed from chart.ts")
 		assert.NotContains(t, dot, "(deleted)")
 		assert.NotContains(t, dot, `"chart.ts" -> "ScatterPlot.ts"`)
 	})
@@ -843,7 +843,7 @@ func TestWatchAndRebuild_DetectsFileRename(t *testing.T) {
 	// Unstaged: git reports a deletion plus an untracked add, not a rename, so the
 	// graph shows both faithfully rather than guessing a rename.
 	assert.Contains(t, snap, "(deleted)", "old path should render as deleted while unstaged")
-	assert.NotContains(t, snap, "(renamed from", "an unstaged move must not be reported as a rename")
+	assert.NotContains(t, snap, "renamed from", "an unstaged move must not be reported as a rename")
 }
 
 // TestWatchAndRebuild_DebounceFiresOnEverySaveCycle reproduces a watcher bug
