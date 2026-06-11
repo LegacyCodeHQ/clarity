@@ -1,11 +1,9 @@
 package modules
 
 import (
-	"encoding/json"
 	"fmt"
 	"path/filepath"
 	"sort"
-	"strings"
 	"text/tabwriter"
 
 	"github.com/LegacyCodeHQ/clarity/clarityconfig"
@@ -13,18 +11,12 @@ import (
 )
 
 type moduleInfo struct {
-	Name      string   `json:"name"`
-	FileCount int      `json:"file_count"`
-	Files     []string `json:"files"`
-}
-
-type modulesOutput struct {
-	Modules []moduleInfo `json:"modules"`
+	Name      string
+	FileCount int
 }
 
 type options struct {
 	repoPath string
-	format   string
 }
 
 // Cmd represents the modules command.
@@ -32,9 +24,7 @@ var Cmd = NewCommand()
 
 // NewCommand returns a new modules command instance.
 func NewCommand() *cobra.Command {
-	opts := &options{
-		format: "text",
-	}
+	opts := &options{}
 
 	cmd := &cobra.Command{
 		Use:   "modules",
@@ -47,7 +37,6 @@ empty or mistyped patterns surface as a count of 0. Pass a listed name to
 
 Examples:
   clarity modules
-  clarity modules --format json
   clarity modules --repo path/to/repo`,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			return runModules(cmd, opts)
@@ -55,7 +44,6 @@ Examples:
 	}
 
 	cmd.Flags().StringVarP(&opts.repoPath, "repo", "r", "", "Git repository path (default: current directory)")
-	cmd.Flags().StringVar(&opts.format, "format", opts.format, "Output format (text, json)")
 	return cmd
 }
 
@@ -79,21 +67,11 @@ func runModules(cmd *cobra.Command, opts *options) error {
 		infos = append(infos, moduleInfo{
 			Name:      m.Name,
 			FileCount: len(m.Files),
-			Files:     m.Files,
 		})
 	}
 	sort.Slice(infos, func(i, j int) bool { return infos[i].Name < infos[j].Name })
 
-	switch strings.ToLower(opts.format) {
-	case "json":
-		enc := json.NewEncoder(cmd.OutOrStdout())
-		enc.SetIndent("", "  ")
-		return enc.Encode(modulesOutput{Modules: infos})
-	case "text":
-		return renderModulesText(cmd, infos)
-	default:
-		return fmt.Errorf("unknown format: %s (valid options: text, json)", opts.format)
-	}
+	return renderModulesText(cmd, infos)
 }
 
 func renderModulesText(cmd *cobra.Command, infos []moduleInfo) error {

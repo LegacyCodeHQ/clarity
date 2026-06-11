@@ -56,23 +56,6 @@ func TestModules_ListsDeclaredModulesText(t *testing.T) {
 	}
 }
 
-func TestModules_JSON(t *testing.T) {
-	repoDir := t.TempDir()
-	writeModulesConfig(t, repoDir, `{
-  "modules": [
-    { "name": "core", "files": ["main.go", "util.go"] }
-  ]
-}`)
-
-	out := runModulesCmd(t, "--repo", repoDir, "--format", "json")
-	if !strings.Contains(out, `"name": "core"`) {
-		t.Fatalf("expected JSON with module name, got:\n%s", out)
-	}
-	if !strings.Contains(out, `"file_count": 2`) {
-		t.Fatalf("expected JSON with file_count 2, got:\n%s", out)
-	}
-}
-
 func TestModules_EmptyWhenConfigAbsent(t *testing.T) {
 	repoDir := t.TempDir()
 	out := runModulesCmd(t, "--repo", repoDir)
