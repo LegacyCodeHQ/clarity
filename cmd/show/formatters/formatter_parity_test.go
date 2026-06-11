@@ -68,6 +68,42 @@ func TestFormatterParity_NodeStates(t *testing.T) {
 	}
 }
 
+// TestFormatterParity_RenameAnnotation asserts a collapsed rename annotates the
+// new node with where it came from, distinguishing a rename (basename change), a
+// move (directory change), and both — and that the annotation renders in BOTH
+// formatters, through the full Format pipeline rather than the helper alone.
+func TestFormatterParity_RenameAnnotation(t *testing.T) {
+	g := parityFileGraph(t, map[string][]string{
+		"/p/app.go":              {"/p/cmd/show_cmd.go", "/p/internal/binding.go", "/p/parsers/bar.go"},
+		"/p/cmd/show_cmd.go":     {},
+		"/p/internal/binding.go": {},
+		"/p/parsers/bar.go":      {},
+	})
+	mutate := func(key, from string) {
+		md := g.Meta.Files[key]
+		md.RenamedFrom = from
+		g.Meta.Files[key] = md
+	}
+	mutate("/p/cmd/show_cmd.go", "/p/cmd/graph_cmd.go")        // rename: same directory
+	mutate("/p/internal/binding.go", "/p/external/binding.go") // move: same basename
+	mutate("/p/parsers/bar.go", "/p/parser/foo.go")            // move + rename: both change
+
+	opts := RenderOptions{BasePath: "/p"}
+	dot, err := (&dotFormatter{}).Format(g, opts)
+	require.NoError(t, err)
+	mermaid, err := mermaidFormatter{}.Format(g, opts)
+	require.NoError(t, err)
+
+	for _, want := range []string{
+		"(renamed from graph_cmd.go)",
+		"(moved from external/)",
+		"(moved & renamed from parser/foo.go)",
+	} {
+		require.Containsf(t, dot, want, "DOT missing %q", want)
+		require.Containsf(t, mermaid, want, "Mermaid missing %q", want)
+	}
+}
+
 // TestFormatterParity_PhantomNodes asserts the phantom test-sibling capability
 // renders in both formatters, so it cannot be dropped from one unnoticed.
 func TestFormatterParity_PhantomNodes(t *testing.T) {

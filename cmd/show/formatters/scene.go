@@ -146,7 +146,7 @@ func BuildScene(g depgraph.FileDependencyGraph, opts RenderOptions) (Scene, erro
 		nodes[source] = SceneNode{
 			Key:        source,
 			Name:       nodeNames[source],
-			LabelLines: nodeLabelLines(g, nodeNames[source], source),
+			LabelLines: nodeLabelLines(g, nodeNames[source], source, opts.BasePath),
 			Type:       fileType[source],
 			Kind:       nodeKind(md),
 			State:      md.State,
@@ -237,7 +237,7 @@ func majorityType(counts map[string]int) string {
 // nodeLabelLines resolves a node's label into ordered visual rows. It mirrors
 // the label both formatters built independently, including module file counts,
 // churn stats with the new-file sprout, and the deleted/renamed markers.
-func nodeLabelLines(g depgraph.FileDependencyGraph, name, source string) []string {
+func nodeLabelLines(g depgraph.FileDependencyGraph, name, source, basePath string) []string {
 	md, ok := g.Meta.Files[source]
 	if !ok {
 		return []string{name}
@@ -283,10 +283,27 @@ func nodeLabelLines(g depgraph.FileDependencyGraph, name, source string) []strin
 	// A collapsed rename renders as the single new-path node, annotated with the
 	// path it came from (the old node is removed from the graph).
 	if md.RenamedFrom != "" {
-		lines = append(lines, fmt.Sprintf("(renamed from %s)", filepath.Base(md.RenamedFrom)))
+		lines = append(lines, renameAnnotation(md.RenamedFrom, source, basePath))
 	}
 
 	return lines
+}
+
+// renameAnnotation describes a path change the way a developer thinks of it,
+// from the old and new paths git reported: changing only the basename is a
+// rename, changing only the directory is a move, and changing both is a move +
+// rename. Paths are shown relative to basePath, matching the node names.
+func renameAnnotation(oldPath, newPath, basePath string) string {
+	oldRel := nodeKey(oldPath, basePath)
+	newRel := nodeKey(newPath, basePath)
+	switch {
+	case filepath.Dir(oldRel) == filepath.Dir(newRel):
+		return fmt.Sprintf("(renamed from %s)", filepath.Base(oldRel))
+	case filepath.Base(oldRel) == filepath.Base(newRel):
+		return fmt.Sprintf("(moved from %s/)", filepath.Dir(oldRel))
+	default:
+		return fmt.Sprintf("(moved & renamed from %s)", oldRel)
+	}
 }
 
 // buildCycleNodes returns the set of nodes that participate in a dependency
