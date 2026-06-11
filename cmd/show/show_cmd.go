@@ -119,6 +119,9 @@ func NewCommand() *cobra.Command {
 	cmd.Flags().BoolVar(&opts.modules, "modules", false, "Collapse files into the modules declared in .clarity/modules.json (off by default)")
 	cmd.Flags().StringVar(&opts.moduleSelect, "module", "", "Render the named module's files inside a box, alongside any files already in scope such as working-set changes (quote names with spaces)")
 	cmd.Flags().StringVarP(&opts.moduleDirection, "direction", "d", opts.moduleDirection, "Module boundary direction (in, out, both) — not currently applied; reserved")
+	// Hidden until the boundary direction is actually implemented, so a released
+	// build does not advertise a no-op flag. The flag still parses and validates.
+	_ = cmd.Flags().MarkHidden("direction")
 	cmd.Flags().BoolVar(&opts.edgeLabels, "label", false, "Add deterministic short labels to edges")
 	cmd.Flags().BoolVar(&opts.noStats, "no-stats", false, "Skip file addition/deletion statistics for faster rendering")
 	cmd.Flags().BoolVar(&opts.noPhantom, "no-phantom", false, "Suppress phantom test nodes (Rust files with #[cfg(test)] regions are rendered as a single node)")
