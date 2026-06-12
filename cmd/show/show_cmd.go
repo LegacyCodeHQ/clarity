@@ -210,6 +210,10 @@ func runGraph(cmd *cobra.Command, opts *graphOptions) error {
 	if err != nil {
 		return err
 	}
+	snapshotFiles, err := moduleSnapshotFiles(opts, toCommit)
+	if err != nil {
+		return err
+	}
 	// --module is a scope: the module's own files render (inside a box) alongside
 	// whatever else is in scope. With -d, also bring in the module's immediate
 	// dependents/dependencies as context, which requires parsing the wider repo so
@@ -221,14 +225,14 @@ func runGraph(cmd *cobra.Command, opts *graphOptions) error {
 		if selErr != nil {
 			return selErr
 		}
-		moduleMembers = existingFiles(selected.Files)
+		moduleMembers = existingSnapshotFiles(selected.Files, snapshotFiles)
 		if len(moduleMembers) == 0 {
 			return fmt.Errorf("module %q resolves to no files", opts.moduleSelect)
 		}
 		if opts.moduleDirection == moduleDirectionNone {
 			filePaths = unionPaths(filePaths, moduleMembers)
 		} else {
-			repoFiles, repoErr := expandPaths([]string{opts.repoPath}, false)
+			repoFiles, repoErr := moduleRepoFiles(opts, toCommit, snapshotFiles)
 			if repoErr != nil {
 				return fmt.Errorf("failed to expand repository for --direction: %w", repoErr)
 			}
@@ -1244,6 +1248,42 @@ func existingFiles(paths []string) []string {
 		}
 	}
 	return out
+}
+
+func existingSnapshotFiles(paths []string, snapshotFiles []string) []string {
+	if snapshotFiles == nil {
+		return existingFiles(paths)
+	}
+
+	present := make(map[string]bool, len(snapshotFiles))
+	for _, file := range snapshotFiles {
+		present[filepath.Clean(file)] = true
+	}
+
+	out := make([]string, 0, len(paths))
+	for _, p := range paths {
+		if present[filepath.Clean(p)] {
+			out = append(out, p)
+		}
+	}
+	return out
+}
+
+func moduleSnapshotFiles(opts *graphOptions, toCommit string) ([]string, error) {
+	if toCommit == "" || opts.moduleSelect == "" {
+		return nil, nil
+	}
+	return git.GetCommitTreeFiles(opts.repoPath, toCommit)
+}
+
+func moduleRepoFiles(opts *graphOptions, toCommit string, snapshotFiles []string) ([]string, error) {
+	if toCommit != "" {
+		if snapshotFiles != nil {
+			return snapshotFiles, nil
+		}
+		return git.GetCommitTreeFiles(opts.repoPath, toCommit)
+	}
+	return expandPaths([]string{opts.repoPath}, false)
 }
 
 // unionPaths appends paths from extra that are not already in base, preserving

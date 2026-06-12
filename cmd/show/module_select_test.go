@@ -239,6 +239,22 @@ func TestShowCommand_ModuleSelectCommitUsesCommitConfig(t *testing.T) {
 	}
 }
 
+func TestShowCommand_ModuleSelectCommitIgnoresWorkingTreeDeletion(t *testing.T) {
+	repoDir := seedCommittedJavaRepo(t, `{
+  "modules": [ { "name": "support", "files": ["src/main/java/com/example/util/Helper.java"] } ]
+}`)
+
+	helperPath := filepath.Join(repoDir, "src", "main", "java", "com", "example", "util", "Helper.java")
+	if err := os.Remove(helperPath); err != nil {
+		t.Fatalf("os.Remove() error = %v", err)
+	}
+
+	out := runShow(t, "-r", repoDir, "-c", "HEAD", "-f", "dot", "--module", "support")
+	if !strings.Contains(out, "subgraph cluster") || !strings.Contains(out, "Helper.java") {
+		t.Fatalf("expected --commit --module to resolve members from HEAD despite working-tree deletion, got:\n%s", out)
+	}
+}
+
 func TestShowCommand_ModuleSelectChangedNeighborKeepsChangeStyling(t *testing.T) {
 	repoDir := seedCommittedJavaRepo(t, `{
   "modules": [ { "name": "support", "files": ["src/main/java/com/example/util/Helper.java"] } ]
