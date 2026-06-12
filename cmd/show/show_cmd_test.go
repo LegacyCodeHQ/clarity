@@ -1429,7 +1429,8 @@ func TestGraphFile_Also_IncludesConnectedTestFiles_ExcludesUnconnected(t *testin
 	cmd := NewCommand()
 	cmd.SetArgs([]string{
 		"-r", repoDir,
-		"-p", "a.ts",
+		"a.ts",
+		"--reach", "down",
 		"-l", "0",
 		"--also", "*.test.ts",
 		"-f", "mermaid",

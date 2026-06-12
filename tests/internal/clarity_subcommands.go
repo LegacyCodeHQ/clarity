@@ -49,9 +49,7 @@ func GraphSubcommandInputWithRepo(t *testing.T, repoPath string, inputs ...strin
 	if allowOutside {
 		args = append(args, "--allow-outside-repo")
 	}
-	if len(inputs) > 0 {
-		args = append(args, "-i", strings.Join(inputs, ","))
-	}
+	args = append(args, inputs...)
 	cmd.SetArgs(args)
 
 	var stdout bytes.Buffer

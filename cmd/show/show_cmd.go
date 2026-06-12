@@ -130,14 +130,21 @@ func NewCommand() *cobra.Command {
 	cmd.Flags().BoolVar(&opts.edgeLabels, "label", false, "Add deterministic short labels to edges")
 	cmd.Flags().BoolVar(&opts.noStats, "no-stats", false, "Skip file addition/deletion statistics for faster rendering")
 	cmd.Flags().BoolVar(&opts.noPhantom, "no-phantom", false, "Suppress phantom test nodes (Rust files with #[cfg(test)] regions are rendered as a single node)")
-	hideLegacyFlags(cmd)
+	deprecateLegacyFlags(cmd)
 
 	return cmd
 }
 
-func hideLegacyFlags(cmd *cobra.Command) {
-	for _, name := range []string{"input", "file", "level", "modules", "direction"} {
-		_ = cmd.Flags().MarkHidden(name)
+func deprecateLegacyFlags(cmd *cobra.Command) {
+	deprecations := map[string]string{
+		"input":     "pass paths positionally instead",
+		"file":      "use a positional path with --reach down",
+		"level":     "use --depth",
+		"modules":   "use --collapse",
+		"direction": "use --reach",
+	}
+	for name, message := range deprecations {
+		_ = cmd.Flags().MarkDeprecated(name, message)
 	}
 }
 
