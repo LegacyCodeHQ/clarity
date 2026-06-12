@@ -219,9 +219,9 @@ func runGraph(cmd *cobra.Command, opts *graphOptions) error {
 	if err != nil {
 		return err
 	}
-	// --module is a scope: the module's own files render (inside a box) alongside
-	// whatever else is in scope. With -d, also bring in the module's immediate
-	// dependents/dependencies as context, which requires parsing the wider repo so
+	// --module is an anchor: the module's own files render (inside a box) alongside
+	// whatever else is in scope. With --reach, also bring in the module's immediate
+	// dependents/dependencies as context, which requires the snapshot's full tree so
 	// they are discoverable; the graph is subset back down after it is built.
 	changeFiles := anchorFiles
 	var moduleMembers []string
@@ -242,7 +242,7 @@ func runGraph(cmd *cobra.Command, opts *graphOptions) error {
 		} else {
 			repoFiles, repoErr := snapshot.TreeFiles()
 			if repoErr != nil {
-				return fmt.Errorf("failed to expand repository for --direction: %w", repoErr)
+				return fmt.Errorf("failed to expand repository for --reach: %w", repoErr)
 			}
 			filePaths = unionPaths(repoFiles, changeFiles)
 		}
