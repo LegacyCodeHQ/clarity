@@ -46,8 +46,8 @@ func NewCommand() *cobra.Command {
 
 	cmd := &cobra.Command{
 		Use:   "workspace",
-		Short: "Experimental workspace relationship graph for Go modules and Rust crates",
-		Long:  "Experimental workspace relationship graph for Go modules and Rust crates.",
+		Short: "Workspace relationship graph for Go modules and Rust crates (experimental)",
+		Long:  "Workspace relationship graph for Go modules and Rust crates (experimental).",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runWorkspace(cmd, opts)
 		},

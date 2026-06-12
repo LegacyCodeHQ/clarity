@@ -56,14 +56,20 @@ func Execute() {
 }
 
 func init() {
-	// Register subcommands
+	// Preserve registration order in help output instead of sorting
+	// alphabetically, so stable commands lead and experimental ones trail.
+	cobra.EnableCommandSorting = false
+
+	// Register subcommands in display order: primary commands first, then
+	// the experimental ones last. (Cobra appends the auto-generated `help`
+	// command after these regardless.)
+	rootCmd.AddCommand(watchcmd.Cmd)
 	rootCmd.AddCommand(show.Cmd)
-	rootCmd.AddCommand(cyclescmd.Cmd)
-	rootCmd.AddCommand(workspacecmd.Cmd)
 	rootCmd.AddCommand(languages.Cmd)
 	rootCmd.AddCommand(modulescmd.Cmd)
 	rootCmd.AddCommand(setupcmd.Cmd)
-	rootCmd.AddCommand(watchcmd.Cmd)
+	rootCmd.AddCommand(cyclescmd.Cmd)
+	rootCmd.AddCommand(workspacecmd.Cmd)
 	rootCmd.CompletionOptions.DisableDefaultCmd = true
 
 	// Global flags inherited by all subcommands.
