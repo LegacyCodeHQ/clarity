@@ -53,12 +53,6 @@ func NewCommand() *cobra.Command {
 		opts.direction,
 		fmt.Sprintf("Graph layout orientation (%s)", formatters.SupportedDirections()))
 	cmd.Flags().StringVarP(
-		&opts.direction,
-		"direction",
-		"d",
-		opts.direction,
-		fmt.Sprintf("Graph direction (%s)", formatters.SupportedDirections()))
-	cmd.Flags().StringVarP(
 		&opts.format,
 		"format",
 		"f",
