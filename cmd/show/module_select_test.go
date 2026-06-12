@@ -208,7 +208,7 @@ func TestShowCommand_ModuleSelectDirectionInShowsDependentsPruned(t *testing.T) 
 
 	// App.java imports Helper (the module), so -d in surfaces it as a pruned
 	// dependent on a clean tree (it is context, not a change).
-	out := runShow(t, "-r", repoDir, "-f", "dot", "--module", "support", "-d", "in")
+	out := runShow(t, "-r", repoDir, "-f", "dot", "--module", "support", "--reach", "up")
 	if !strings.Contains(out, "subgraph cluster") || !strings.Contains(out, "App.java") {
 		t.Fatalf("expected the box and the incoming dependent App.java:\n%s", out)
 	}
@@ -223,7 +223,7 @@ func TestShowCommand_ModuleSelectDirectionOutShowsDependenciesPruned(t *testing.
 }`)
 
 	// App imports Helper, so -d out surfaces Helper as a pruned dependency.
-	out := runShow(t, "-r", repoDir, "-f", "dot", "--module", "app", "-d", "out")
+	out := runShow(t, "-r", repoDir, "-f", "dot", "--module", "app", "--reach", "down")
 	if !strings.Contains(out, "Helper.java") || !strings.Contains(out, "dashed") {
 		t.Fatalf("expected Helper.java as a pruned out-dependency:\n%s", out)
 	}
@@ -283,7 +283,7 @@ func TestShowCommand_ModuleSelectChangedNeighborKeepsChangeStyling(t *testing.T)
 		t.Fatalf("os.WriteFile() error = %v", err)
 	}
 
-	out := runShow(t, "-r", repoDir, "-f", "dot", "--module", "support", "-d", "in")
+	out := runShow(t, "-r", repoDir, "-f", "dot", "--module", "support", "--reach", "up")
 	if !strings.Contains(out, "App.java") {
 		t.Fatalf("expected the changed dependent App.java rendered:\n%s", out)
 	}
@@ -293,13 +293,5 @@ func TestShowCommand_ModuleSelectChangedNeighborKeepsChangeStyling(t *testing.T)
 	}
 }
 
-func TestShowCommand_ModuleDirectionRequiresModule(t *testing.T) {
-	repoDir, srcDir := writeJavaPair(t)
-	err := runShowErr(t, "-i", srcDir, "-r", repoDir, "-f", "dot", "-d", "in")
-	if err == nil {
-		t.Fatal("expected an error when --direction is used without --module, got nil")
-	}
-	if !strings.Contains(err.Error(), "--module") {
-		t.Fatalf("expected the error to mention --module, got: %v", err)
-	}
-}
+// (removed TestShowCommand_ModuleDirectionRequiresModule: --reach has no
+// "requires --module" rule; it applies to file and path anchors too.)

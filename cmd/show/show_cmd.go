@@ -123,7 +123,6 @@ func NewCommand() *cobra.Command {
 	cmd.Flags().StringSliceVar(&opts.alsoPatterns, "also", nil, "Include files matching glob patterns that connect to --file graph (requires --file)")
 	cmd.Flags().BoolVar(&opts.collapse, "collapse", false, "Collapse files into the modules declared in .clarity/modules.json")
 	cmd.Flags().StringVarP(&opts.moduleSelect, "module", "m", "", "Render the named module's files inside a box, alongside any files already in scope such as working-set changes (quote names with spaces)")
-	cmd.Flags().StringVarP(&opts.moduleDirection, "direction", "d", opts.moduleDirection, "With --module, also show the module's immediate dependents/dependencies as context: none (default), in, out, both")
 	cmd.Flags().BoolVar(&opts.edgeLabels, "label", false, "Add deterministic short labels to edges")
 	cmd.Flags().BoolVar(&opts.noStats, "no-stats", false, "Skip file addition/deletion statistics for faster rendering")
 	cmd.Flags().BoolVar(&opts.noPhantom, "no-phantom", false, "Suppress phantom test nodes (Rust files with #[cfg(test)] regions are rendered as a single node)")
@@ -134,9 +133,8 @@ func NewCommand() *cobra.Command {
 
 func deprecateLegacyFlags(cmd *cobra.Command) {
 	deprecations := map[string]string{
-		"input":     "pass paths positionally instead",
-		"file":      "use a positional path with --reach down",
-		"direction": "use --reach",
+		"input": "pass paths positionally instead",
+		"file":  "use a positional path with --reach down",
 	}
 	for name, message := range deprecations {
 		_ = cmd.Flags().MarkDeprecated(name, message)
@@ -566,16 +564,7 @@ func validateGraphOptions(opts *graphOptions) error {
 		}
 	}
 
-	moduleDirection := strings.ToLower(strings.TrimSpace(opts.moduleDirection))
-	switch moduleDirection {
-	case moduleDirectionNone, moduleDirectionIn, moduleDirectionOut, moduleDirectionBoth:
-		opts.moduleDirection = moduleDirection
-	default:
-		return fmt.Errorf("unknown direction: %s (valid options: none, in, out, both)", opts.moduleDirection)
-	}
-	if opts.moduleSelect == "" && opts.moduleDirection != moduleDirectionNone {
-		return fmt.Errorf("--direction requires --module")
-	}
+	// --reach over a selected module maps to the internal in/out/both direction.
 	if opts.moduleSelect != "" && opts.reach != "" {
 		switch opts.reach {
 		case reachDown:
@@ -925,6 +914,11 @@ func annotateRustPhantoms(
 }
 
 func applyReachFilter(opts *graphOptions, pathResolver PathResolver, graph depgraph.DependencyGraph, filePaths, anchorFiles []string) (depgraph.DependencyGraph, []string, map[string]bool, error) {
+	// A --module view consumes --reach through the module boundary (its in/out
+	// direction), so the file-reach filter must not also run and prune members.
+	if opts.moduleSelect != "" {
+		return graph, filePaths, nil, nil
+	}
 	if opts.targetFile == "" && opts.reach == "" {
 		return graph, filePaths, nil, nil
 	}

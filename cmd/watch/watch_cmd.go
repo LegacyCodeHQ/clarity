@@ -75,8 +75,7 @@ func NewCommand() *cobra.Command {
 
 func deprecateLegacyWatchFlags(cmd *cobra.Command) {
 	deprecations := map[string]string{
-		"input":     "pass paths positionally instead",
-		"direction": "use --reach",
+		"input": "pass paths positionally instead",
 	}
 	for name, message := range deprecations {
 		_ = cmd.Flags().MarkDeprecated(name, message)
