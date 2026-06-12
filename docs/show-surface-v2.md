@@ -142,14 +142,25 @@ Then apply anchors and lenses over that resolver. With this in place:
 ## Migration
 
 Breaking change — golden fixtures, tests, and the desktop app shell out to these
-flags. Recommended path: **additive + deprecate.**
+flags. The path taken was **additive → deprecate → remove**, and is now
+**complete**:
 
-- Land positional `[paths…]`, `--reach`, `--collapse`, `--all`.
-- Keep `-i`, `-p`, `-w`, `-d`/`--direction`, `--scope`, `--modules` as **hidden
-  aliases** mapping onto the new model.
-- Do the snapshot-resolver centralization **now** — it is a bug fix, valuable
-  independent of the rename.
-- Drop the aliases after a deprecation window.
+1. Landed positional `[paths…]`, `--reach`, `--collapse`, `--all`, and the
+   snapshot-resolver centralization (the bug fix, valuable on its own).
+2. Removed the dead `--scope` and converted `--input`, `--file`, `--level`,
+   `--modules`, `--direction` to deprecation warnings.
+3. Migrated the internal callers (desktop app, docs, tests) onto the new
+   grammar, then removed the deprecated flags entirely.
+
+There are no remaining legacy aliases. (`-w`/`--between` was never legacy — it
+is the current anchor flag.) Mapping from the old surface:
+
+- `-i <paths>` → positional `<paths>`
+- `-p <file>` → `<file> --reach down`
+- `--level` → `--depth` / `-l`
+- `--modules` → `--collapse`
+- `--direction in|out|both` → `--reach up|down|both` (on a `--module`)
+- `--scope` → removed (it was `--reach down`, and was already dead)
 
 ## `watch`
 
@@ -157,8 +168,8 @@ flags. Recommended path: **additive + deprecate.**
 re-rendered on change. **Implemented** (`feat: add watch show grammar parity`):
 `watch` now accepts positional `[paths…]`, `--between`, `--module / -m`,
 `--reach`, `--depth / -l`, `--prune`, `--all`, and `--collapse`, alongside the
-existing filters, format/orientation, port/repo, and `--no-phantom`. Legacy
-flags (`--input`, `--modules`, …) are kept as hidden aliases, matching `show`.
+existing filters, format/orientation, port/repo, and `--no-phantom`. Its legacy
+flags (`--input`, `--modules`) have been removed, matching `show`.
 
 The one intentional difference from `show`: `watch` has **no `--commit / -c`**.
 A live view is always the working tree, so there is no historical snapshot to
