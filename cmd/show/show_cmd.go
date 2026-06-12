@@ -206,7 +206,7 @@ func runGraph(cmd *cobra.Command, opts *graphOptions) error {
 		contentReader = deletedAwareContentReader(contentReader, deletedContent)
 	}
 
-	modules, err := resolveConfigModules(opts.repoPath, opts.collapse || opts.moduleSelect != "")
+	modules, err := resolveConfigModules(opts.repoPath, opts.collapse || opts.moduleSelect != "", toCommit)
 	if err != nil {
 		return err
 	}

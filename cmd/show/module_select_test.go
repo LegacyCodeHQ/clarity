@@ -224,6 +224,21 @@ func TestShowCommand_ModuleSelectDefaultShowsNoNeighbors(t *testing.T) {
 	}
 }
 
+func TestShowCommand_ModuleSelectCommitUsesCommitConfig(t *testing.T) {
+	repoDir := seedCommittedJavaRepo(t, `{
+  "modules": [ { "name": "support", "files": ["src/main/java/com/example/util/Helper.java"] } ]
+}`)
+
+	writeModulesConfig(t, repoDir, `{
+  "modules": [ { "name": "working", "files": ["src/main/java/com/example/App.java"] } ]
+}`)
+
+	out := runShow(t, "-r", repoDir, "-c", "HEAD", "-f", "dot", "--module", "support")
+	if !strings.Contains(out, "subgraph cluster") || !strings.Contains(out, "Helper.java") {
+		t.Fatalf("expected --commit --module to use module config from HEAD, got:\n%s", out)
+	}
+}
+
 func TestShowCommand_ModuleSelectChangedNeighborKeepsChangeStyling(t *testing.T) {
 	repoDir := seedCommittedJavaRepo(t, `{
   "modules": [ { "name": "support", "files": ["src/main/java/com/example/util/Helper.java"] } ]

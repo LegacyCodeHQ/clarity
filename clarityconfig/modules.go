@@ -49,25 +49,38 @@ func LoadModules(repoRoot string) ([]depgraph.Module, error) {
 		return nil, fmt.Errorf("failed to read %s: %w", path, err)
 	}
 
+	return parseModules(repoRoot, path, data, func(patterns []string) ([]string, error) {
+		return resolveModulePatterns(repoRoot, patterns)
+	})
+}
+
+// LoadModulesFromContent parses a modules.json snapshot and resolves file
+// patterns against the supplied absolute tree file list.
+func LoadModulesFromContent(repoRoot, source string, data []byte, treeFiles []string) ([]depgraph.Module, error) {
+	return parseModules(repoRoot, source, data, func(patterns []string) ([]string, error) {
+		return resolveModulePatternsFromTree(repoRoot, patterns, treeFiles)
+	})
+}
+
+func parseModules(repoRoot, source string, data []byte, resolvePatterns func([]string) ([]string, error)) ([]depgraph.Module, error) {
 	var cfg modulesConfig
 	decoder := json.NewDecoder(strings.NewReader(string(data)))
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(&cfg); err != nil {
-		return nil, fmt.Errorf("failed to parse %s: %w", path, err)
+		return nil, fmt.Errorf("failed to parse %s: %w", source, err)
 	}
-
 	modules := make([]depgraph.Module, 0, len(cfg.Modules))
 	for _, entry := range cfg.Modules {
 		name := strings.TrimSpace(entry.Name)
 		if name == "" {
-			return nil, fmt.Errorf("invalid module in %s: name is required", path)
+			return nil, fmt.Errorf("invalid module in %s: name is required", source)
 		}
 		if len(entry.Files) == 0 {
-			return nil, fmt.Errorf("invalid module %q in %s: no files specified", name, path)
+			return nil, fmt.Errorf("invalid module %q in %s: no files specified", name, source)
 		}
-		files, err := resolveModulePatterns(repoRoot, entry.Files)
+		files, err := resolvePatterns(entry.Files)
 		if err != nil {
-			return nil, fmt.Errorf("module %q in %s: %w", name, path, err)
+			return nil, fmt.Errorf("module %q in %s: %w", name, source, err)
 		}
 		modules = append(modules, depgraph.Module{Name: name, Files: files})
 	}
@@ -110,4 +123,47 @@ func resolveModulePatterns(repoRoot string, patterns []string) ([]string, error)
 
 func hasGlobMeta(pattern string) bool {
 	return strings.ContainsAny(pattern, "*?[")
+}
+
+func resolveModulePatternsFromTree(repoRoot string, patterns []string, treeFiles []string) ([]string, error) {
+	var files []string
+	seen := make(map[string]bool)
+	add := func(p string) {
+		clean := filepath.Clean(p)
+		if !seen[clean] {
+			seen[clean] = true
+			files = append(files, clean)
+		}
+	}
+
+	relByAbs := make(map[string]string, len(treeFiles))
+	for _, file := range treeFiles {
+		rel, err := filepath.Rel(repoRoot, file)
+		if err != nil {
+			continue
+		}
+		relByAbs[filepath.Clean(file)] = filepath.ToSlash(rel)
+	}
+
+	for _, raw := range patterns {
+		raw = strings.TrimSpace(raw)
+		if raw == "" {
+			continue
+		}
+		if hasGlobMeta(raw) {
+			pattern := filepath.ToSlash(filepath.Clean(raw))
+			for abs, rel := range relByAbs {
+				matched, err := filepath.Match(pattern, rel)
+				if err != nil {
+					return nil, fmt.Errorf("invalid glob %q: %w", raw, err)
+				}
+				if matched {
+					add(abs)
+				}
+			}
+			continue
+		}
+		add(filepath.Join(repoRoot, raw))
+	}
+	return files, nil
 }
