@@ -162,8 +162,9 @@ func runGraph(cmd *cobra.Command, opts *graphOptions) error {
 	if err != nil {
 		return err
 	}
+	snapshot := newSnapshotResolver(opts.repoPath, toCommit)
 
-	filePaths, done, err := determineFilePaths(cmd, opts, pathResolver, fromCommit, toCommit, isCommitRange)
+	filePaths, done, err := determineFilePaths(cmd, opts, pathResolver, snapshot, fromCommit, toCommit, isCommitRange)
 	if err != nil {
 		return err
 	}
@@ -208,16 +209,12 @@ func runGraph(cmd *cobra.Command, opts *graphOptions) error {
 
 	emitUnsupportedFileWarning(filePaths)
 
-	contentReader := selectContentReader(opts, toCommit)
+	contentReader := snapshot.ContentReader()
 	if len(deletedContent) > 0 {
 		contentReader = deletedAwareContentReader(contentReader, deletedContent)
 	}
 
-	modules, err := resolveConfigModules(opts.repoPath, opts.collapse || opts.moduleSelect != "", toCommit)
-	if err != nil {
-		return err
-	}
-	snapshotFiles, err := moduleSnapshotFiles(opts, toCommit)
+	modules, err := snapshot.Modules(opts.collapse || opts.moduleSelect != "")
 	if err != nil {
 		return err
 	}
@@ -232,14 +229,17 @@ func runGraph(cmd *cobra.Command, opts *graphOptions) error {
 		if selErr != nil {
 			return selErr
 		}
-		moduleMembers = existingSnapshotFiles(selected.Files, snapshotFiles)
+		moduleMembers, err = snapshot.ExistingModuleFiles(selected.Files)
+		if err != nil {
+			return err
+		}
 		if len(moduleMembers) == 0 {
 			return fmt.Errorf("module %q resolves to no files", opts.moduleSelect)
 		}
 		if opts.moduleDirection == moduleDirectionNone {
 			filePaths = unionPaths(filePaths, moduleMembers)
 		} else {
-			repoFiles, repoErr := moduleRepoFiles(opts, toCommit, snapshotFiles)
+			repoFiles, repoErr := snapshot.TreeFiles()
 			if repoErr != nil {
 				return fmt.Errorf("failed to expand repository for --direction: %w", repoErr)
 			}
@@ -660,49 +660,28 @@ func parseCommitRange(opts *graphOptions) (string, string, bool, error) {
 	return fromCommit, toCommit, isCommitRange, nil
 }
 
-func determineFilePaths(cmd *cobra.Command, opts *graphOptions, pathResolver PathResolver, fromCommit, toCommit string, isCommitRange bool) ([]string, bool, error) {
+func determineFilePaths(cmd *cobra.Command, opts *graphOptions, pathResolver PathResolver, snapshot *snapshotResolver, fromCommit, toCommit string, isCommitRange bool) ([]string, bool, error) {
 	if opts.all {
-		if opts.commitID != "" {
-			filePaths, err := git.GetCommitTreeFiles(opts.repoPath, toCommit)
-			if err != nil {
+		filePaths, err := snapshot.TreeFiles()
+		if err != nil {
+			if opts.commitID != "" {
 				return nil, false, fmt.Errorf("failed to get files from commit tree: %w", err)
 			}
-			if len(filePaths) == 0 {
-				return nil, false, fmt.Errorf("no files found in commit %s", toCommit)
-			}
-			return filePaths, false, nil
-		}
-		filePaths, err := expandPaths([]string{opts.repoPath}, false)
-		if err != nil {
 			return nil, false, fmt.Errorf("failed to expand working directory: %w", err)
 		}
 		if len(filePaths) == 0 {
+			if opts.commitID != "" {
+				return nil, false, fmt.Errorf("no files found in commit %s", toCommit)
+			}
 			return nil, false, fmt.Errorf("no supported files found in working directory")
 		}
 		return filePaths, false, nil
 	}
 
 	if len(opts.includes) > 0 {
-		if opts.commitID != "" {
-			filePaths, err := collectCommitIncludedFilePaths(opts, pathResolver, toCommit)
-			if err != nil {
-				return nil, false, err
-			}
-			return filePaths, false, nil
-		}
-
-		resolvedIncludes := make([]string, 0, len(opts.includes))
-		for _, include := range opts.includes {
-			resolvedInclude, err := pathResolver.Resolve(RawPath(include))
-			if err != nil {
-				return nil, false, fmt.Errorf("failed to resolve input path %q: %w", include, err)
-			}
-			resolvedIncludes = append(resolvedIncludes, resolvedInclude.String())
-		}
-
-		filePaths, err := expandPaths(resolvedIncludes, true)
+		filePaths, err := snapshot.FilesUnder(pathResolver, opts.includes)
 		if err != nil {
-			return nil, false, fmt.Errorf("failed to expand paths: %w", err)
+			return nil, false, fmt.Errorf("failed to resolve input paths: %w", err)
 		}
 		if len(filePaths) == 0 {
 			return nil, false, fmt.Errorf("no files found in specified paths")
@@ -711,9 +690,26 @@ func determineFilePaths(cmd *cobra.Command, opts *graphOptions, pathResolver Pat
 	}
 
 	if len(opts.betweenFiles) > 0 {
-		filePaths, err := collectBetweenFilePaths(opts, toCommit)
+		filePaths, err := collectBetweenFilePaths(opts, snapshot, toCommit)
 		if err != nil {
 			return nil, false, err
+		}
+		return filePaths, false, nil
+	}
+
+	if opts.targetFile != "" {
+		filePaths, err := snapshot.TreeFiles()
+		if err != nil {
+			if opts.commitID != "" {
+				return nil, false, fmt.Errorf("failed to get files from commit tree: %w", err)
+			}
+			return nil, false, fmt.Errorf("failed to expand working directory: %w", err)
+		}
+		if len(filePaths) == 0 {
+			if opts.commitID != "" {
+				return nil, false, fmt.Errorf("no files found in commit %s", toCommit)
+			}
+			return nil, false, fmt.Errorf("no supported files found in working directory")
 		}
 		return filePaths, false, nil
 	}
@@ -722,17 +718,6 @@ func determineFilePaths(cmd *cobra.Command, opts *graphOptions, pathResolver Pat
 		filePaths, err := collectCommitFilePaths(opts, fromCommit, toCommit, isCommitRange)
 		if err != nil {
 			return nil, false, err
-		}
-		return filePaths, false, nil
-	}
-
-	if opts.targetFile != "" {
-		filePaths, err := expandPaths([]string{opts.repoPath}, false)
-		if err != nil {
-			return nil, false, fmt.Errorf("failed to expand working directory: %w", err)
-		}
-		if len(filePaths) == 0 {
-			return nil, false, fmt.Errorf("no supported files found in working directory")
 		}
 		return filePaths, false, nil
 	}
@@ -761,61 +746,18 @@ func determineFilePaths(cmd *cobra.Command, opts *graphOptions, pathResolver Pat
 	return filePaths, false, nil
 }
 
-func collectCommitIncludedFilePaths(opts *graphOptions, pathResolver PathResolver, toCommit string) ([]string, error) {
-	commitFiles, err := git.GetCommitTreeFiles(opts.repoPath, toCommit)
+func collectBetweenFilePaths(opts *graphOptions, snapshot *snapshotResolver, toCommit string) ([]string, error) {
+	filePaths, err := snapshot.TreeFiles()
 	if err != nil {
-		return nil, fmt.Errorf("failed to get files from commit tree: %w", err)
-	}
-
-	resolvedIncludes := make([]string, 0, len(opts.includes))
-	for _, include := range opts.includes {
-		resolvedInclude, err := pathResolver.Resolve(RawPath(include))
-		if err != nil {
-			return nil, fmt.Errorf("failed to resolve input path %q: %w", include, err)
-		}
-		resolvedIncludes = append(resolvedIncludes, resolveSymlinks(filepath.Clean(resolvedInclude.String())))
-	}
-
-	filtered := make([]string, 0, len(commitFiles))
-	seen := make(map[string]struct{}, len(commitFiles))
-	for _, filePath := range commitFiles {
-		cleanFilePath := resolveSymlinks(filepath.Clean(filePath))
-		for _, includePath := range resolvedIncludes {
-			if cleanFilePath == includePath || strings.HasPrefix(cleanFilePath, includePath+string(filepath.Separator)) {
-				if _, ok := seen[filePath]; ok {
-					break
-				}
-				seen[filePath] = struct{}{}
-				filtered = append(filtered, filePath)
-				break
-			}
-		}
-	}
-
-	if len(filtered) == 0 {
-		return nil, fmt.Errorf("no files found in specified paths")
-	}
-
-	return filtered, nil
-}
-
-func collectBetweenFilePaths(opts *graphOptions, toCommit string) ([]string, error) {
-	if opts.commitID != "" {
-		filePaths, err := git.GetCommitTreeFiles(opts.repoPath, toCommit)
-		if err != nil {
+		if opts.commitID != "" {
 			return nil, fmt.Errorf("failed to get files from commit tree: %w", err)
 		}
-		if len(filePaths) == 0 {
-			return nil, fmt.Errorf("no files found in commit %s", toCommit)
-		}
-		return filePaths, nil
-	}
-
-	filePaths, err := expandPaths([]string{opts.repoPath}, false)
-	if err != nil {
 		return nil, fmt.Errorf("failed to expand working directory: %w", err)
 	}
 	if len(filePaths) == 0 {
+		if opts.commitID != "" {
+			return nil, fmt.Errorf("no files found in commit %s", toCommit)
+		}
 		return nil, fmt.Errorf("no supported files found in working directory")
 	}
 	return filePaths, nil
@@ -841,13 +783,6 @@ func collectCommitFilePaths(opts *graphOptions, fromCommit, toCommit string, isC
 		return nil, fmt.Errorf("no files changed in commit %s", toCommit)
 	}
 	return filePaths, nil
-}
-
-func selectContentReader(opts *graphOptions, toCommit string) vcs.ContentReader {
-	if toCommit != "" {
-		return git.GitCommitContentReader(opts.repoPath, toCommit)
-	}
-	return vcs.FilesystemContentReader()
 }
 
 // isPlainCommitView reports whether this is a bare `-c <commit>` view, as opposed
@@ -1274,23 +1209,6 @@ func existingSnapshotFiles(paths []string, snapshotFiles []string) []string {
 		}
 	}
 	return out
-}
-
-func moduleSnapshotFiles(opts *graphOptions, toCommit string) ([]string, error) {
-	if toCommit == "" || opts.moduleSelect == "" {
-		return nil, nil
-	}
-	return git.GetCommitTreeFiles(opts.repoPath, toCommit)
-}
-
-func moduleRepoFiles(opts *graphOptions, toCommit string, snapshotFiles []string) ([]string, error) {
-	if toCommit != "" {
-		if snapshotFiles != nil {
-			return snapshotFiles, nil
-		}
-		return git.GetCommitTreeFiles(opts.repoPath, toCommit)
-	}
-	return expandPaths([]string{opts.repoPath}, false)
 }
 
 // unionPaths appends paths from extra that are not already in base, preserving
