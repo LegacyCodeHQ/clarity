@@ -29,9 +29,16 @@ A `show` invocation answers four questions, **at most one answer per group**:
 
 **ANCHOR** — what to look at *(mutually exclusive)*
 - `[paths…]` *(positional)* — files/dirs, enumerated · *replaces `-i`*
-- `--module / -m <name>` — a declared module · *gives `--module` a short flag*
 - `--between <a,b,…>` — the connecting paths · *replaces `-w`*
 - `--all` — the whole tree at this snapshot
+
+**FRAMING** — `--module / -m <name>` boxes a declared module. It is **not** a
+competing anchor — it composes with whatever scope is active:
+- with positional paths or the default working-set changes → boxes the module's
+  members *within* that scope (non-members still render; the box frames, it does
+  not filter)
+- with a clean tree and no paths → self-scopes to the module's own files
+- `--reach up|down|both` extends context from the module's members
 
 Default anchor depends on the snapshot:
 - working tree → **working-set changes** (uncommitted files)
@@ -70,13 +77,16 @@ for but never exposed.
 | Anchor ↓ \ Lens → | as-is | `--reach` | `--collapse` |
 |---|---|---|---|
 | `[paths…]` | ✓ region | ✓ cone from paths | ✓ fold modules in region |
-| `--module` | ✓ members boxed | ✓ members + up/down neighbors | ✗ (focus vs. fold) |
 | `--between` | ✓ connecting paths | ✗ (between *is* a traversal) | ✗ |
 | `--all` | ✓ whole tree | ✗ (reach from everything = everything) | ✓ **the architecture overview** |
 | *(default: changes)* | ✓ changed files | ✓ reach from changes | ✓ |
 
 `--reach` and `--collapse` are mutually exclusive (both are LENS).
-`--commit` composes with every anchor.
+`--commit` composes with every anchor. `--module` is a FRAMING (see above), not a
+row here: it boxes its members over whichever anchor is active — `[paths…]`, the
+default changes, or (alone, clean tree) itself — and is the only thing that
+composes *with* an anchor rather than replacing it. It conflicts only with
+`--collapse` (box vs. fold) and `--between`/`--all`.
 
 ## Old → new, by intent
 
