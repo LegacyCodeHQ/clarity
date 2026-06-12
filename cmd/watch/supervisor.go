@@ -32,8 +32,10 @@ const gitdirAppearTimeout = 2 * time.Second
 
 // worktreeReconcileInterval backs up fsnotify delivery with a lightweight
 // registry scan so stale worktree entries or dropped events do not strand the
-// watch process.
-const worktreeReconcileInterval = 500 * time.Millisecond
+// watch process. fsnotify is the fast path (instant), so this is only a
+// backstop for missed events (e.g. a kqueue subscription dropped across
+// sleep/wake) and runs at a relaxed cadence -- worktree adds/removes are rare.
+const worktreeReconcileInterval = 2 * time.Second
 
 // planInitialRepos resolves which worktrees to watch when `clarity watch`
 // starts in `cwd`. The first entry is always the cwd-tree, given the literal
@@ -373,8 +375,12 @@ func (s *supervisor) reconcileWorktrees(ctx context.Context) {
 		}
 		desc := descriptorForLinked(w)
 		seen[desc.ID] = true
-		s.rememberWorktreeSubdir(w.Path, desc.ID)
 		if !s.hasWatcher(desc.ID) {
+			// Resolve the worktree's gitdir (a git subprocess) only when this is
+			// a newly discovered worktree; for already-watched trees the subdir
+			// mapping is already recorded, so the steady-state tick is just one
+			// `git worktree list`.
+			s.rememberWorktreeSubdir(w.Path, desc.ID)
 			s.spawnWatcher(ctx, desc)
 		}
 	}
