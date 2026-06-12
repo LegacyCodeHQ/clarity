@@ -128,6 +128,59 @@ func TestSupervisor_DetectsLiveWorktreeAdd(t *testing.T) {
 	}
 }
 
+// TestSupervisor_ReconcileDiscoversWorktreeWithoutFsnotify pins the reconcile
+// backstop in isolation: with no meta-watcher running, a worktree added after
+// the supervisor exists is invisible to fsnotify, so only reconcileWorktrees can
+// discover it. This guards the recovery path for a dropped/stale fsnotify
+// subscription (the failure that strands a long-running watch) and would fail if
+// the reconcile scan were removed.
+func TestSupervisor_ReconcileDiscoversWorktreeWithoutFsnotify(t *testing.T) {
+	repo := initRepoWithCommit(t)
+	b := newBroker()
+	formatter, err := formatters.NewFormatter("dot")
+	require.NoError(t, err)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	s := &supervisor{
+		b:              b,
+		opts:           &watchOptions{},
+		formatter:      formatter,
+		rootPath:       repo,
+		watchers:       make(map[string]context.CancelFunc),
+		subdirToRepoID: make(map[string]string),
+	}
+
+	// Added with no fsnotify meta-watcher in the picture, so only an explicit
+	// reconcile can discover it.
+	live := filepath.Join(t.TempDir(), "reconciled")
+	runGit(t, repo, "worktree", "add", "-b", "feat/reconciled", live)
+
+	countReconciled := func() int {
+		b.mu.Lock()
+		defer b.mu.Unlock()
+		n := 0
+		for _, r := range b.repos {
+			if r.Label == "reconciled" && r.Active {
+				n++
+			}
+		}
+		return n
+	}
+
+	require.Zero(t, countReconciled(), "tab must not exist before a reconcile runs")
+
+	s.reconcileWorktrees(ctx)
+	require.Eventually(t, func() bool { return countReconciled() == 1 },
+		2*time.Second, 20*time.Millisecond,
+		"reconcile alone should register the worktree tab")
+
+	// Idempotent: a second pass must not double-register the same worktree.
+	s.reconcileWorktrees(ctx)
+	require.Equal(t, 1, countReconciled(), "reconcile must be idempotent")
+}
+
 // TestSupervisor_SkipsStaleInitialWorktreeAndDetectsLaterAdds reproduces the
 // failure mode where Git still lists a linked worktree after its directory has
 // disappeared. A stale startup entry must not leave a dead active tab or break
