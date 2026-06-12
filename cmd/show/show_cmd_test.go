@@ -805,7 +805,7 @@ func TestGraphCommit_WithFile_UsesCommitContent(t *testing.T) {
 		t.Fatalf("os.WriteFile() error = %v", err)
 	}
 
-	out := runShow(t, "-r", repoDir, "-c", "HEAD", "-p", "a.ts", "-l", "0", "-f", "dot")
+	out := runShow(t, "-r", repoDir, "-c", "HEAD", "a.ts", "--reach", "down", "-l", "0", "-f", "dot")
 	if !strings.Contains(out, `"b.ts"`) {
 		t.Fatalf("expected --commit -p to read a.ts content from HEAD and include b.ts, got:\n%s", out)
 	}
@@ -829,7 +829,7 @@ func TestGraphCommit_WithFile_UsesCommitTreeUniverse(t *testing.T) {
 	gitRun(t, repoDir, "add", ".")
 	gitRun(t, repoDir, "commit", "-m", "add dependent")
 
-	out := runShow(t, "-r", repoDir, "-c", "HEAD", "-p", "a.ts", "-l", "0", "-f", "dot")
+	out := runShow(t, "-r", repoDir, "-c", "HEAD", "a.ts", "--reach", "down", "-l", "0", "-f", "dot")
 	if !strings.Contains(out, `"b.ts"`) {
 		t.Fatalf("expected --commit -p to traverse unchanged dependencies from the commit tree, got:\n%s", out)
 	}
@@ -901,7 +901,7 @@ func TestGraphFileRelativePath_WithRepo_ResolvesFromRepoRoot(t *testing.T) {
 	}
 
 	cmd := NewCommand()
-	cmd.SetArgs([]string{"-r", repoDir, "-p", targetRelativePath, "-f", "dot"})
+	cmd.SetArgs([]string{"-r", repoDir, targetRelativePath, "--reach", "down", "-f", "dot"})
 
 	var stdout bytes.Buffer
 	cmd.SetOut(&stdout)
@@ -938,7 +938,7 @@ func TestGraphFileScopeDownstream_LevelZero_IncludesTransitiveOutgoingOnly(t *te
 	cmd := NewCommand()
 	cmd.SetArgs([]string{
 		"-r", repoDir,
-		"-p", "a.ts",
+		"a.ts", "--reach", "down",
 		"-l", "0",
 		"-f", "dot",
 	})
@@ -968,7 +968,7 @@ func TestGraphFile_DefaultScope_IsDownstreamAtLevelOne(t *testing.T) {
 	cmd := NewCommand()
 	cmd.SetArgs([]string{
 		"-r", repoDir,
-		"-p", "a.ts",
+		"a.ts", "--reach", "down",
 		"-l", "1",
 		"-f", "dot",
 	})
@@ -1062,7 +1062,7 @@ func TestGraphFile_PruneStopsTraversal(t *testing.T) {
 	cmd := NewCommand()
 	cmd.SetArgs([]string{
 		"-r", repoDir,
-		"-p", "a.ts",
+		"a.ts", "--reach", "down",
 		"--prune", "b.ts",
 		"-l", "0",
 		"-f", "dot",
@@ -1117,7 +1117,7 @@ func TestGraphFile_PruneDoesNotBlockNodesReachableViaOtherPaths(t *testing.T) {
 	cmd := NewCommand()
 	cmd.SetArgs([]string{
 		"-r", repoDir,
-		"-p", "a.ts",
+		"a.ts", "--reach", "down",
 		"--prune", "b.ts",
 		"-l", "0",
 		"-f", "dot",
@@ -1144,7 +1144,7 @@ func TestGraphFile_PruneWithoutFile_ReturnsError(t *testing.T) {
 	if err == nil {
 		t.Fatalf("expected error when --prune is used without --file")
 	}
-	if !strings.Contains(err.Error(), "--prune requires --file flag") {
+	if !strings.Contains(err.Error(), "--prune requires --reach") {
 		t.Fatalf("expected prune requires file error, got: %v", err)
 	}
 }
@@ -1282,7 +1282,7 @@ func TestGraphFile_Also_IncludesConnectedTestFile(t *testing.T) {
 	cmd := NewCommand()
 	cmd.SetArgs([]string{
 		"-r", repoDir,
-		"-p", "a.ts",
+		"a.ts", "--reach", "down",
 		"-l", "0",
 		"--also", "*.test.ts",
 		"-f", "dot",
@@ -1330,7 +1330,7 @@ func TestGraphFile_Also_ExcludesUnconnectedFiles(t *testing.T) {
 	cmd := NewCommand()
 	cmd.SetArgs([]string{
 		"-r", repoDir,
-		"-p", "a.ts",
+		"a.ts", "--reach", "down",
 		"-l", "0",
 		"--also", "*.test.ts",
 		"-f", "dot",
@@ -1360,7 +1360,7 @@ func TestGraphFile_Also_WithoutFile_ReturnsError(t *testing.T) {
 	if err == nil {
 		t.Fatalf("expected error when --also is used without --file")
 	}
-	if !strings.Contains(err.Error(), "--also requires --file flag") {
+	if !strings.Contains(err.Error(), "--also requires a single path with --reach") {
 		t.Fatalf("expected also requires file error, got: %v", err)
 	}
 }
@@ -1384,7 +1384,7 @@ func TestGraphFile_Also_MultiplePatterns(t *testing.T) {
 	cmd := NewCommand()
 	cmd.SetArgs([]string{
 		"-r", repoDir,
-		"-p", "a.ts",
+		"a.ts", "--reach", "down",
 		"-l", "0",
 		"--also", "*.test.ts,*.spec.ts",
 		"-f", "dot",
@@ -1462,7 +1462,7 @@ func TestGraphFile_Also_NoMatches_ReturnsOriginalGraph(t *testing.T) {
 	cmd := NewCommand()
 	cmd.SetArgs([]string{
 		"-r", repoDir,
-		"-p", "a.ts",
+		"a.ts", "--reach", "down",
 		"-l", "0",
 		"--also", "*.test.ts",
 		"-f", "dot",

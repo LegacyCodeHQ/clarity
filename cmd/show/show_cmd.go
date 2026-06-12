@@ -113,14 +113,12 @@ func NewCommand() *cobra.Command {
 	cmd.Flags().StringVar(&opts.excludeExt, "exclude-ext", "", "Exclude files with these extensions (comma-separated, e.g. .go,.java)")
 	// Add between flag for finding paths between files
 	cmd.Flags().StringSliceVarP(&opts.betweenFiles, "between", "w", nil, "Find all paths between specified files (comma-separated)")
-	// Add file flag for showing dependencies of a specific file
-	cmd.Flags().StringVarP(&opts.targetFile, "file", "p", "", "Show dependencies for a specific file")
-	// Add level flag for limiting dependency depth
+	// Add depth flag for limiting reach traversal
 	cmd.Flags().IntVarP(&opts.depthLevel, "depth", "l", opts.depthLevel, "Depth for --reach (0 = unlimited)")
 	cmd.Flags().StringVar(&opts.reach, "reach", "", "Walk dependencies from the anchor: up, down, both")
 	cmd.Flags().BoolVar(&opts.all, "all", false, "Render the whole tree at this snapshot")
-	cmd.Flags().StringSliceVar(&opts.pruneFiles, "prune", nil, "Show node but skip its subtree (requires --file; shown with dashed border)")
-	cmd.Flags().StringSliceVar(&opts.alsoPatterns, "also", nil, "Include files matching glob patterns that connect to --file graph (requires --file)")
+	cmd.Flags().StringSliceVar(&opts.pruneFiles, "prune", nil, "Show node but skip its subtree (requires --reach; shown with dashed border)")
+	cmd.Flags().StringSliceVar(&opts.alsoPatterns, "also", nil, "Include files matching glob patterns that connect to the --reach graph (requires --reach)")
 	cmd.Flags().BoolVar(&opts.collapse, "collapse", false, "Collapse files into the modules declared in .clarity/modules.json")
 	cmd.Flags().StringVarP(&opts.moduleSelect, "module", "m", "", "Render the named module's files inside a box, alongside any files already in scope such as working-set changes (quote names with spaces)")
 	cmd.Flags().BoolVar(&opts.edgeLabels, "label", false, "Add deterministic short labels to edges")
@@ -134,7 +132,6 @@ func NewCommand() *cobra.Command {
 func deprecateLegacyFlags(cmd *cobra.Command) {
 	deprecations := map[string]string{
 		"input": "pass paths positionally instead",
-		"file":  "use a positional path with --reach down",
 	}
 	for name, message := range deprecations {
 		_ = cmd.Flags().MarkDeprecated(name, message)
@@ -525,9 +522,6 @@ func validateGraphOptions(opts *graphOptions) error {
 	if opts.all && len(opts.betweenFiles) > 0 {
 		return fmt.Errorf("--all cannot be used with --between")
 	}
-	if opts.all && opts.targetFile != "" {
-		return fmt.Errorf("--all cannot be used with --file")
-	}
 	if opts.all && opts.moduleSelect != "" {
 		return fmt.Errorf("--all cannot be used with --module")
 	}
@@ -535,29 +529,21 @@ func validateGraphOptions(opts *graphOptions) error {
 		return fmt.Errorf("--reach cannot be used with --all")
 	}
 
-	if opts.targetFile != "" {
-		if len(opts.betweenFiles) > 0 {
-			return fmt.Errorf("--file cannot be used with --between flag")
-		}
-		if len(opts.includes) > 0 {
-			return fmt.Errorf("--file cannot be used with --input flag")
-		}
-		if opts.depthLevel < 0 {
-			return fmt.Errorf("--depth must be at least 0")
-		}
+	if opts.depthLevel < 0 {
+		return fmt.Errorf("--depth must be at least 0")
 	}
 
 	if len(opts.pruneFiles) > 0 && opts.targetFile == "" && opts.reach == "" {
-		return fmt.Errorf("--prune requires --file flag")
+		return fmt.Errorf("--prune requires --reach")
 	}
 
 	if len(opts.alsoPatterns) > 0 && opts.targetFile == "" {
-		return fmt.Errorf("--also requires --file flag")
+		return fmt.Errorf("--also requires a single path with --reach")
 	}
 
 	if opts.moduleSelect != "" {
 		if opts.targetFile != "" {
-			return fmt.Errorf("--module cannot be used with --file flag")
+			return fmt.Errorf("--module cannot be used with a file anchor")
 		}
 		if len(opts.betweenFiles) > 0 {
 			return fmt.Errorf("--module cannot be used with --between flag")
@@ -792,8 +778,8 @@ func collectCommitFilePaths(opts *graphOptions, fromCommit, toCommit string, isC
 }
 
 // isPlainCommitView reports whether this is a bare `-c <commit>` view, as opposed
-// to one narrowed by --input, --between, or --file. Only the plain view injects
-// deleted files as nodes; the narrowed views resolve against the commit tree.
+// to one narrowed by positional paths, --between, or --reach. Only the plain view
+// injects deleted files as nodes; the narrowed views resolve against the commit tree.
 func isPlainCommitView(opts *graphOptions) bool {
 	return opts.commitID != "" && len(opts.includes) == 0 && len(opts.betweenFiles) == 0 && opts.targetFile == ""
 }
