@@ -23,12 +23,39 @@ Inherited by all subcommands. Extracted from `cmd/root.go`.
 
 | Command | Description |
 |---|---|
+| `cycles [path...]` | List circular dependencies within a scope (experimental) |
 | `languages` | List all supported languages and file extensions |
+| `modules` | List the modules declared for this project |
 | `setup` | Add clarity usage instructions to AGENTS.md |
-| `show` | Show a scoped file-based dependency graph |
-| `watch` | Watch for file changes and serve a live dependency graph |
-| `why <from> <to>` | Show direct dependency direction(s) between two files |
-| `workspace` | Experimental workspace relationship graph for Go modules and Rust crates |
+| `show [paths...]` | Show a scoped file-based dependency graph |
+| `watch [paths...]` | Watch for file changes and serve a live dependency graph |
+| `workspace` | Workspace relationship graph for Go modules and Rust crates (experimental) |
+
+---
+
+
+## `clarity cycles [path...]`
+
+List circular dependencies between files within a scope.
+
+Scopes to the directories (or files) you pass, defaulting to the current
+directory, and reports every cyclic group of files found within that scope.
+Use it to audit a module you own without walking it directory by directory.
+
+With --url, each cycle is rendered as its own focused diagram and the command
+emits a shareable visualization URL beneath it.
+
+This command is experimental; its output may change.
+
+```
+clarity cycles [path...] [OPTIONS]
+```
+
+| Flag | Short | Type | Default | Description |
+|---|---|---|---|---|
+
+---
+
 
 ## `clarity languages`
 
@@ -36,6 +63,7 @@ List all supported programming languages and their mapped file extensions.
 
 Examples:
   clarity languages
+  clarity languages --format json
 
 ```
 clarity languages [OPTIONS]
@@ -43,6 +71,32 @@ clarity languages [OPTIONS]
 
 | Flag | Short | Type | Default | Description |
 |---|---|---|---|---|
+| `--format` | | string | `opts.format` | Output format (text, json) |
+
+---
+
+
+## `clarity modules`
+
+List the modules declared in .clarity/modules.json.
+
+Each module reports the files it resolves to after expanding globs, split into
+test and non-test files (mistyped patterns surface as a count of 0). Pass a
+listed name to "clarity show --module <name>" to render that module.
+
+Examples:
+  clarity modules
+  clarity modules --sort-by size
+  clarity modules --repo path/to/repo
+
+```
+clarity modules [OPTIONS]
+```
+
+| Flag | Short | Type | Default | Description |
+|---|---|---|---|---|
+| `--repo` | `-r` | string | `""` | Git repository path (default: current directory) |
+| `--sort-by` | | string | `opts.sortBy` | Order modules by: name (A→Z) or size (largest first) |
 
 ---
 
@@ -61,12 +115,12 @@ clarity setup [OPTIONS]
 ---
 
 
-## `clarity show`
+## `clarity show [paths...]`
 
 Show a scoped file-based dependency graph.
 
 ```
-clarity show [OPTIONS]
+clarity show [paths...] [OPTIONS]
 ```
 
 | Flag | Short | Type | Default | Description |
@@ -74,68 +128,61 @@ clarity show [OPTIONS]
 | `--format` | `-f` | string | `opts.outputFormat` | fmt.Sprintf("Output format (%s)", formatters.SupportedFormats()) |
 | `--repo` | `-r` | string | `""` | Git repository path (default: current directory) |
 | `--commit` | `-c` | string | `""` | Git commit or range to analyze (e.g., f0459ec, HEAD~3, f0459ec...be3d11a) |
-| `--direction` | `-d` | string | `opts.direction` | fmt.Sprintf("Graph direction (%s)", formatters.SupportedDirections()) |
-| `--file` | `-p` | string | `""` | Show dependencies for a specific file |
+| `--orientation` | `-o` | string | `opts.orientation` | fmt.Sprintf("Graph layout orientation (%s)", formatters.SupportedDirections()) |
+| `--module` | `-m` | string | `""` | Render the named module's files inside a box, alongside any files already in scope such as working-set changes (quote names with spaces) |
 | `--url` | `-u` | bool | `false` | Generate visualization URL (supported formats: dot, mermaid) |
-| `--input` | `-i` | []string | `nil` | Build graph from specific files and/or directories (comma-separated) |
 | `--between` | `-w` | []string | `nil` | Find all paths between specified files (comma-separated) |
-| `--level` | `-l` | int | `opts.depthLevel` | Depth level for dependencies (used with --file, 0 = unlimited) |
+| `--depth` | `-l` | int | `opts.depthLevel` | Depth for --reach (0 = unlimited) |
 | `--include-ext` | | string | `""` | Include only files with these extensions (comma-separated, e.g. .go,.java) |
 | `--exclude-ext` | | string | `""` | Exclude files with these extensions (comma-separated, e.g. .go,.java) |
-| `--scope` | | string | `opts.scope` | Dependency scope for --file (downstream only) |
+| `--reach` | | string | `""` | Walk dependencies from the anchor: up, down, both |
 | `--allow-outside-repo` | | bool | `false` | Allow input paths outside the repo root |
+| `--all` | | bool | `false` | Render the whole tree at this snapshot |
+| `--collapse` | | bool | `false` | Collapse files into the modules declared in .clarity/modules.json |
 | `--label` | | bool | `false` | Add deterministic short labels to edges |
 | `--no-stats` | | bool | `false` | Skip file addition/deletion statistics for faster rendering |
+| `--no-phantom` | | bool | `false` | Suppress phantom test nodes (Rust files with #[cfg(test)] regions are rendered as a single node) |
 | `--exclude` | | []string | `nil` | Exclude specific files and/or directories from graph inputs (comma-separated) |
-| `--prune` | | []string | `nil` | Show node but skip its subtree (requires --file; shown with dashed border) |
-| `--also` | | []string | `nil` | Include files matching glob patterns that connect to --file graph (requires --file) |
+| `--prune` | | []string | `nil` | Show node but skip its subtree (requires --reach; shown with dashed border) |
+| `--also` | | []string | `nil` | Include files matching glob patterns that connect to the --reach graph (requires --reach) |
 
 ---
 
 
-## `clarity watch`
+## `clarity watch [paths...]`
 
 Watch a project directory for file changes, rebuild the dependency graph, and serve a live-updating visualization at localhost.
 
 ```
-clarity watch [OPTIONS]
+clarity watch [paths...] [OPTIONS]
 ```
 
 | Flag | Short | Type | Default | Description |
 |---|---|---|---|---|
 | `--repo` | `-r` | string | `""` | Git repository path (default: current directory) |
-| `--direction` | `-d` | string | `opts.direction` | fmt.Sprintf("Graph direction (%s)", formatters.SupportedDirections()) |
-| `--input` | `-i` | []string | `nil` | Watch specific files and/or directories (comma-separated) |
+| `--module` | `-m` | string | `""` | Render the named module's files inside a box |
+| `--orientation` | `-o` | string | `opts.direction` | fmt.Sprintf("Graph layout orientation (%s)", formatters.SupportedDirections()) |
+| `--format` | `-f` | string | `opts.format` | fmt.Sprintf("Output format (%s)", formatters.SupportedFormats()) |
+| `--between` | `-w` | []string | `nil` | Find all paths between specified files (comma-separated) |
 | `--port` | `-P` | int | `opts.port` | HTTP server port |
+| `--depth` | `-l` | int | `opts.depthLevel` | Depth for --reach (0 = unlimited) |
 | `--include-ext` | | string | `""` | Include only files with these extensions (comma-separated, e.g. .go,.java) |
 | `--exclude-ext` | | string | `""` | Exclude files with these extensions (comma-separated, e.g. .go,.java) |
+| `--reach` | | string | `""` | Walk dependencies from the anchor: up, down, both |
+| `--all` | | bool | `false` | Render the whole live working tree |
+| `--collapse` | | bool | `false` | Collapse files into the modules declared in .clarity/modules.json |
+| `--label` | | bool | `false` | Add deterministic short labels to edges |
+| `--no-stats` | | bool | `false` | Skip file addition/deletion statistics for faster rendering |
+| `--no-phantom` | | bool | `false` | Suppress phantom test nodes (Rust files with #[cfg(test)] regions are rendered as a single node) |
 | `--exclude` | | []string | `nil` | Exclude specific files and/or directories (comma-separated) |
-
----
-
-
-## `clarity why <from> <to>`
-
-Show immediate dependency edge(s) between two files, including referenced members when available.
-
-Args: `cobra.ExactArgs(2)`
-
-```
-clarity why <from> <to> [OPTIONS]
-```
-
-| Flag | Short | Type | Default | Description |
-|---|---|---|---|---|
-| `--format` | `-f` | string | `opts.outputFormat` | fmt.Sprintf("Output format (%s)", supportedFormats()) |
-| `--repo` | `-r` | string | `""` | Git repository path (default: current directory) |
-| `--allow-outside-repo` | | bool | `false` | Allow input paths outside the repo root |
+| `--prune` | | []string | `nil` | Show node but skip its subtree (requires --reach) |
 
 ---
 
 
 ## `clarity workspace`
 
-Experimental workspace relationship graph for Go modules and Rust crates.
+Workspace relationship graph for Go modules and Rust crates (experimental).
 
 ```
 clarity workspace [OPTIONS]
@@ -148,5 +195,6 @@ clarity workspace [OPTIONS]
 | `--direction` | `-d` | string | `opts.direction` | fmt.Sprintf("Graph direction (%s)", formatters.SupportedDirections()) |
 | `--url` | `-u` | bool | `false` | Generate visualization URL (supported formats: dot, mermaid) |
 | `--language` | | string | `opts.language` | Workspace language filter (auto, go, rust) |
+| `--manifest` | | string | `""` | Prune workspace graph to the dependency subgraph rooted at this manifest path |
 
 ---
