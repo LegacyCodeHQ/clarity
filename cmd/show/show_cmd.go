@@ -567,7 +567,7 @@ func validateGraphOptions(opts *graphOptions) error {
 		}
 	}
 
-	if len(opts.pruneFiles) > 0 && opts.targetFile == "" {
+	if len(opts.pruneFiles) > 0 && opts.targetFile == "" && opts.reach == "" {
 		return fmt.Errorf("--prune requires --file flag")
 	}
 

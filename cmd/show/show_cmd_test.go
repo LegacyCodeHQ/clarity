@@ -119,6 +119,35 @@ func TestGraphReachDown_FromWorkingSetChanges(t *testing.T) {
 	}
 }
 
+func TestGraphReachDown_FromWorkingSetChanges_PruneStopsTraversal(t *testing.T) {
+	repoDir := t.TempDir()
+	gitInitRepo(t, repoDir)
+
+	aPath := filepath.Join(repoDir, "a.ts")
+	bPath := filepath.Join(repoDir, "b.ts")
+	cPath := filepath.Join(repoDir, "c.ts")
+	if err := os.WriteFile(bPath, []byte("import { c } from './c';\nexport const b = c;\n"), 0o644); err != nil {
+		t.Fatalf("os.WriteFile() error = %v", err)
+	}
+	if err := os.WriteFile(cPath, []byte("export const c = 1;\n"), 0o644); err != nil {
+		t.Fatalf("os.WriteFile() error = %v", err)
+	}
+	gitRun(t, repoDir, "add", ".")
+	gitRun(t, repoDir, "commit", "-m", "add dependency chain")
+
+	if err := os.WriteFile(aPath, []byte("import { b } from './b';\nexport const a = b;\n"), 0o644); err != nil {
+		t.Fatalf("os.WriteFile() error = %v", err)
+	}
+
+	out := runShow(t, "-r", repoDir, "--reach", "down", "--depth", "0", "--prune", "b.ts", "-f", "dot")
+	if !strings.Contains(out, `"a.ts"`) || !strings.Contains(out, `"b.ts"`) {
+		t.Fatalf("expected pruned reach to include anchor a.ts and pruned b.ts, got:\n%s", out)
+	}
+	if strings.Contains(out, `"c.ts"`) {
+		t.Fatalf("expected prune b.ts to stop traversal before c.ts, got:\n%s", out)
+	}
+}
+
 func TestGraphAllCollapse_AliasesModules(t *testing.T) {
 	repoDir, _ := writeJavaPair(t)
 	writeModulesConfig(t, repoDir, `{
