@@ -54,6 +54,51 @@ public class App {}
 	}
 }
 
+func TestGraphPositionalPath_RendersDependencyEdges(t *testing.T) {
+	repoDir, srcDir := writeJavaPair(t)
+
+	cmd := NewCommand()
+	cmd.SetArgs([]string{srcDir, "-r", repoDir, "-f", "dot"})
+
+	var stdout bytes.Buffer
+	cmd.SetOut(&stdout)
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("cmd.Execute() error = %v", err)
+	}
+
+	output := stdout.String()
+	if !strings.Contains(output, "App.java") || !strings.Contains(output, "Helper.java") {
+		t.Fatalf("expected positional path graph to include App.java and Helper.java, got:\n%s", output)
+	}
+}
+
+func TestGraphReachDown_AliasesFileScope(t *testing.T) {
+	repoDir := writeTypeScriptReachFixture(t)
+
+	out := runShow(t, "-r", repoDir, "a.ts", "--reach", "down", "--depth", "0", "-f", "dot")
+	if !strings.Contains(out, `"a.ts"`) || !strings.Contains(out, `"b.ts"`) || !strings.Contains(out, `"c.ts"`) {
+		t.Fatalf("expected --reach down to include transitive downstream nodes, got:\n%s", out)
+	}
+	if strings.Contains(out, `"x.ts"`) {
+		t.Fatalf("expected --reach down to exclude upstream dependent x.ts, got:\n%s", out)
+	}
+}
+
+func TestGraphAllCollapse_AliasesModules(t *testing.T) {
+	repoDir, _ := writeJavaPair(t)
+	writeModulesConfig(t, repoDir, `{
+  "modules": [
+    { "name": "support", "files": ["src/main/java/com/example/util/Helper.java"] }
+  ]
+}`)
+
+	out := runShow(t, "-r", repoDir, "-f", "dot", "--all", "--collapse")
+	if !strings.Contains(out, `"support"`) {
+		t.Fatalf("expected --all --collapse to render declared module node, got:\n%s", out)
+	}
+}
+
 func TestGraphInput_WithMJSFiles_RendersDependencyEdges(t *testing.T) {
 	repoDir := t.TempDir()
 	testFile := filepath.Join(repoDir, "viewer_state.test.mjs")
@@ -807,24 +852,7 @@ func TestGraphFileScopeDownstream_LevelZero_IncludesTransitiveOutgoingOnly(t *te
 }
 
 func TestGraphFile_DefaultScope_IsDownstreamAtLevelOne(t *testing.T) {
-	repoDir := t.TempDir()
-	aFile := filepath.Join(repoDir, "a.ts")
-	bFile := filepath.Join(repoDir, "b.ts")
-	cFile := filepath.Join(repoDir, "c.ts")
-	upstreamFile := filepath.Join(repoDir, "x.ts")
-
-	if err := os.WriteFile(aFile, []byte("import { b } from './b';\nexport const a = b;\n"), 0o644); err != nil {
-		t.Fatalf("os.WriteFile() error = %v", err)
-	}
-	if err := os.WriteFile(bFile, []byte("import { c } from './c';\nexport const b = c;\n"), 0o644); err != nil {
-		t.Fatalf("os.WriteFile() error = %v", err)
-	}
-	if err := os.WriteFile(cFile, []byte("export const c = 1;\n"), 0o644); err != nil {
-		t.Fatalf("os.WriteFile() error = %v", err)
-	}
-	if err := os.WriteFile(upstreamFile, []byte("import { a } from './a';\nexport const x = a;\n"), 0o644); err != nil {
-		t.Fatalf("os.WriteFile() error = %v", err)
-	}
+	repoDir := writeTypeScriptReachFixture(t)
 
 	cmd := NewCommand()
 	cmd.SetArgs([]string{
@@ -851,6 +879,23 @@ func TestGraphFile_DefaultScope_IsDownstreamAtLevelOne(t *testing.T) {
 	if strings.Contains(output, `"c.ts"`) {
 		t.Fatalf("expected level 1 to exclude transitive downstream node c.ts, got:\n%s", output)
 	}
+}
+
+func writeTypeScriptReachFixture(t *testing.T) string {
+	t.Helper()
+	repoDir := t.TempDir()
+	files := map[string]string{
+		"a.ts": "import { b } from './b';\nexport const a = b;\n",
+		"b.ts": "import { c } from './c';\nexport const b = c;\n",
+		"c.ts": "export const c = 1;\n",
+		"x.ts": "import { a } from './a';\nexport const x = a;\n",
+	}
+	for name, content := range files {
+		if err := os.WriteFile(filepath.Join(repoDir, name), []byte(content), 0o644); err != nil {
+			t.Fatalf("os.WriteFile() error = %v", err)
+		}
+	}
+	return repoDir
 }
 
 func TestGraphFile_InvalidScope_ReturnsError(t *testing.T) {

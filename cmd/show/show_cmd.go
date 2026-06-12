@@ -35,6 +35,9 @@ type graphOptions struct {
 	betweenFiles    []string
 	targetFile      string
 	depthLevel      int
+	reach           string
+	all             bool
+	collapse        bool
 	scope           string
 	pruneFiles      []string
 	alsoPatterns    []string
@@ -48,6 +51,10 @@ type graphOptions struct {
 
 const (
 	scopeDownstream = "downstream"
+
+	reachDown = "down"
+	reachUp   = "up"
+	reachBoth = "both"
 
 	moduleDirectionNone = "none"
 	moduleDirectionIn   = "in"
@@ -71,10 +78,11 @@ func NewCommand() *cobra.Command {
 	}
 
 	cmd := &cobra.Command{
-		Use:   "show",
+		Use:   "show [paths...]",
 		Short: "Show a scoped file-based dependency graph",
 		Long:  `Show a scoped file-based dependency graph.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			opts.includes = append(opts.includes, args...)
 			return runGraph(cmd, opts)
 		},
 	}
@@ -114,11 +122,15 @@ func NewCommand() *cobra.Command {
 	cmd.Flags().StringVarP(&opts.targetFile, "file", "p", "", "Show dependencies for a specific file")
 	// Add level flag for limiting dependency depth
 	cmd.Flags().IntVarP(&opts.depthLevel, "level", "l", opts.depthLevel, "Depth level for dependencies (used with --file, 0 = unlimited)")
+	cmd.Flags().IntVar(&opts.depthLevel, "depth", opts.depthLevel, "Depth for --reach (0 = unlimited)")
+	cmd.Flags().StringVar(&opts.reach, "reach", "", "Walk dependencies from the anchor: up, down, both")
+	cmd.Flags().BoolVar(&opts.all, "all", false, "Render the whole tree at this snapshot")
 	cmd.Flags().StringVar(&opts.scope, "scope", opts.scope, "Dependency scope for --file (downstream only)")
 	cmd.Flags().StringSliceVar(&opts.pruneFiles, "prune", nil, "Show node but skip its subtree (requires --file; shown with dashed border)")
 	cmd.Flags().StringSliceVar(&opts.alsoPatterns, "also", nil, "Include files matching glob patterns that connect to --file graph (requires --file)")
+	cmd.Flags().BoolVar(&opts.collapse, "collapse", false, "Collapse files into the modules declared in .clarity/modules.json")
 	cmd.Flags().BoolVar(&opts.modules, "modules", false, "Collapse files into the modules declared in .clarity/modules.json (off by default)")
-	cmd.Flags().StringVar(&opts.moduleSelect, "module", "", "Render the named module's files inside a box, alongside any files already in scope such as working-set changes (quote names with spaces)")
+	cmd.Flags().StringVarP(&opts.moduleSelect, "module", "m", "", "Render the named module's files inside a box, alongside any files already in scope such as working-set changes (quote names with spaces)")
 	cmd.Flags().StringVarP(&opts.moduleDirection, "direction", "d", opts.moduleDirection, "With --module, also show the module's immediate dependents/dependencies as context: none (default), in, out, both")
 	cmd.Flags().BoolVar(&opts.edgeLabels, "label", false, "Add deterministic short labels to edges")
 	cmd.Flags().BoolVar(&opts.noStats, "no-stats", false, "Skip file addition/deletion statistics for faster rendering")
@@ -194,7 +206,7 @@ func runGraph(cmd *cobra.Command, opts *graphOptions) error {
 		contentReader = deletedAwareContentReader(contentReader, deletedContent)
 	}
 
-	modules, err := resolveConfigModules(opts.repoPath, opts.modules || opts.moduleSelect != "")
+	modules, err := resolveConfigModules(opts.repoPath, opts.collapse || opts.moduleSelect != "")
 	if err != nil {
 		return err
 	}
@@ -306,7 +318,7 @@ func runGraph(cmd *cobra.Command, opts *graphOptions) error {
 				return err
 			}
 		}
-	case len(modules) > 0:
+	case opts.collapse && len(modules) > 0:
 		graph, collapse, err = depgraph.CollapseModules(graph, modules)
 		if err != nil {
 			return err
@@ -448,6 +460,14 @@ func commonPathPrefix(paths []string) string {
 }
 
 func validateGraphOptions(opts *graphOptions) error {
+	if opts.modules {
+		opts.collapse = true
+	}
+
+	if opts.collapse && opts.moduleSelect != "" {
+		return fmt.Errorf("--collapse cannot be used with --module")
+	}
+
 	orientation, ok := formatters.ParseDirection(opts.orientation)
 	if !ok {
 		return fmt.Errorf("unknown orientation: %s (valid options: %s)", opts.orientation, formatters.SupportedDirections())
@@ -478,8 +498,40 @@ func validateGraphOptions(opts *graphOptions) error {
 		return fmt.Errorf("unknown scope: %s (valid options: %s)", opts.scope, scopeDownstream)
 	}
 
+	reach := strings.ToLower(strings.TrimSpace(opts.reach))
+	switch reach {
+	case "":
+	case reachDown, reachUp, reachBoth:
+		opts.reach = reach
+	default:
+		return fmt.Errorf("unknown reach: %s (valid options: up, down, both)", opts.reach)
+	}
+	if opts.reach == reachDown {
+		opts.scope = scopeDownstream
+	}
+
+	if opts.reach != "" && opts.targetFile == "" && len(opts.includes) == 1 {
+		opts.targetFile = opts.includes[0]
+		opts.includes = nil
+	}
+
 	if len(opts.betweenFiles) > 0 && len(opts.includes) > 0 {
 		return fmt.Errorf("--between cannot be used with --input flag")
+	}
+	if opts.all && len(opts.includes) > 0 {
+		return fmt.Errorf("--all cannot be used with paths")
+	}
+	if opts.all && len(opts.betweenFiles) > 0 {
+		return fmt.Errorf("--all cannot be used with --between")
+	}
+	if opts.all && opts.targetFile != "" {
+		return fmt.Errorf("--all cannot be used with --file")
+	}
+	if opts.all && opts.moduleSelect != "" {
+		return fmt.Errorf("--all cannot be used with --module")
+	}
+	if opts.all && opts.reach != "" {
+		return fmt.Errorf("--reach cannot be used with --all")
 	}
 
 	if opts.targetFile != "" {
@@ -520,6 +572,16 @@ func validateGraphOptions(opts *graphOptions) error {
 	}
 	if opts.moduleSelect == "" && opts.moduleDirection != moduleDirectionNone {
 		return fmt.Errorf("--direction requires --module")
+	}
+	if opts.moduleSelect != "" && opts.reach != "" {
+		switch opts.reach {
+		case reachDown:
+			opts.moduleDirection = moduleDirectionOut
+		case reachUp:
+			opts.moduleDirection = moduleDirectionIn
+		case reachBoth:
+			opts.moduleDirection = moduleDirectionBoth
+		}
 	}
 
 	return nil
@@ -588,6 +650,27 @@ func parseCommitRange(opts *graphOptions) (string, string, bool, error) {
 }
 
 func determineFilePaths(cmd *cobra.Command, opts *graphOptions, pathResolver PathResolver, fromCommit, toCommit string, isCommitRange bool) ([]string, bool, error) {
+	if opts.all {
+		if opts.commitID != "" {
+			filePaths, err := git.GetCommitTreeFiles(opts.repoPath, toCommit)
+			if err != nil {
+				return nil, false, fmt.Errorf("failed to get files from commit tree: %w", err)
+			}
+			if len(filePaths) == 0 {
+				return nil, false, fmt.Errorf("no files found in commit %s", toCommit)
+			}
+			return filePaths, false, nil
+		}
+		filePaths, err := expandPaths([]string{opts.repoPath}, false)
+		if err != nil {
+			return nil, false, fmt.Errorf("failed to expand working directory: %w", err)
+		}
+		if len(filePaths) == 0 {
+			return nil, false, fmt.Errorf("no supported files found in working directory")
+		}
+		return filePaths, false, nil
+	}
+
 	if len(opts.includes) > 0 {
 		if opts.commitID != "" {
 			filePaths, err := collectCommitIncludedFilePaths(opts, pathResolver, toCommit)
@@ -901,7 +984,11 @@ func applyTargetFileFilter(opts *graphOptions, pathResolver PathResolver, graph 
 		pruneSet[absPrunePath.String()] = true
 	}
 
-	graph, prunedNodes := filterGraphByLevel(graph, absTargetFile.String(), opts.depthLevel, opts.scope, pruneSet)
+	reach := opts.reach
+	if reach == "" {
+		reach = reachDown
+	}
+	graph, prunedNodes := filterGraphByLevel(graph, absTargetFile.String(), opts.depthLevel, reach, pruneSet)
 	filePaths = graphFiles(graph)
 
 	return graph, filePaths, prunedNodes, nil
@@ -1701,14 +1788,23 @@ func resolveAndValidatePaths(paths []string, pathResolver PathResolver, graph de
 }
 
 // filterGraphByLevel filters the dependency graph to include only nodes within
-// the specified number of levels from the target file, according to scope.
+// the specified number of levels from the target file, according to reach.
 // A level of 0 means unlimited traversal depth.
 // Nodes in pruneSet are included in the graph but their subtrees are not traversed.
 // Returns the filtered graph and the set of pruned nodes that were actually visited.
-func filterGraphByLevel(graph depgraph.DependencyGraph, targetFile string, level int, scope string, pruneSet map[string]bool) (depgraph.DependencyGraph, map[string]bool) {
+func filterGraphByLevel(graph depgraph.DependencyGraph, targetFile string, level int, reach string, pruneSet map[string]bool) (depgraph.DependencyGraph, map[string]bool) {
 	adjacency, err := depgraph.AdjacencyList(graph)
 	if err != nil {
 		return depgraph.NewDependencyGraph(), nil
+	}
+	reverseAdjacency := make(map[string][]string, len(adjacency))
+	for source, deps := range adjacency {
+		if _, ok := reverseAdjacency[source]; !ok {
+			reverseAdjacency[source] = nil
+		}
+		for _, dep := range deps {
+			reverseAdjacency[dep] = append(reverseAdjacency[dep], source)
+		}
 	}
 
 	// BFS to find all nodes within the specified level (or all reachable nodes when level=0)
@@ -1723,12 +1819,21 @@ func filterGraphByLevel(graph depgraph.DependencyGraph, targetFile string, level
 			if pruneSet[file] {
 				continue
 			}
-			if scope == scopeDownstream {
+			if reach == reachDown || reach == reachBoth {
 				// Add direct dependencies (files this file imports).
 				for _, dep := range adjacency[file] {
 					if !visited[dep] {
 						visited[dep] = true
 						nextLevel = append(nextLevel, dep)
+					}
+				}
+			}
+			if reach == reachUp || reach == reachBoth {
+				// Add direct dependents (files that import this file).
+				for _, dependent := range reverseAdjacency[file] {
+					if !visited[dependent] {
+						visited[dependent] = true
+						nextLevel = append(nextLevel, dependent)
 					}
 				}
 			}
