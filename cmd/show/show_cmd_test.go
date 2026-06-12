@@ -723,6 +723,31 @@ func TestGraphInput_ExcludeExt_MultipleExtensions_AreAccepted(t *testing.T) {
 	}
 }
 
+func TestGraphCommit_WithFile_UsesCommitContent(t *testing.T) {
+	repoDir := t.TempDir()
+	gitInitRepo(t, repoDir)
+
+	aPath := filepath.Join(repoDir, "a.ts")
+	bPath := filepath.Join(repoDir, "b.ts")
+	if err := os.WriteFile(aPath, []byte("import { b } from './b';\nexport const a = b;\n"), 0o644); err != nil {
+		t.Fatalf("os.WriteFile() error = %v", err)
+	}
+	if err := os.WriteFile(bPath, []byte("export const b = 1;\n"), 0o644); err != nil {
+		t.Fatalf("os.WriteFile() error = %v", err)
+	}
+	gitRun(t, repoDir, "add", ".")
+	gitRun(t, repoDir, "commit", "-m", "add dependency")
+
+	if err := os.WriteFile(aPath, []byte("export const a = 1;\n"), 0o644); err != nil {
+		t.Fatalf("os.WriteFile() error = %v", err)
+	}
+
+	out := runShow(t, "-r", repoDir, "-c", "HEAD", "-p", "a.ts", "--scope", "downstream", "-l", "0", "-f", "dot")
+	if !strings.Contains(out, `"b.ts"`) {
+		t.Fatalf("expected --commit -p to read a.ts content from HEAD and include b.ts, got:\n%s", out)
+	}
+}
+
 func TestGraphInputRelativePath_WithRepo_ResolvesFromRepoRoot(t *testing.T) {
 	repoDir := t.TempDir()
 	relativePath := filepath.Join("src", "main.go")

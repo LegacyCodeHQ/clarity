@@ -833,7 +833,7 @@ func collectCommitFilePaths(opts *graphOptions, fromCommit, toCommit string, isC
 }
 
 func selectContentReader(opts *graphOptions, toCommit string) vcs.ContentReader {
-	if toCommit != "" && opts.targetFile == "" {
+	if toCommit != "" {
 		return git.GitCommitContentReader(opts.repoPath, toCommit)
 	}
 	return vcs.FilesystemContentReader()
