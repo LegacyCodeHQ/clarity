@@ -27,7 +27,7 @@ func TestShowCommand_ModuleSelectBoxesMembers(t *testing.T) {
   ]
 }`)
 
-	out := runShow(t, "-i", srcDir, "-r", repoDir, "-f", "dot", "--module", "support")
+	out := runShow(t, srcDir, "-r", repoDir, "-f", "dot", "--module", "support")
 
 	if !strings.Contains(out, "subgraph cluster") {
 		t.Fatalf("expected a boundary box (subgraph cluster) for the module:\n%s", out)
@@ -52,7 +52,7 @@ func TestShowCommand_ModuleSelectMermaidSubgraph(t *testing.T) {
   ]
 }`)
 
-	out := runShow(t, "-i", srcDir, "-r", repoDir, "-f", "mermaid", "--module", "support")
+	out := runShow(t, srcDir, "-r", repoDir, "-f", "mermaid", "--module", "support")
 	if !strings.Contains(out, `subgraph moduleCluster["support"]`) {
 		t.Fatalf("expected a mermaid subgraph boundary labeled with the module name:\n%s", out)
 	}
@@ -72,7 +72,7 @@ func TestShowCommand_ModuleSelectBoxesEvenWhenIsolated(t *testing.T) {
   ]
 }`)
 
-	out := runShow(t, "-i", srcDir, "-r", repoDir, "-f", "dot", "--module", "bundle")
+	out := runShow(t, srcDir, "-r", repoDir, "-f", "dot", "--module", "bundle")
 	if !strings.Contains(out, "subgraph cluster") {
 		t.Fatalf("expected the module box to draw even when isolated:\n%s", out)
 	}
@@ -92,7 +92,7 @@ func TestShowCommand_ModuleSelectSelfScopesOnCleanTree(t *testing.T) {
 	gitRun(t, repoDir, "add", ".")
 	gitRun(t, repoDir, "commit", "-m", "seed")
 
-	// No -i and a clean tree: the module supplies its own scope rather than
+	// No paths and a clean tree: the module supplies its own scope rather than
 	// printing the "working directory is clean" hint.
 	out := runShow(t, "-r", repoDir, "-f", "dot", "--module", "support")
 	if strings.Contains(out, "Working directory is clean") {
@@ -106,7 +106,7 @@ func TestShowCommand_ModuleSelectSelfScopesOnCleanTree(t *testing.T) {
 func TestShowCommand_ModuleSelectThroughSymlinkedRepo(t *testing.T) {
 	// Reproduces the /tmp -> /private/tmp aliasing: the repo is reached through a
 	// symlink. Module member paths (derived from the symlink-resolved repo root)
-	// must still match graph node keys (derived from the -i input path).
+	// must still match graph node keys (derived from the positional path argument).
 	realRepo := resolveSymlinks(t.TempDir())
 	dir := filepath.Join(realRepo, "src", "main", "java", "com", "example")
 	if err := os.MkdirAll(filepath.Join(dir, "util"), 0o755); err != nil {
@@ -130,7 +130,7 @@ func TestShowCommand_ModuleSelectThroughSymlinkedRepo(t *testing.T) {
 		t.Skipf("symlinks unsupported on this platform: %v", err)
 	}
 
-	out := runShow(t, "-i", filepath.Join(linkRepo, "src"), "-r", linkRepo, "-f", "dot", "--module", "support")
+	out := runShow(t, filepath.Join(linkRepo, "src"), "-r", linkRepo, "-f", "dot", "--module", "support")
 	if !strings.Contains(out, "subgraph cluster") {
 		t.Fatalf("expected the box to draw through a symlinked repo path, got:\n%s", out)
 	}
@@ -147,7 +147,7 @@ func TestShowCommand_ModuleSelectUnknownName(t *testing.T) {
   ]
 }`)
 
-	err := runShowErr(t, "-i", srcDir, "-r", repoDir, "-f", "dot", "--module", "nope")
+	err := runShowErr(t, srcDir, "-r", repoDir, "-f", "dot", "--module", "nope")
 	if err == nil {
 		t.Fatal("expected an error for an unknown module name, got nil")
 	}
@@ -164,7 +164,7 @@ func TestShowCommand_CollapseCannotBeUsedWithModule(t *testing.T) {
   ]
 }`)
 
-	err := runShowErr(t, "-i", srcDir, "-r", repoDir, "-f", "dot", "--collapse", "--module", "support")
+	err := runShowErr(t, srcDir, "-r", repoDir, "-f", "dot", "--collapse", "--module", "support")
 	if err == nil {
 		t.Fatal("expected an error when --collapse is used with --module, got nil")
 	}
@@ -182,7 +182,7 @@ func TestShowCommand_ModuleSelectResolvesToNoFiles(t *testing.T) {
   ]
 }`)
 
-	err := runShowErr(t, "-i", srcDir, "-r", repoDir, "-f", "dot", "--module", "ghost")
+	err := runShowErr(t, srcDir, "-r", repoDir, "-f", "dot", "--module", "ghost")
 	if err == nil {
 		t.Fatal("expected an error when the module resolves to no files, got nil")
 	}

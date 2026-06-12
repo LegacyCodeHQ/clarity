@@ -36,7 +36,6 @@ func NewCommand() *cobra.Command {
 
 	cmd.Flags().StringVarP(&opts.repoPath, "repo", "r", "", "Git repository path (default: current directory)")
 	cmd.Flags().IntVarP(&opts.port, "port", "P", opts.port, "HTTP server port")
-	cmd.Flags().StringSliceVarP(&opts.includes, "input", "i", nil, "Watch specific files and/or directories (comma-separated)")
 	cmd.Flags().StringSliceVar(&opts.excludes, "exclude", nil, "Exclude specific files and/or directories (comma-separated)")
 	cmd.Flags().StringVar(&opts.includeExt, "include-ext", "", "Include only files with these extensions (comma-separated, e.g. .go,.java)")
 	cmd.Flags().StringVar(&opts.excludeExt, "exclude-ext", "", "Exclude files with these extensions (comma-separated, e.g. .go,.java)")
@@ -68,18 +67,8 @@ func NewCommand() *cobra.Command {
 	cmd.Flags().BoolVar(&opts.edgeLabels, "label", false, "Add deterministic short labels to edges")
 	cmd.Flags().BoolVar(&opts.noStats, "no-stats", false, "Skip file addition/deletion statistics for faster rendering")
 	cmd.Flags().BoolVar(&opts.noPhantom, "no-phantom", false, "Suppress phantom test nodes (Rust files with #[cfg(test)] regions are rendered as a single node)")
-	deprecateLegacyWatchFlags(cmd)
 
 	return cmd
-}
-
-func deprecateLegacyWatchFlags(cmd *cobra.Command) {
-	deprecations := map[string]string{
-		"input": "pass paths positionally instead",
-	}
-	for name, message := range deprecations {
-		_ = cmd.Flags().MarkDeprecated(name, message)
-	}
 }
 
 func runWatch(cmd *cobra.Command, opts *watchOptions) error {

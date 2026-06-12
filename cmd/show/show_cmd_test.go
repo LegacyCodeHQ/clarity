@@ -36,7 +36,7 @@ public class App {}
 	}
 
 	cmd := NewCommand()
-	cmd.SetArgs([]string{"-i", filepath.Join(repoDir, "src"), "-f", "dot", "--allow-outside-repo"})
+	cmd.SetArgs([]string{filepath.Join(repoDir, "src"), "-f", "dot", "--allow-outside-repo"})
 
 	var stdout bytes.Buffer
 	cmd.SetOut(&stdout)
@@ -179,7 +179,7 @@ func TestGraphInput_WithMJSFiles_RendersDependencyEdges(t *testing.T) {
 	}
 
 	cmd := NewCommand()
-	cmd.SetArgs([]string{"-i", testFile + "," + stateFile, "-f", "dot", "--allow-outside-repo"})
+	cmd.SetArgs([]string{testFile, stateFile, "-f", "dot", "--allow-outside-repo"})
 
 	var stdout bytes.Buffer
 	cmd.SetOut(&stdout)
@@ -421,7 +421,7 @@ func TestGraphCommit_WithInput_UsesCommitTreePaths(t *testing.T) {
 	cmd.SetArgs([]string{
 		"-r", repoDir,
 		"-c", "HEAD",
-		"-i", "cmd/graph",
+		"cmd/graph",
 		"-f", "dot",
 	})
 
@@ -449,7 +449,7 @@ func TestGraphInput_WithSupportedFiles_RendersNode(t *testing.T) {
 	}
 
 	cmd := NewCommand()
-	cmd.SetArgs([]string{"-i", supportedFile, "-f", "dot", "--allow-outside-repo"})
+	cmd.SetArgs([]string{supportedFile, "-f", "dot", "--allow-outside-repo"})
 
 	var stdout bytes.Buffer
 	cmd.SetOut(&stdout)
@@ -471,7 +471,7 @@ func TestGraphInput_WithJSONFormat_ReturnsError(t *testing.T) {
 	}
 
 	cmd := NewCommand()
-	cmd.SetArgs([]string{"-i", supportedFile, "-f", "json", "--allow-outside-repo"})
+	cmd.SetArgs([]string{supportedFile, "-f", "json", "--allow-outside-repo"})
 
 	err := cmd.Execute()
 	if err == nil {
@@ -497,7 +497,7 @@ func TestGraphInput_Exclude_RemovesSpecificFile(t *testing.T) {
 	cmd := NewCommand()
 	cmd.SetArgs([]string{
 		"-r", repoDir,
-		"-i", repoDir,
+		repoDir,
 		"-f", "dot",
 		"--exclude", "Helper.java",
 	})
@@ -536,7 +536,7 @@ func TestGraphInput_Exclude_RemovesDirectory(t *testing.T) {
 	cmd := NewCommand()
 	cmd.SetArgs([]string{
 		"-r", repoDir,
-		"-i", repoDir,
+		repoDir,
 		"-f", "dot",
 		"--exclude", "internal",
 	})
@@ -567,7 +567,7 @@ func TestGraphInput_Exclude_AllFiles_ReturnsError(t *testing.T) {
 	cmd := NewCommand()
 	cmd.SetArgs([]string{
 		"-r", repoDir,
-		"-i", repoDir,
+		repoDir,
 		"-f", "dot",
 		"--exclude", repoDir,
 	})
@@ -594,7 +594,7 @@ func TestGraphInput_IncludeExt_KeepsOnlyMatchingExtension(t *testing.T) {
 	}
 
 	cmd := NewCommand()
-	cmd.SetArgs([]string{"-i", repoDir, "-f", "dot", "--allow-outside-repo", "--include-ext", ".go"})
+	cmd.SetArgs([]string{repoDir, "-f", "dot", "--allow-outside-repo", "--include-ext", ".go"})
 
 	var stdout bytes.Buffer
 	cmd.SetOut(&stdout)
@@ -628,7 +628,7 @@ func TestGraphInput_IncludeExt_MultipleExtensions_AreAccepted(t *testing.T) {
 	}
 
 	cmd := NewCommand()
-	cmd.SetArgs([]string{"-i", repoDir, "-f", "dot", "--allow-outside-repo", "--include-ext", "go,.java"})
+	cmd.SetArgs([]string{repoDir, "-f", "dot", "--allow-outside-repo", "--include-ext", "go,.java"})
 
 	var stdout bytes.Buffer
 	cmd.SetOut(&stdout)
@@ -666,7 +666,7 @@ func TestGraphInput_IncludeExtAndExcludeExt_ExcludeWins(t *testing.T) {
 
 	cmd := NewCommand()
 	cmd.SetArgs([]string{
-		"-i", repoDir, "-f", "dot", "--allow-outside-repo",
+		repoDir, "-f", "dot", "--allow-outside-repo",
 		"--include-ext", ".go,.java",
 		"--exclude-ext", ".java",
 	})
@@ -703,7 +703,7 @@ func TestGraphInput_ExcludeExt_SkipsMatchingExtension(t *testing.T) {
 	}
 
 	cmd := NewCommand()
-	cmd.SetArgs([]string{"-i", repoDir, "-f", "dot", "--allow-outside-repo", "--exclude-ext", ".java"})
+	cmd.SetArgs([]string{repoDir, "-f", "dot", "--allow-outside-repo", "--exclude-ext", ".java"})
 
 	var stdout bytes.Buffer
 	cmd.SetOut(&stdout)
@@ -734,7 +734,7 @@ func TestGraphInput_ExcludeExt_WithoutDot_IsAccepted(t *testing.T) {
 	}
 
 	cmd := NewCommand()
-	cmd.SetArgs([]string{"-i", repoDir, "-f", "dot", "--allow-outside-repo", "--exclude-ext", "java"})
+	cmd.SetArgs([]string{repoDir, "-f", "dot", "--allow-outside-repo", "--exclude-ext", "java"})
 
 	var stdout bytes.Buffer
 	cmd.SetOut(&stdout)
@@ -765,7 +765,7 @@ func TestGraphInput_ExcludeExt_MultipleExtensions_AreAccepted(t *testing.T) {
 	}
 
 	cmd := NewCommand()
-	cmd.SetArgs([]string{"-i", repoDir, "-f", "dot", "--allow-outside-repo", "--exclude-ext", ".go,.java"})
+	cmd.SetArgs([]string{repoDir, "-f", "dot", "--allow-outside-repo", "--exclude-ext", ".go,.java"})
 
 	var stdout bytes.Buffer
 	cmd.SetOut(&stdout)
@@ -848,7 +848,7 @@ func TestGraphInputRelativePath_WithRepo_ResolvesFromRepoRoot(t *testing.T) {
 	}
 
 	cmd := NewCommand()
-	cmd.SetArgs([]string{"-r", repoDir, "-i", relativePath, "-f", "dot"})
+	cmd.SetArgs([]string{"-r", repoDir, relativePath, "-f", "dot"})
 
 	var stdout bytes.Buffer
 	cmd.SetOut(&stdout)
@@ -1515,7 +1515,7 @@ func TestGraphRust_PhantomDefaultOn(t *testing.T) {
 	}
 
 	cmd := NewCommand()
-	cmd.SetArgs([]string{"-i", rsFile, "-f", "dot", "--allow-outside-repo"})
+	cmd.SetArgs([]string{rsFile, "-f", "dot", "--allow-outside-repo"})
 
 	var stdout bytes.Buffer
 	cmd.SetOut(&stdout)
@@ -1538,7 +1538,7 @@ func TestGraphRust_NoPhantomFlag_SuppressesPhantom(t *testing.T) {
 	}
 
 	cmd := NewCommand()
-	cmd.SetArgs([]string{"-i", rsFile, "-f", "dot", "--allow-outside-repo", "--no-phantom"})
+	cmd.SetArgs([]string{rsFile, "-f", "dot", "--allow-outside-repo", "--no-phantom"})
 
 	var stdout bytes.Buffer
 	cmd.SetOut(&stdout)

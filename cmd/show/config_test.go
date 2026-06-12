@@ -131,7 +131,7 @@ func TestShowCommand_ModulesFlagAppliesConfig(t *testing.T) {
   ]
 }`)
 
-	out := runShow(t, "-i", srcDir, "-r", repoDir, "-f", "dot", "--collapse")
+	out := runShow(t, srcDir, "-r", repoDir, "-f", "dot", "--collapse")
 	if !strings.Contains(out, `"support"`) {
 		t.Fatalf("expected --modules to collapse into module node \"support\", got:\n%s", out)
 	}
@@ -149,7 +149,7 @@ func TestShowCommand_ModulesOffByDefault(t *testing.T) {
 }`)
 
 	// Without --modules the config is ignored, even though modules.json exists.
-	out := runShow(t, "-i", srcDir, "-r", repoDir, "-f", "dot")
+	out := runShow(t, srcDir, "-r", repoDir, "-f", "dot")
 	if strings.Contains(out, `"support"`) {
 		t.Fatalf("expected modules off by default, but module node present:\n%s", out)
 	}
@@ -160,7 +160,7 @@ func TestShowCommand_ModulesOffByDefault(t *testing.T) {
 
 func writeJavaPair(t *testing.T) (repoDir, srcDir string) {
 	t.Helper()
-	// Resolve symlinks so an absolute -i path matches the symlink-normalized repo
+	// Resolve symlinks so an absolute path argument matches the symlink-normalized repo
 	// base (macOS /var -> /private/var), keeping graph node keys and config paths
 	// consistent the way they are when clarity runs against a real repo.
 	repoDir = resolveSymlinks(t.TempDir())

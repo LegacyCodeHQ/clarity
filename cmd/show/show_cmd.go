@@ -103,8 +103,6 @@ func NewCommand() *cobra.Command {
 		"o",
 		opts.orientation,
 		fmt.Sprintf("Graph layout orientation (%s)", formatters.SupportedDirections()))
-	// Add input flag for explicit files/directories
-	cmd.Flags().StringSliceVarP(&opts.includes, "input", "i", nil, "Build graph from specific files and/or directories (comma-separated)")
 	// Add exclude flag for removing explicit files/directories from graph inputs
 	cmd.Flags().StringSliceVar(&opts.excludes, "exclude", nil, "Exclude specific files and/or directories from graph inputs (comma-separated)")
 	// Add extension inclusion flag
@@ -124,18 +122,8 @@ func NewCommand() *cobra.Command {
 	cmd.Flags().BoolVar(&opts.edgeLabels, "label", false, "Add deterministic short labels to edges")
 	cmd.Flags().BoolVar(&opts.noStats, "no-stats", false, "Skip file addition/deletion statistics for faster rendering")
 	cmd.Flags().BoolVar(&opts.noPhantom, "no-phantom", false, "Suppress phantom test nodes (Rust files with #[cfg(test)] regions are rendered as a single node)")
-	deprecateLegacyFlags(cmd)
 
 	return cmd
-}
-
-func deprecateLegacyFlags(cmd *cobra.Command) {
-	deprecations := map[string]string{
-		"input": "pass paths positionally instead",
-	}
-	for name, message := range deprecations {
-		_ = cmd.Flags().MarkDeprecated(name, message)
-	}
 }
 
 func runGraph(cmd *cobra.Command, opts *graphOptions) error {
@@ -505,7 +493,7 @@ func validateGraphOptions(opts *graphOptions) error {
 	}
 
 	if len(opts.betweenFiles) > 0 && len(opts.includes) > 0 {
-		return fmt.Errorf("--between cannot be used with --input flag")
+		return fmt.Errorf("--between cannot be used with paths")
 	}
 	if len(opts.betweenFiles) > 0 && opts.reach != "" {
 		return fmt.Errorf("--reach cannot be used with --between")
