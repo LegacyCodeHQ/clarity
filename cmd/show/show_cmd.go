@@ -116,7 +116,6 @@ func NewCommand() *cobra.Command {
 	// Add file flag for showing dependencies of a specific file
 	cmd.Flags().StringVarP(&opts.targetFile, "file", "p", "", "Show dependencies for a specific file")
 	// Add level flag for limiting dependency depth
-	cmd.Flags().IntVar(&opts.depthLevel, "level", opts.depthLevel, "Depth level for dependencies (used with --file, 0 = unlimited)")
 	cmd.Flags().IntVarP(&opts.depthLevel, "depth", "l", opts.depthLevel, "Depth for --reach (0 = unlimited)")
 	cmd.Flags().StringVar(&opts.reach, "reach", "", "Walk dependencies from the anchor: up, down, both")
 	cmd.Flags().BoolVar(&opts.all, "all", false, "Render the whole tree at this snapshot")
@@ -137,7 +136,6 @@ func deprecateLegacyFlags(cmd *cobra.Command) {
 	deprecations := map[string]string{
 		"input":     "pass paths positionally instead",
 		"file":      "use a positional path with --reach down",
-		"level":     "use --depth",
 		"direction": "use --reach",
 	}
 	for name, message := range deprecations {
@@ -547,7 +545,7 @@ func validateGraphOptions(opts *graphOptions) error {
 			return fmt.Errorf("--file cannot be used with --input flag")
 		}
 		if opts.depthLevel < 0 {
-			return fmt.Errorf("--level must be at least 0")
+			return fmt.Errorf("--depth must be at least 0")
 		}
 	}
 
