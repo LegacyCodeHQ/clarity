@@ -97,6 +97,28 @@ func TestGraphReachUp_IncludesFileDependents(t *testing.T) {
 	}
 }
 
+func TestGraphReachDown_FromWorkingSetChanges(t *testing.T) {
+	repoDir := t.TempDir()
+	gitInitRepo(t, repoDir)
+
+	aPath := filepath.Join(repoDir, "a.ts")
+	bPath := filepath.Join(repoDir, "b.ts")
+	if err := os.WriteFile(bPath, []byte("export const b = 1;\n"), 0o644); err != nil {
+		t.Fatalf("os.WriteFile() error = %v", err)
+	}
+	gitRun(t, repoDir, "add", ".")
+	gitRun(t, repoDir, "commit", "-m", "add dependency")
+
+	if err := os.WriteFile(aPath, []byte("import { b } from './b';\nexport const a = b;\n"), 0o644); err != nil {
+		t.Fatalf("os.WriteFile() error = %v", err)
+	}
+
+	out := runShow(t, "-r", repoDir, "--reach", "down", "--depth", "0", "-f", "dot")
+	if !strings.Contains(out, `"a.ts"`) || !strings.Contains(out, `"b.ts"`) {
+		t.Fatalf("expected --reach down to traverse from working-set changes, got:\n%s", out)
+	}
+}
+
 func TestGraphAllCollapse_AliasesModules(t *testing.T) {
 	repoDir, _ := writeJavaPair(t)
 	writeModulesConfig(t, repoDir, `{
@@ -969,6 +991,36 @@ func TestGraphFile_InvalidScope_ReturnsError(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "unknown scope: sideways") {
 		t.Fatalf("expected unknown scope error, got: %v", err)
+	}
+}
+
+func TestGraphBetween_CannotBeUsedWithReach(t *testing.T) {
+	err := runShowErr(t, "--between", "a.ts,b.ts", "--reach", "down")
+	if err == nil {
+		t.Fatal("expected an error when --between is used with --reach, got nil")
+	}
+	if !strings.Contains(err.Error(), "--reach cannot be used with --between") {
+		t.Fatalf("expected between/reach conflict error, got: %v", err)
+	}
+}
+
+func TestGraphBetween_CannotBeUsedWithCollapse(t *testing.T) {
+	err := runShowErr(t, "--between", "a.ts,b.ts", "--collapse")
+	if err == nil {
+		t.Fatal("expected an error when --between is used with --collapse, got nil")
+	}
+	if !strings.Contains(err.Error(), "--collapse cannot be used with --between") {
+		t.Fatalf("expected between/collapse conflict error, got: %v", err)
+	}
+}
+
+func TestGraphReach_CannotBeUsedWithCollapse(t *testing.T) {
+	err := runShowErr(t, "a.ts", "--reach", "down", "--collapse")
+	if err == nil {
+		t.Fatal("expected an error when --reach is used with --collapse, got nil")
+	}
+	if !strings.Contains(err.Error(), "--reach cannot be used with --collapse") {
+		t.Fatalf("expected reach/collapse conflict error, got: %v", err)
 	}
 }
 

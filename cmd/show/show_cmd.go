@@ -164,7 +164,7 @@ func runGraph(cmd *cobra.Command, opts *graphOptions) error {
 	}
 	snapshot := newSnapshotResolver(opts.repoPath, toCommit)
 
-	filePaths, done, err := determineFilePaths(cmd, opts, pathResolver, snapshot, fromCommit, toCommit, isCommitRange)
+	filePaths, anchorFiles, done, err := determineFilePaths(cmd, opts, pathResolver, snapshot, fromCommit, toCommit, isCommitRange)
 	if err != nil {
 		return err
 	}
@@ -189,6 +189,7 @@ func runGraph(cmd *cobra.Command, opts *graphOptions) error {
 				return err
 			}
 			filePaths = append(filePaths, deletedFiles...)
+			anchorFiles = append(anchorFiles, deletedFiles...)
 		}
 	}
 
@@ -222,7 +223,7 @@ func runGraph(cmd *cobra.Command, opts *graphOptions) error {
 	// whatever else is in scope. With -d, also bring in the module's immediate
 	// dependents/dependencies as context, which requires parsing the wider repo so
 	// they are discoverable; the graph is subset back down after it is built.
-	changeFiles := filePaths
+	changeFiles := anchorFiles
 	var moduleMembers []string
 	if opts.moduleSelect != "" {
 		selected, selErr := findDeclaredModule(opts.moduleSelect, modules)
@@ -288,7 +289,7 @@ func runGraph(cmd *cobra.Command, opts *graphOptions) error {
 	}
 
 	var prunedNodes map[string]bool
-	graph, filePaths, prunedNodes, err = applyTargetFileFilter(opts, pathResolver, graph, filePaths)
+	graph, filePaths, prunedNodes, err = applyReachFilter(opts, pathResolver, graph, filePaths, anchorFiles)
 	if err != nil {
 		return err
 	}
@@ -529,6 +530,15 @@ func validateGraphOptions(opts *graphOptions) error {
 	if len(opts.betweenFiles) > 0 && len(opts.includes) > 0 {
 		return fmt.Errorf("--between cannot be used with --input flag")
 	}
+	if len(opts.betweenFiles) > 0 && opts.reach != "" {
+		return fmt.Errorf("--reach cannot be used with --between")
+	}
+	if len(opts.betweenFiles) > 0 && opts.collapse {
+		return fmt.Errorf("--collapse cannot be used with --between")
+	}
+	if opts.reach != "" && opts.collapse {
+		return fmt.Errorf("--reach cannot be used with --collapse")
+	}
 	if opts.all && len(opts.includes) > 0 {
 		return fmt.Errorf("--all cannot be used with paths")
 	}
@@ -660,78 +670,95 @@ func parseCommitRange(opts *graphOptions) (string, string, bool, error) {
 	return fromCommit, toCommit, isCommitRange, nil
 }
 
-func determineFilePaths(cmd *cobra.Command, opts *graphOptions, pathResolver PathResolver, snapshot *snapshotResolver, fromCommit, toCommit string, isCommitRange bool) ([]string, bool, error) {
+func determineFilePaths(cmd *cobra.Command, opts *graphOptions, pathResolver PathResolver, snapshot *snapshotResolver, fromCommit, toCommit string, isCommitRange bool) ([]string, []string, bool, error) {
 	if opts.all {
 		filePaths, err := snapshot.TreeFiles()
 		if err != nil {
 			if opts.commitID != "" {
-				return nil, false, fmt.Errorf("failed to get files from commit tree: %w", err)
+				return nil, nil, false, fmt.Errorf("failed to get files from commit tree: %w", err)
 			}
-			return nil, false, fmt.Errorf("failed to expand working directory: %w", err)
+			return nil, nil, false, fmt.Errorf("failed to expand working directory: %w", err)
 		}
 		if len(filePaths) == 0 {
 			if opts.commitID != "" {
-				return nil, false, fmt.Errorf("no files found in commit %s", toCommit)
+				return nil, nil, false, fmt.Errorf("no files found in commit %s", toCommit)
 			}
-			return nil, false, fmt.Errorf("no supported files found in working directory")
+			return nil, nil, false, fmt.Errorf("no supported files found in working directory")
 		}
-		return filePaths, false, nil
+		return filePaths, filePaths, false, nil
 	}
 
 	if len(opts.includes) > 0 {
-		filePaths, err := snapshot.FilesUnder(pathResolver, opts.includes)
+		anchorFiles, err := snapshot.FilesUnder(pathResolver, opts.includes)
 		if err != nil {
-			return nil, false, fmt.Errorf("failed to resolve input paths: %w", err)
+			return nil, nil, false, fmt.Errorf("failed to resolve input paths: %w", err)
 		}
-		if len(filePaths) == 0 {
-			return nil, false, fmt.Errorf("no files found in specified paths")
+		if len(anchorFiles) == 0 {
+			return nil, nil, false, fmt.Errorf("no files found in specified paths")
 		}
-		return filePaths, false, nil
+		if opts.reach != "" {
+			filePaths, err := snapshot.TreeFiles()
+			if err != nil {
+				if opts.commitID != "" {
+					return nil, nil, false, fmt.Errorf("failed to get files from commit tree: %w", err)
+				}
+				return nil, nil, false, fmt.Errorf("failed to expand working directory: %w", err)
+			}
+			return filePaths, anchorFiles, false, nil
+		}
+		return anchorFiles, anchorFiles, false, nil
 	}
 
 	if len(opts.betweenFiles) > 0 {
 		filePaths, err := collectBetweenFilePaths(opts, snapshot, toCommit)
 		if err != nil {
-			return nil, false, err
+			return nil, nil, false, err
 		}
-		return filePaths, false, nil
+		return filePaths, filePaths, false, nil
 	}
 
 	if opts.targetFile != "" {
 		filePaths, err := snapshot.TreeFiles()
 		if err != nil {
 			if opts.commitID != "" {
-				return nil, false, fmt.Errorf("failed to get files from commit tree: %w", err)
+				return nil, nil, false, fmt.Errorf("failed to get files from commit tree: %w", err)
 			}
-			return nil, false, fmt.Errorf("failed to expand working directory: %w", err)
+			return nil, nil, false, fmt.Errorf("failed to expand working directory: %w", err)
 		}
 		if len(filePaths) == 0 {
 			if opts.commitID != "" {
-				return nil, false, fmt.Errorf("no files found in commit %s", toCommit)
+				return nil, nil, false, fmt.Errorf("no files found in commit %s", toCommit)
 			}
-			return nil, false, fmt.Errorf("no supported files found in working directory")
+			return nil, nil, false, fmt.Errorf("no supported files found in working directory")
 		}
-		return filePaths, false, nil
+		return filePaths, nil, false, nil
 	}
 
 	if opts.commitID != "" {
-		filePaths, err := collectCommitFilePaths(opts, fromCommit, toCommit, isCommitRange)
+		anchorFiles, err := collectCommitFilePaths(opts, fromCommit, toCommit, isCommitRange)
 		if err != nil {
-			return nil, false, err
+			return nil, nil, false, err
 		}
-		return filePaths, false, nil
+		if opts.reach != "" {
+			filePaths, treeErr := snapshot.TreeFiles()
+			if treeErr != nil {
+				return nil, nil, false, fmt.Errorf("failed to get files from commit tree: %w", treeErr)
+			}
+			return filePaths, anchorFiles, false, nil
+		}
+		return anchorFiles, anchorFiles, false, nil
 	}
 
-	filePaths, err := git.GetUncommittedFiles(opts.repoPath)
+	anchorFiles, err := git.GetUncommittedFiles(opts.repoPath)
 	if err != nil {
-		return nil, false, fmt.Errorf("failed to get uncommitted files: %w", err)
+		return nil, nil, false, fmt.Errorf("failed to get uncommitted files: %w", err)
 	}
 
-	if len(filePaths) == 0 {
+	if len(anchorFiles) == 0 {
 		// --module supplies its own files as the scope, so a clean tree is fine:
 		// fall through with no changes and let the module fill the scope.
 		if opts.moduleSelect != "" {
-			return nil, false, nil
+			return nil, nil, false, nil
 		}
 		fmt.Fprintln(cmd.OutOrStdout(), "Working directory is clean (no uncommitted changes).")
 		fmt.Fprintln(cmd.OutOrStdout())
@@ -740,10 +767,18 @@ func determineFilePaths(cmd *cobra.Command, opts *graphOptions, pathResolver Pat
 		fmt.Fprintln(cmd.OutOrStdout())
 		fmt.Fprintln(cmd.OutOrStdout(), "To visualize a specific commit:")
 		fmt.Fprintln(cmd.OutOrStdout(), "  clarity show -c <commit-hash>")
-		return nil, true, nil
+		return nil, nil, true, nil
 	}
 
-	return filePaths, false, nil
+	if opts.reach != "" {
+		filePaths, treeErr := snapshot.TreeFiles()
+		if treeErr != nil {
+			return nil, nil, false, fmt.Errorf("failed to expand working directory: %w", treeErr)
+		}
+		return filePaths, anchorFiles, false, nil
+	}
+
+	return anchorFiles, anchorFiles, false, nil
 }
 
 func collectBetweenFilePaths(opts *graphOptions, snapshot *snapshotResolver, toCommit string) ([]string, error) {
@@ -907,18 +942,23 @@ func annotateRustPhantoms(
 	depgraph.AnnotateRustPhantomsWatch(fg, diffs, oldContent, newContent)
 }
 
-func applyTargetFileFilter(opts *graphOptions, pathResolver PathResolver, graph depgraph.DependencyGraph, filePaths []string) (depgraph.DependencyGraph, []string, map[string]bool, error) {
-	if opts.targetFile == "" {
+func applyReachFilter(opts *graphOptions, pathResolver PathResolver, graph depgraph.DependencyGraph, filePaths, anchorFiles []string) (depgraph.DependencyGraph, []string, map[string]bool, error) {
+	if opts.targetFile == "" && opts.reach == "" {
 		return graph, filePaths, nil, nil
 	}
 
-	absTargetFile, err := pathResolver.Resolve(RawPath(opts.targetFile))
-	if err != nil {
-		return nil, nil, nil, fmt.Errorf("failed to resolve file path: %w", err)
-	}
-
-	if !depgraph.ContainsNode(graph, absTargetFile.String()) {
-		return nil, nil, nil, fmt.Errorf("file not found in graph: %s", opts.targetFile)
+	var targets []string
+	if opts.targetFile != "" {
+		absTargetFile, err := pathResolver.Resolve(RawPath(opts.targetFile))
+		if err != nil {
+			return nil, nil, nil, fmt.Errorf("failed to resolve file path: %w", err)
+		}
+		if !depgraph.ContainsNode(graph, absTargetFile.String()) {
+			return nil, nil, nil, fmt.Errorf("file not found in graph: %s", opts.targetFile)
+		}
+		targets = []string{absTargetFile.String()}
+	} else {
+		targets = anchorFiles
 	}
 
 	pruneSet := make(map[string]bool, len(opts.pruneFiles))
@@ -934,7 +974,7 @@ func applyTargetFileFilter(opts *graphOptions, pathResolver PathResolver, graph 
 	if reach == "" {
 		reach = reachDown
 	}
-	graph, prunedNodes := filterGraphByLevel(graph, absTargetFile.String(), opts.depthLevel, reach, pruneSet)
+	graph, prunedNodes := filterGraphByLevel(graph, targets, opts.depthLevel, reach, pruneSet)
 	filePaths = graphFiles(graph)
 
 	return graph, filePaths, prunedNodes, nil
@@ -1757,7 +1797,7 @@ func resolveAndValidatePaths(paths []string, pathResolver PathResolver, graph de
 // A level of 0 means unlimited traversal depth.
 // Nodes in pruneSet are included in the graph but their subtrees are not traversed.
 // Returns the filtered graph and the set of pruned nodes that were actually visited.
-func filterGraphByLevel(graph depgraph.DependencyGraph, targetFile string, level int, reach string, pruneSet map[string]bool) (depgraph.DependencyGraph, map[string]bool) {
+func filterGraphByLevel(graph depgraph.DependencyGraph, targetFiles []string, level int, reach string, pruneSet map[string]bool) (depgraph.DependencyGraph, map[string]bool) {
 	adjacency, err := depgraph.AdjacencyList(graph)
 	if err != nil {
 		return depgraph.NewDependencyGraph(), nil
@@ -1774,9 +1814,20 @@ func filterGraphByLevel(graph depgraph.DependencyGraph, targetFile string, level
 
 	// BFS to find all nodes within the specified level (or all reachable nodes when level=0)
 	visited := make(map[string]bool)
-	visited[targetFile] = true
+	currentLevel := make([]string, 0, len(targetFiles))
+	for _, targetFile := range targetFiles {
+		if _, ok := adjacency[targetFile]; !ok {
+			continue
+		}
+		if !visited[targetFile] {
+			visited[targetFile] = true
+			currentLevel = append(currentLevel, targetFile)
+		}
+	}
+	if len(currentLevel) == 0 {
+		return depgraph.NewDependencyGraph(), nil
+	}
 
-	currentLevel := []string{targetFile}
 	for l := 0; (level == 0 || l < level) && len(currentLevel) > 0; l++ {
 		nextLevel := []string{}
 		for _, file := range currentLevel {
