@@ -30,6 +30,11 @@ const (
 // milliseconds, but we add headroom for slow disks/CI.
 const gitdirAppearTimeout = 2 * time.Second
 
+// worktreeReconcileInterval backs up fsnotify delivery with a lightweight
+// registry scan so stale worktree entries or dropped events do not strand the
+// watch process.
+const worktreeReconcileInterval = 500 * time.Millisecond
+
 // planInitialRepos resolves which worktrees to watch when `clarity watch`
 // starts in `cwd`. The first entry is always the cwd-tree, given the literal
 // id "primary" so it's the default tab. In primary mode (cwd is the primary
@@ -69,6 +74,9 @@ func planInitialRepos(cwd string) ([]protocol.RepoDescriptor, repoMode, error) {
 	}}
 	for _, w := range worktrees {
 		if w.IsPrimary {
+			continue
+		}
+		if !pathExists(w.Path) {
 			continue
 		}
 		repos = append(repos, descriptorForLinked(w))
@@ -134,6 +142,7 @@ func runSupervisor(ctx context.Context, cwd string, opts *watchOptions, b *broke
 		b:              b,
 		opts:           opts,
 		formatter:      formatter,
+		rootPath:       repos[0].Path,
 		watchers:       make(map[string]context.CancelFunc),
 		subdirToRepoID: make(map[string]string),
 	}
@@ -174,6 +183,7 @@ type supervisor struct {
 	opts      *watchOptions
 	formatter formatters.Formatter
 	commonDir string
+	rootPath  string
 
 	mu             sync.Mutex
 	watchers       map[string]context.CancelFunc // repoID -> cancel
@@ -181,6 +191,9 @@ type supervisor struct {
 }
 
 func (s *supervisor) spawnWatcher(parent context.Context, desc protocol.RepoDescriptor) {
+	if !pathExists(desc.Path) {
+		return
+	}
 	s.b.registerRepo(desc)
 	wctx, cancel := context.WithCancel(parent)
 	s.mu.Lock()
@@ -188,10 +201,18 @@ func (s *supervisor) spawnWatcher(parent context.Context, desc protocol.RepoDesc
 	s.mu.Unlock()
 	go func() {
 		if err := watchAndRebuild(wctx, desc.ID, desc.Path, s.opts, s.b, s.formatter); err != nil {
+			if !pathExists(desc.Path) {
+				s.finishWatcher(desc.ID)
+				return
+			}
 			fmt.Fprintf(os.Stderr, "watcher %s exited: %v\n", desc.ID, err)
 		}
 	}()
 	// Seed an initial graph so the tab has content immediately.
+	if !pathExists(desc.Path) {
+		s.finishWatcher(desc.ID)
+		return
+	}
 	publishCurrentGraph(desc.ID, desc.Path, s.opts, s.b, s.formatter)
 }
 
@@ -260,16 +281,16 @@ func (s *supervisor) runMetaWatcher(ctx context.Context, ready chan<- struct{}) 
 			if !e.IsDir() {
 				continue
 			}
-			if path := readWorktreeGitdir(filepath.Join(worktreesDir, e.Name())); path != "" {
+			if path := readWorktreeGitdir(filepath.Join(worktreesDir, e.Name())); path != "" && pathExists(path) {
 				id := repoIDFor(path, false)
-				s.mu.Lock()
-				s.subdirToRepoID[e.Name()] = id
-				s.mu.Unlock()
+				s.rememberWorktreeSubdirName(e.Name(), id)
 			}
 		}
 	}
 
 	closeReady()
+	reconcileTicker := time.NewTicker(worktreeReconcileInterval)
+	defer reconcileTicker.Stop()
 
 	for {
 		select {
@@ -286,11 +307,14 @@ func (s *supervisor) runMetaWatcher(ctx context.Context, ready chan<- struct{}) 
 			case ev.Has(fsnotify.Remove) || ev.Has(fsnotify.Rename):
 				s.handleWorktreeRemove(subdir)
 			}
+			s.reconcileWorktrees(ctx)
 		case err, ok := <-watcher.Errors:
 			if !ok {
 				return nil
 			}
 			fmt.Fprintf(os.Stderr, "meta-watcher error: %v\n", err)
+		case <-reconcileTicker.C:
+			s.reconcileWorktrees(ctx)
 		}
 	}
 }
@@ -307,16 +331,17 @@ func (s *supervisor) handleWorktreeCreate(ctx context.Context, subdirPath, subdi
 	if gitdirPath == "" {
 		return
 	}
+	if !pathExists(gitdirPath) {
+		return
+	}
 
 	desc := descriptorForLinked(git.Worktree{
 		Path:   gitdirPath,
 		Branch: currentBranchFor(gitdirPath),
 	})
 
-	s.mu.Lock()
-	s.subdirToRepoID[subdirName] = desc.ID
-	already := s.watchers[desc.ID] != nil
-	s.mu.Unlock()
+	s.rememberWorktreeSubdirName(subdirName, desc.ID)
+	already := s.hasWatcher(desc.ID)
 	if already {
 		return
 	}
@@ -332,6 +357,66 @@ func (s *supervisor) handleWorktreeRemove(subdirName string) {
 		return
 	}
 	s.finishWatcher(repoID)
+}
+
+func (s *supervisor) reconcileWorktrees(ctx context.Context) {
+	worktrees, err := git.ListWorktrees(s.rootPath)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "worktree reconciliation error: %v\n", err)
+		return
+	}
+
+	seen := make(map[string]bool)
+	for _, w := range worktrees {
+		if w.IsPrimary || !pathExists(w.Path) {
+			continue
+		}
+		desc := descriptorForLinked(w)
+		seen[desc.ID] = true
+		s.rememberWorktreeSubdir(w.Path, desc.ID)
+		if !s.hasWatcher(desc.ID) {
+			s.spawnWatcher(ctx, desc)
+		}
+	}
+
+	for _, repoID := range s.linkedWatchersMissingFrom(seen) {
+		s.finishWatcher(repoID)
+	}
+}
+
+func (s *supervisor) hasWatcher(repoID string) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.watchers[repoID] != nil
+}
+
+func (s *supervisor) linkedWatchersMissingFrom(seen map[string]bool) []string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	var missing []string
+	for repoID := range s.watchers {
+		if repoID != primaryRepoID && !seen[repoID] {
+			missing = append(missing, repoID)
+		}
+	}
+	return missing
+}
+
+func (s *supervisor) rememberWorktreeSubdir(worktreePath, repoID string) {
+	gitDir, err := git.GetGitDir(worktreePath)
+	if err != nil {
+		return
+	}
+	s.rememberWorktreeSubdirName(filepath.Base(gitDir), repoID)
+}
+
+func (s *supervisor) rememberWorktreeSubdirName(subdirName, repoID string) {
+	if subdirName == "" || subdirName == "." || subdirName == string(filepath.Separator) {
+		return
+	}
+	s.mu.Lock()
+	s.subdirToRepoID[subdirName] = repoID
+	s.mu.Unlock()
 }
 
 // readWorktreeGitdir reads `<subdirPath>/gitdir` — a one-line file written by

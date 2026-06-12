@@ -128,6 +128,63 @@ func TestSupervisor_DetectsLiveWorktreeAdd(t *testing.T) {
 	}
 }
 
+// TestSupervisor_SkipsStaleInitialWorktreeAndDetectsLaterAdds reproduces the
+// failure mode where Git still lists a linked worktree after its directory has
+// disappeared. A stale startup entry must not leave a dead active tab or break
+// discovery of subsequently added worktrees.
+func TestSupervisor_SkipsStaleInitialWorktreeAndDetectsLaterAdds(t *testing.T) {
+	repo := initRepoWithCommit(t)
+	stale := filepath.Join(t.TempDir(), "stale")
+	runGit(t, repo, "worktree", "add", "-b", "feat/stale", stale)
+	require.NoError(t, os.RemoveAll(stale))
+
+	b := newBroker()
+	formatter, err := formatters.NewFormatter("dot")
+	require.NoError(t, err)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	supervisorDone := make(chan struct{})
+	go func() {
+		_ = runSupervisor(ctx, repo, &watchOptions{}, b, formatter)
+		close(supervisorDone)
+	}()
+
+	require.Eventually(t, func() bool {
+		b.mu.Lock()
+		defer b.mu.Unlock()
+		return len(b.repos) > 0 && b.repos[0].ID == primaryRepoID
+	}, 2*time.Second, 20*time.Millisecond, "primary tab should register on startup")
+
+	live := filepath.Join(t.TempDir(), "live-after-stale")
+	runGit(t, repo, "worktree", "add", "-b", "feat/live-after-stale", live)
+
+	require.Eventually(t, func() bool {
+		b.mu.Lock()
+		defer b.mu.Unlock()
+		if len(b.repos) != 2 {
+			return false
+		}
+		hasLive := false
+		for _, repo := range b.repos {
+			if repo.Label == "stale" {
+				return false
+			}
+			if repo.Label == "live-after-stale" && repo.Active {
+				hasLive = true
+			}
+		}
+		return hasLive
+	}, 3*time.Second, 50*time.Millisecond, "live worktree discovery should continue after a stale startup entry")
+
+	cancel()
+	select {
+	case <-supervisorDone:
+	case <-time.After(2 * time.Second):
+		t.Fatal("supervisor did not exit after cancel")
+	}
+}
+
 // TestSupervisor_VanishedWorktreeSelfFinishes guards the teardown backstop: a
 // watcher whose working directory disappears must stop polling git and flip its
 // tab to inactive on its own, WITHOUT a meta-watcher REMOVE event. This is the
