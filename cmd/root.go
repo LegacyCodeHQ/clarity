@@ -4,7 +4,6 @@ import (
 	"log/slog"
 	"os"
 	"runtime/pprof"
-	"strconv"
 
 	cyclescmd "github.com/LegacyCodeHQ/clarity/cmd/cycles"
 	extensionscmd "github.com/LegacyCodeHQ/clarity/cmd/extensions"
@@ -13,7 +12,6 @@ import (
 	setupcmd "github.com/LegacyCodeHQ/clarity/cmd/setup"
 	"github.com/LegacyCodeHQ/clarity/cmd/show"
 	watchcmd "github.com/LegacyCodeHQ/clarity/cmd/watch"
-	whycmd "github.com/LegacyCodeHQ/clarity/cmd/why"
 	workspacecmd "github.com/LegacyCodeHQ/clarity/cmd/workspace"
 	"github.com/spf13/cobra"
 )
@@ -23,9 +21,6 @@ var version = "dev"
 
 // commit is set via build-time ldflags
 var commit = "unknown"
-
-// enableDevCommands is set via build-time ldflags
-var enableDevCommands = "false"
 
 var cpuProfilePath string
 var cpuProfileFile *os.File
@@ -93,9 +88,6 @@ func init() {
 	rootCmd.AddCommand(extensionscmd.Cmd)
 	rootCmd.AddCommand(setupcmd.Cmd)
 	rootCmd.AddCommand(watchcmd.Cmd)
-	if isDevelopmentBuild(enableDevCommands) {
-		rootCmd.AddCommand(whycmd.Cmd)
-	}
 	rootCmd.CompletionOptions.DisableDefaultCmd = true
 
 	// Global flags inherited by all subcommands.
@@ -116,13 +108,4 @@ func init() {
 	rootCmd.SetVersionTemplate(`{{with .Name}}{{printf "%s " .}}{{end}}{{printf "version %s" .Version}}
 Commit: {{printf "%s" (index .Annotations "commit")}}
 `)
-}
-
-func isDevelopmentBuild(devCommandsFlag string) bool {
-	devCommandsEnabled, err := strconv.ParseBool(devCommandsFlag)
-	if err != nil {
-		return false
-	}
-
-	return devCommandsEnabled
 }
