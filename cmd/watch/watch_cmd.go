@@ -25,10 +25,11 @@ func NewCommand() *cobra.Command {
 	opts := defaultWatchOptions()
 
 	cmd := &cobra.Command{
-		Use:   "watch",
+		Use:   "watch [paths...]",
 		Short: "Watch for file changes and serve a live dependency graph",
 		Long:  `Watch a project directory for file changes, rebuild the dependency graph, and serve a live-updating visualization at localhost.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			opts.includes = append(opts.includes, args...)
 			return runWatch(cmd, opts)
 		},
 	}
@@ -39,6 +40,20 @@ func NewCommand() *cobra.Command {
 	cmd.Flags().StringSliceVar(&opts.excludes, "exclude", nil, "Exclude specific files and/or directories (comma-separated)")
 	cmd.Flags().StringVar(&opts.includeExt, "include-ext", "", "Include only files with these extensions (comma-separated, e.g. .go,.java)")
 	cmd.Flags().StringVar(&opts.excludeExt, "exclude-ext", "", "Exclude files with these extensions (comma-separated, e.g. .go,.java)")
+	cmd.Flags().StringSliceVarP(&opts.betweenFiles, "between", "w", nil, "Find all paths between specified files (comma-separated)")
+	cmd.Flags().StringVarP(&opts.moduleSelect, "module", "m", "", "Render the named module's files inside a box")
+	cmd.Flags().StringVar(&opts.reach, "reach", "", "Walk dependencies from the anchor: up, down, both")
+	cmd.Flags().IntVarP(&opts.depthLevel, "depth", "l", opts.depthLevel, "Depth for --reach (0 = unlimited)")
+	cmd.Flags().StringSliceVar(&opts.pruneFiles, "prune", nil, "Show node but skip its subtree (requires --reach)")
+	cmd.Flags().BoolVar(&opts.all, "all", false, "Render the whole live working tree")
+	cmd.Flags().BoolVar(&opts.collapse, "collapse", false, "Collapse files into the modules declared in .clarity/modules.json")
+	cmd.Flags().BoolVar(&opts.modules, "modules", false, "Collapse files into the modules declared in .clarity/modules.json")
+	cmd.Flags().StringVarP(
+		&opts.direction,
+		"orientation",
+		"o",
+		opts.direction,
+		fmt.Sprintf("Graph layout orientation (%s)", formatters.SupportedDirections()))
 	cmd.Flags().StringVarP(
 		&opts.direction,
 		"direction",
@@ -51,9 +66,18 @@ func NewCommand() *cobra.Command {
 		"f",
 		opts.format,
 		fmt.Sprintf("Output format (%s)", formatters.SupportedFormats()))
+	cmd.Flags().BoolVar(&opts.edgeLabels, "label", false, "Add deterministic short labels to edges")
+	cmd.Flags().BoolVar(&opts.noStats, "no-stats", false, "Skip file addition/deletion statistics for faster rendering")
 	cmd.Flags().BoolVar(&opts.noPhantom, "no-phantom", false, "Suppress phantom test nodes (Rust files with #[cfg(test)] regions are rendered as a single node)")
+	hideLegacyWatchFlags(cmd)
 
 	return cmd
+}
+
+func hideLegacyWatchFlags(cmd *cobra.Command) {
+	for _, name := range []string{"input", "modules", "direction"} {
+		_ = cmd.Flags().MarkHidden(name)
+	}
 }
 
 func runWatch(cmd *cobra.Command, opts *watchOptions) error {
@@ -72,6 +96,9 @@ func runWatch(cmd *cobra.Command, opts *watchOptions) error {
 		return fmt.Errorf("unknown direction: %s (valid options: %s)", opts.direction, formatters.SupportedDirections())
 	} else {
 		opts.direction = direction.StringLower()
+	}
+	if err := validateWatchGraphOptions(opts); err != nil {
+		return err
 	}
 
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)

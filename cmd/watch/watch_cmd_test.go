@@ -574,6 +574,105 @@ func TestBuildGraph_WithIncludeExt(t *testing.T) {
 	assert.NotContains(t, dot, "app.py")
 }
 
+func TestBuildGraph_WithInputOnCleanTree(t *testing.T) {
+	dir := t.TempDir()
+	initGitRepo(t, dir)
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, "src"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "src", "a.ts"), []byte("import { b } from './b';\nexport const a = b;\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "src", "b.ts"), []byte("export const b = 1;\n"), 0o644))
+	runGit(t, dir, "add", ".")
+	runGit(t, dir, "commit", "-m", "seed")
+
+	opts := &watchOptions{includes: []string{"src"}}
+	formatter, err := formatters.NewFormatter("dot")
+	require.NoError(t, err)
+	dot, err := buildGraph(dir, opts, formatter)
+	require.NoError(t, err)
+
+	assert.Contains(t, dot, "a.ts")
+	assert.Contains(t, dot, "b.ts")
+}
+
+func TestBuildGraph_ReachDownFromWorkingSetChanges(t *testing.T) {
+	dir := t.TempDir()
+	initGitRepo(t, dir)
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "b.ts"), []byte("export const b = 1;\n"), 0o644))
+	runGit(t, dir, "add", ".")
+	runGit(t, dir, "commit", "-m", "seed")
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "a.ts"), []byte("import { b } from './b';\nexport const a = b;\n"), 0o644))
+
+	opts := &watchOptions{reach: "down", depthLevel: 0}
+	formatter, err := formatters.NewFormatter("dot")
+	require.NoError(t, err)
+	dot, err := buildGraph(dir, opts, formatter)
+	require.NoError(t, err)
+
+	assert.Contains(t, dot, "a.ts")
+	assert.Contains(t, dot, "b.ts")
+}
+
+func TestBuildGraph_AllCollapseOnCleanTree(t *testing.T) {
+	dir := t.TempDir()
+	initGitRepo(t, dir)
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, ".clarity"), 0o755))
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, "src"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, ".clarity", "modules.json"), []byte(`{
+  "modules": [ { "name": "core", "files": ["src/a.ts"] } ]
+}`), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "src", "a.ts"), []byte("export const a = 1;\n"), 0o644))
+	runGit(t, dir, "add", ".")
+	runGit(t, dir, "commit", "-m", "seed")
+
+	opts := &watchOptions{all: true, collapse: true}
+	formatter, err := formatters.NewFormatter("dot")
+	require.NoError(t, err)
+	dot, err := buildGraph(dir, opts, formatter)
+	require.NoError(t, err)
+
+	assert.Contains(t, dot, `"core"`)
+}
+
+func TestBuildGraph_ModuleOnCleanTree(t *testing.T) {
+	dir := t.TempDir()
+	initGitRepo(t, dir)
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, ".clarity"), 0o755))
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, "src"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, ".clarity", "modules.json"), []byte(`{
+  "modules": [ { "name": "core", "files": ["src/a.ts"] } ]
+}`), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "src", "a.ts"), []byte("export const a = 1;\n"), 0o644))
+	runGit(t, dir, "add", ".")
+	runGit(t, dir, "commit", "-m", "seed")
+
+	opts := &watchOptions{moduleSelect: "core"}
+	formatter, err := formatters.NewFormatter("dot")
+	require.NoError(t, err)
+	dot, err := buildGraph(dir, opts, formatter)
+	require.NoError(t, err)
+
+	assert.Contains(t, dot, "subgraph cluster")
+	assert.Contains(t, dot, "a.ts")
+}
+
+func TestBuildGraph_BetweenOnCleanTree(t *testing.T) {
+	dir := t.TempDir()
+	initGitRepo(t, dir)
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "a.ts"), []byte("import { b } from './b';\nexport const a = b;\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "b.ts"), []byte("export const b = 1;\n"), 0o644))
+	runGit(t, dir, "add", ".")
+	runGit(t, dir, "commit", "-m", "seed")
+
+	opts := &watchOptions{betweenFiles: []string{"a.ts", "b.ts"}}
+	formatter, err := formatters.NewFormatter("dot")
+	require.NoError(t, err)
+	dot, err := buildGraph(dir, opts, formatter)
+	require.NoError(t, err)
+
+	assert.Contains(t, dot, "a.ts")
+	assert.Contains(t, dot, "b.ts")
+	assert.Contains(t, dot, `a.ts" -> "`)
+}
+
 func TestBuildGraph_WithExcludeExt(t *testing.T) {
 	dir := t.TempDir()
 	initGitRepo(t, dir)

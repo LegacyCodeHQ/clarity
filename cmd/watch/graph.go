@@ -4,12 +4,21 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
+	"github.com/LegacyCodeHQ/clarity/clarityconfig"
 	"github.com/LegacyCodeHQ/clarity/cmd/show/formatters"
 	"github.com/LegacyCodeHQ/clarity/depgraph"
+	"github.com/LegacyCodeHQ/clarity/depgraph/registry"
 	"github.com/LegacyCodeHQ/clarity/vcs"
 	"github.com/LegacyCodeHQ/clarity/vcs/git"
+)
+
+const (
+	watchReachDown = "down"
+	watchReachUp   = "up"
+	watchReachBoth = "both"
 )
 
 func buildGraph(repoPath string, opts *watchOptions, formatter formatters.Formatter) (string, error) {
@@ -20,7 +29,11 @@ func buildGraph(repoPath string, opts *watchOptions, formatter formatters.Format
 		repoPath = resolved
 	}
 
-	filePaths, err := git.GetUncommittedFiles(repoPath)
+	if err := validateWatchGraphOptions(opts); err != nil {
+		return "", err
+	}
+
+	changedFiles, err := git.GetUncommittedFiles(repoPath)
 	if err != nil {
 		return "", fmt.Errorf("failed to get uncommitted files: %w", err)
 	}
@@ -45,8 +58,12 @@ func buildGraph(repoPath string, opts *watchOptions, formatter formatters.Format
 	if err != nil {
 		return "", err
 	}
-	filePaths = append(filePaths, deletedFiles...)
+	defaultAnchorFiles := unionWatchPaths(changedFiles, deletedFiles)
 
+	filePaths, anchorFiles, modules, moduleMembers, err := selectWatchGraphFiles(repoPath, opts, defaultAnchorFiles)
+	if err != nil {
+		return "", err
+	}
 	if len(filePaths) == 0 {
 		return "", errNoUncommittedChanges
 	}
@@ -57,7 +74,7 @@ func buildGraph(repoPath string, opts *watchOptions, formatter formatters.Format
 	}
 
 	if len(opts.excludes) > 0 {
-		filePaths, err = applyWatchExcludeFilter(opts, filePaths)
+		filePaths, err = applyWatchExcludeFilter(repoPath, opts, filePaths)
 		if err != nil {
 			return "", err
 		}
@@ -83,6 +100,7 @@ func buildGraph(repoPath string, opts *watchOptions, formatter formatters.Format
 			pureDeleted = append(pureDeleted, d)
 		}
 	}
+	pureDeleted = filesPresentInGraph(graph, pureDeleted)
 
 	// Reconstruct each deleted file's pre-deletion edges from HEAD so removed
 	// nodes show their old links instead of floating; MarkDeletedFiles styles
@@ -95,7 +113,33 @@ func buildGraph(repoPath string, opts *watchOptions, formatter formatters.Format
 		}
 	}
 
-	fileStats, _ := git.GetUncommittedFileStats(repoPath)
+	var prunedNodes map[string]bool
+	if opts.reach != "" {
+		graph, prunedNodes, err = applyWatchReachFilter(repoPath, opts, graph, anchorFiles)
+		if err != nil {
+			return "", err
+		}
+	}
+
+	if len(opts.betweenFiles) > 0 {
+		graph, err = applyWatchBetweenFilter(repoPath, opts, graph)
+		if err != nil {
+			return "", err
+		}
+	}
+
+	var collapse depgraph.Collapse
+	if opts.collapse && len(modules) > 0 {
+		graph, collapse, err = depgraph.CollapseModules(graph, modules)
+		if err != nil {
+			return "", err
+		}
+	}
+
+	var fileStats map[string]vcs.FileStats
+	if !opts.noStats {
+		fileStats, _ = git.GetUncommittedFileStats(repoPath)
+	}
 
 	fileGraph, err := depgraph.NewFileDependencyGraph(graph, fileStats, contentReader)
 	if err != nil {
@@ -103,6 +147,22 @@ func buildGraph(repoPath string, opts *watchOptions, formatter formatters.Format
 	}
 	depgraph.MarkDeletedFiles(&fileGraph, pureDeleted)
 	depgraph.MarkRenamedFiles(&fileGraph, renames, mergeContent(deletedContent, renameOldContent), contentReader)
+	for node := range prunedNodes {
+		if md, ok := fileGraph.Meta.Files[node]; ok {
+			md.IsPruned = true
+			fileGraph.Meta.Files[node] = md
+		}
+	}
+	for moduleNode, members := range collapse.Members {
+		depgraph.AnnotateModule(&fileGraph, moduleNode, members, fileStats)
+	}
+	fileGraph.Meta.EdgeOrigins = collapse.EdgeOrigins
+	if opts.moduleSelect != "" && len(moduleMembers) > 0 {
+		fileGraph.Meta.ModuleCluster = &depgraph.ModuleCluster{
+			Name:    opts.moduleSelect,
+			Members: membersInWatchGraph(graph, moduleMembers),
+		}
+	}
 
 	if !opts.noPhantom {
 		if diffs, diffErr := git.GetUncommittedFileDiffs(repoPath); diffErr == nil {
@@ -115,14 +175,355 @@ func buildGraph(repoPath string, opts *watchOptions, formatter formatters.Format
 		direction = formatters.DefaultDirection
 	}
 	renderOpts := formatters.RenderOptions{
-		Direction: direction,
-		BasePath:  repoPath,
+		Direction:  direction,
+		BasePath:   repoPath,
+		EdgeLabels: opts.edgeLabels,
 	}
 
 	return formatter.Format(fileGraph, renderOpts)
 }
 
 var errNoUncommittedChanges = fmt.Errorf("no uncommitted changes")
+
+func validateWatchGraphOptions(opts *watchOptions) error {
+	if opts.modules {
+		opts.collapse = true
+	}
+	opts.reach = strings.ToLower(strings.TrimSpace(opts.reach))
+	switch opts.reach {
+	case "", watchReachDown, watchReachUp, watchReachBoth:
+	default:
+		return fmt.Errorf("unknown reach: %s (valid options: up, down, both)", opts.reach)
+	}
+	if opts.depthLevel < 0 {
+		return fmt.Errorf("--depth must be at least 0")
+	}
+	if opts.collapse && opts.moduleSelect != "" {
+		return fmt.Errorf("--collapse cannot be used with --module")
+	}
+	if opts.reach != "" && opts.collapse {
+		return fmt.Errorf("--reach cannot be used with --collapse")
+	}
+	if len(opts.betweenFiles) > 0 && opts.reach != "" {
+		return fmt.Errorf("--reach cannot be used with --between")
+	}
+	if len(opts.betweenFiles) > 0 && opts.collapse {
+		return fmt.Errorf("--collapse cannot be used with --between")
+	}
+	if opts.all && len(opts.includes) > 0 {
+		return fmt.Errorf("--all cannot be used with paths")
+	}
+	if opts.all && len(opts.betweenFiles) > 0 {
+		return fmt.Errorf("--all cannot be used with --between")
+	}
+	if opts.all && opts.moduleSelect != "" {
+		return fmt.Errorf("--all cannot be used with --module")
+	}
+	if opts.all && opts.reach != "" {
+		return fmt.Errorf("--reach cannot be used with --all")
+	}
+	if opts.moduleSelect != "" && len(opts.betweenFiles) > 0 {
+		return fmt.Errorf("--module cannot be used with --between")
+	}
+	if len(opts.pruneFiles) > 0 && opts.reach == "" {
+		return fmt.Errorf("--prune requires --reach")
+	}
+	return nil
+}
+
+func selectWatchGraphFiles(repoPath string, opts *watchOptions, defaultAnchorFiles []string) (filePaths, anchorFiles []string, modules []depgraph.Module, moduleMembers []string, err error) {
+	loadModules := func() ([]depgraph.Module, error) {
+		if !opts.collapse && opts.moduleSelect == "" {
+			return nil, nil
+		}
+		return clarityconfig.LoadModules(repoPath)
+	}
+
+	if opts.all {
+		filePaths, err = expandWatchPaths([]string{repoPath}, false)
+		if err != nil {
+			return nil, nil, nil, nil, err
+		}
+		modules, err = loadModules()
+		return filePaths, filePaths, modules, nil, err
+	}
+
+	if len(opts.includes) > 0 {
+		modules, err = loadModules()
+		if err != nil {
+			return nil, nil, nil, nil, err
+		}
+		anchorFiles, err = expandWatchInputPaths(repoPath, opts.includes, true)
+		if err != nil {
+			return nil, nil, nil, nil, err
+		}
+		if opts.reach != "" {
+			filePaths, err = expandWatchPaths([]string{repoPath}, false)
+			if err != nil {
+				return nil, nil, nil, nil, err
+			}
+			return filePaths, anchorFiles, modules, nil, nil
+		}
+		return anchorFiles, anchorFiles, modules, nil, nil
+	}
+
+	if len(opts.betweenFiles) > 0 {
+		filePaths, err = expandWatchPaths([]string{repoPath}, false)
+		return filePaths, filePaths, nil, nil, err
+	}
+
+	if opts.moduleSelect != "" {
+		modules, err = clarityconfig.LoadModules(repoPath)
+		if err != nil {
+			return nil, nil, nil, nil, err
+		}
+		selected, selErr := findWatchModule(opts.moduleSelect, modules)
+		if selErr != nil {
+			return nil, nil, nil, nil, selErr
+		}
+		moduleMembers = existingWatchFiles(selected.Files)
+		if len(moduleMembers) == 0 {
+			return nil, nil, nil, nil, fmt.Errorf("module %q resolves to no files", opts.moduleSelect)
+		}
+		anchorFiles = moduleMembers
+		if opts.reach != "" {
+			filePaths, err = expandWatchPaths([]string{repoPath}, false)
+			if err != nil {
+				return nil, nil, nil, nil, err
+			}
+			return filePaths, anchorFiles, modules, moduleMembers, nil
+		}
+		return moduleMembers, anchorFiles, modules, moduleMembers, nil
+	}
+
+	if len(defaultAnchorFiles) == 0 {
+		return nil, nil, nil, nil, nil
+	}
+
+	if opts.reach != "" {
+		filePaths, err = expandWatchPaths([]string{repoPath}, false)
+		if err != nil {
+			return nil, nil, nil, nil, err
+		}
+		filePaths = unionWatchPaths(filePaths, defaultAnchorFiles)
+		return filePaths, defaultAnchorFiles, nil, nil, nil
+	}
+
+	modules, err = loadModules()
+	if err != nil {
+		return nil, nil, nil, nil, err
+	}
+	return defaultAnchorFiles, defaultAnchorFiles, modules, nil, nil
+}
+
+func expandWatchInputPaths(repoPath string, includes []string, includeUnsupportedFiles bool) ([]string, error) {
+	resolved := make([]string, 0, len(includes))
+	for _, include := range includes {
+		resolved = append(resolved, resolveWatchPath(repoPath, include))
+	}
+	return expandWatchPaths(resolved, includeUnsupportedFiles)
+}
+
+func expandWatchPaths(paths []string, includeUnsupportedFiles bool) ([]string, error) {
+	var result []string
+	for _, path := range paths {
+		info, err := os.Stat(path)
+		if err != nil {
+			return nil, fmt.Errorf("failed to access %s: %w", path, err)
+		}
+		if !info.IsDir() {
+			result = append(result, path)
+			continue
+		}
+		err = filepath.WalkDir(path, func(filePath string, d os.DirEntry, walkErr error) error {
+			if walkErr != nil {
+				return walkErr
+			}
+			if d.IsDir() {
+				if skippedDirs[d.Name()] {
+					return filepath.SkipDir
+				}
+				return nil
+			}
+			if includeUnsupportedFiles || registry.IsSupportedLanguageExtension(filepath.Ext(filePath)) {
+				result = append(result, filePath)
+			}
+			return nil
+		})
+		if err != nil {
+			return nil, err
+		}
+	}
+	return result, nil
+}
+
+func resolveWatchPath(repoPath, raw string) string {
+	if filepath.IsAbs(raw) {
+		return filepath.Clean(raw)
+	}
+	return filepath.Clean(filepath.Join(repoPath, raw))
+}
+
+func existingWatchFiles(paths []string) []string {
+	files := make([]string, 0, len(paths))
+	for _, path := range paths {
+		if info, err := os.Stat(path); err == nil && info.Mode().IsRegular() {
+			files = append(files, path)
+		}
+	}
+	return files
+}
+
+func unionWatchPaths(base, extra []string) []string {
+	seen := make(map[string]bool, len(base)+len(extra))
+	out := make([]string, 0, len(base)+len(extra))
+	for _, path := range append(base, extra...) {
+		clean := filepath.Clean(path)
+		if seen[clean] {
+			continue
+		}
+		seen[clean] = true
+		out = append(out, path)
+	}
+	return out
+}
+
+func findWatchModule(name string, modules []depgraph.Module) (depgraph.Module, error) {
+	available := make([]string, 0, len(modules))
+	for _, module := range modules {
+		if module.Name == name {
+			return module, nil
+		}
+		available = append(available, module.Name)
+	}
+	if len(available) == 0 {
+		return depgraph.Module{}, fmt.Errorf("unknown module %q: no modules declared in .clarity/modules.json", name)
+	}
+	sort.Strings(available)
+	return depgraph.Module{}, fmt.Errorf("unknown module %q (available: %s)", name, strings.Join(available, ", "))
+}
+
+func applyWatchReachFilter(repoPath string, opts *watchOptions, graph depgraph.DependencyGraph, anchorFiles []string) (depgraph.DependencyGraph, map[string]bool, error) {
+	pruneSet := make(map[string]bool, len(opts.pruneFiles))
+	for _, prune := range opts.pruneFiles {
+		pruneSet[resolveWatchPath(repoPath, prune)] = true
+	}
+	return filterWatchGraphByReach(graph, anchorFiles, opts.depthLevel, opts.reach, pruneSet)
+}
+
+func filterWatchGraphByReach(graph depgraph.DependencyGraph, targetFiles []string, depth int, reach string, pruneSet map[string]bool) (depgraph.DependencyGraph, map[string]bool, error) {
+	adjacency, err := depgraph.AdjacencyList(graph)
+	if err != nil {
+		return nil, nil, err
+	}
+	reverseAdjacency := make(map[string][]string, len(adjacency))
+	for source, deps := range adjacency {
+		if _, ok := reverseAdjacency[source]; !ok {
+			reverseAdjacency[source] = nil
+		}
+		for _, dep := range deps {
+			reverseAdjacency[dep] = append(reverseAdjacency[dep], source)
+		}
+	}
+
+	visited := make(map[string]bool)
+	currentLevel := make([]string, 0, len(targetFiles))
+	for _, target := range targetFiles {
+		if _, ok := adjacency[target]; !ok {
+			continue
+		}
+		if !visited[target] {
+			visited[target] = true
+			currentLevel = append(currentLevel, target)
+		}
+	}
+	if len(currentLevel) == 0 {
+		return depgraph.NewDependencyGraph(), nil, nil
+	}
+
+	for level := 0; (depth == 0 || level < depth) && len(currentLevel) > 0; level++ {
+		var nextLevel []string
+		for _, file := range currentLevel {
+			if pruneSet[file] {
+				continue
+			}
+			if reach == watchReachDown || reach == watchReachBoth {
+				for _, dep := range adjacency[file] {
+					if !visited[dep] {
+						visited[dep] = true
+						nextLevel = append(nextLevel, dep)
+					}
+				}
+			}
+			if reach == watchReachUp || reach == watchReachBoth {
+				for _, dependent := range reverseAdjacency[file] {
+					if !visited[dependent] {
+						visited[dependent] = true
+						nextLevel = append(nextLevel, dependent)
+					}
+				}
+			}
+		}
+		currentLevel = nextLevel
+	}
+
+	filtered := make(map[string][]string, len(visited))
+	for file := range visited {
+		for _, dep := range adjacency[file] {
+			if visited[dep] {
+				filtered[file] = append(filtered[file], dep)
+			}
+		}
+		if _, ok := filtered[file]; !ok {
+			filtered[file] = nil
+		}
+	}
+
+	pruned := make(map[string]bool)
+	for file := range pruneSet {
+		if visited[file] {
+			pruned[file] = true
+		}
+	}
+
+	return depgraph.MustDependencyGraph(filtered), pruned, nil
+}
+
+func applyWatchBetweenFilter(repoPath string, opts *watchOptions, graph depgraph.DependencyGraph) (depgraph.DependencyGraph, error) {
+	resolved := make([]string, 0, len(opts.betweenFiles))
+	var missing []string
+	for _, path := range opts.betweenFiles {
+		absPath := resolveWatchPath(repoPath, path)
+		if depgraph.ContainsNode(graph, absPath) {
+			resolved = append(resolved, absPath)
+		} else {
+			missing = append(missing, path)
+		}
+	}
+	if len(missing) > 0 {
+		return nil, fmt.Errorf("files not found in graph: %v", missing)
+	}
+	if len(resolved) < 2 {
+		return nil, fmt.Errorf("at least 2 files required for --between, found %d in graph", len(resolved))
+	}
+	return depgraph.FindPathNodes(graph, resolved), nil
+}
+
+func filesPresentInGraph(graph depgraph.DependencyGraph, files []string) []string {
+	present := make([]string, 0, len(files))
+	for _, file := range files {
+		if depgraph.ContainsNode(graph, file) {
+			present = append(present, file)
+		}
+	}
+	return present
+}
+
+func membersInWatchGraph(graph depgraph.DependencyGraph, members []string) []string {
+	present := filesPresentInGraph(graph, members)
+	sort.Strings(present)
+	return present
+}
 
 // renameSources returns the old paths (rename sources) of a renames map.
 func renameSources(renames map[string]string) []string {
@@ -224,14 +625,10 @@ func applyWatchExtensionFilters(opts *watchOptions, filePaths []string) ([]strin
 	return filePaths, nil
 }
 
-func applyWatchExcludeFilter(opts *watchOptions, filePaths []string) ([]string, error) {
+func applyWatchExcludeFilter(repoPath string, opts *watchOptions, filePaths []string) ([]string, error) {
 	excludePaths := make([]string, 0, len(opts.excludes))
 	for _, exclude := range opts.excludes {
-		absExclude, err := filepath.Abs(exclude)
-		if err != nil {
-			return nil, fmt.Errorf("failed to resolve exclude path %q: %w", exclude, err)
-		}
-		excludePaths = append(excludePaths, absExclude)
+		excludePaths = append(excludePaths, resolveWatchPath(repoPath, exclude))
 	}
 
 	filtered := make([]string, 0, len(filePaths))
