@@ -6,146 +6,245 @@
 [![npm version](https://img.shields.io/npm/v/@legacycodehq/clarity)](https://www.npmjs.com/package/@legacycodehq/clarity)
 [![Go Report Card](https://goreportcard.com/badge/github.com/LegacyCodeHQ/clarity)](https://goreportcard.com/report/github.com/LegacyCodeHQ/clarity)
 
-Clarity is a software design tool for AI-native developers and coding agents.
+See the structure of a code change before you commit it.
 
-**Note:** Clarity supports [**17 languages**](#supported-languages) (parsing quality may vary by language).
+Clarity builds dependency impact graphs from source code. It shows how files,
+modules, tests, and documentation connect so developers and coding agents can
+reason about design changes with evidence instead of intuition.
 
-## What You Get
+Use it when you want to know:
 
-Clarity generates impact graphs from your code so you can review design effects before commit.
+- What does this change touch?
+- Who depends on this file?
+- Why are these two areas connected?
+- Did this refactor cross a boundary?
+- Did we introduce a cycle?
+- What does this branch look like structurally?
 
-- Keep a live impact view while coding with `clarity watch`.
-- Generate focused snapshots for uncommitted changes, commits, commit ranges, and file-to-file paths with `clarity show`.
-- Run repeatable design checks in developer and coding-agent workflows, with shareable visualization output when needed.
+Clarity works at file granularity. It recovers coupling shape, not runtime
+behavior or full API contracts.
 
 ## Quick Start
 
-**Step 1:** Install with npm (cross-platform):
+Install with npm:
 
-```bash
+```sh
 npm install -g @legacycodehq/clarity
 ```
 
-Or install on macOS/Linux using Homebrew:
+Or on macOS/Linux with Homebrew:
 
-```bash
+```sh
 brew install LegacyCodeHQ/tap/clarity
 ```
 
-For more install options see the [installation guide](docs/usage/installation.md).
+Keep a live graph open while you code:
 
-**Step 2:** Inside your project:
-
-```bash
-clarity setup # Configures AGENTS.md for your coding agent to use Clarity
-```
-
-**Step 3:** Start with a live impact view while you code:
-
-```bash
+```sh
 clarity watch
 ```
 
-## Developers & Agents
+Show the structural impact of your uncommitted work:
 
-Clarity helps teams using coding agents make safer, faster design changes.
+```sh
+clarity show
+```
 
-**For developers**, the value is practical:
+Find what depends on a file before changing it:
 
-- Understand what a change will affect before commit.
-- Review architecture and design impact quickly during feature work.
-- Give coding agents concrete feedback grounded in actual low-level design.
+```sh
+clarity show path/to/file.go --reach up
+```
 
-**For agents**, Clarity provides a deterministic and repeatable way to verify and validate their design changes.
+Review the structural footprint of a branch:
 
-### Developer Workflows
+```sh
+clarity show -c main...HEAD
+```
 
-#### 1) During development: keep impact visible while making changes
+## The Model
 
-```bash
+Every graph answers four questions.
+
+| Question | Meaning | Examples |
+|---|---|---|
+| Which snapshot? | working tree, commit, or range | `clarity show`, `-c HEAD`, `-c main...HEAD` |
+| What anchor? | changed files, paths, modules, whole tree, paths between files | `src/auth`, `--module auth`, `--all`, `--between a,b` |
+| What lens? | how much context or abstraction to apply | `--reach up`, `--reach down`, `--depth 2`, `--collapse` |
+| What rendering? | how to output the graph | DOT, Mermaid, browser URL, live UI |
+
+This makes Clarity useful for both quick local checks and repeatable agent
+workflows.
+
+## Core Use Cases
+
+### Review a Change Before Commit
+
+```sh
+clarity show
+```
+
+Shows the dependency graph around your uncommitted work.
+
+Use it to check:
+
+- whether the change stayed inside the intended area
+- which neighboring files are affected
+- whether tests are connected to the changed code
+- whether new coupling appeared
+
+### Review a Commit, Branch, or PR
+
+```sh
+clarity show -c HEAD
+clarity show -c main...HEAD
+```
+
+Use commit and range snapshots to review structural impact after the fact. This
+is useful for pull requests, regression windows, release reviews, and
+agent-generated changes.
+
+### Refactor Safely
+
+```sh
+clarity show path/to/file.go --reach up
+clarity show path/to/file.go --reach both --depth 2
+```
+
+Use upstream reach to answer "who imports this?" before changing a file. Use
+bounded reach to estimate blast radius.
+
+### Understand a Codebase
+
+```sh
+clarity show src/auth
+clarity show src/auth --reach both
+clarity show --all --collapse
+```
+
+Use scoped graphs to explore unfamiliar code. Collapse configured modules when
+the file-level graph is too noisy.
+
+### Trace Unexpected Coupling
+
+```sh
+clarity show --between ui/login.ts,server/session.go
+```
+
+Shows the dependency paths connecting two files. Use this when you need to
+explain why two areas are coupled or decide where to cut a dependency.
+
+### Audit Module Boundaries
+
+```sh
+clarity modules
+clarity show --module auth --reach both
+clarity show --all --collapse
+```
+
+Declare modules in `.clarity/modules.json`, inspect a module in context, or
+collapse modules into architecture-level nodes.
+
+### Find Circular Dependencies
+
+```sh
+clarity cycles src
+clarity cycles src --url
+```
+
+Lists circular dependencies within a scope and can produce focused
+visualizations for each cycle.
+
+### Keep Feedback Live While Coding
+
+```sh
 clarity watch
+clarity watch src/auth --reach both
 ```
 
-Use `clarity watch` during active development to keep design impact visible as the codebase evolves.
+Runs a local live graph that updates as files change. Use it during refactors or
+large agent edits to keep structural feedback visible.
 
-#### 2) Before committing: generate focused change context
+### Support Coding Agents
 
-If your coding agent is already configured with Clarity via `clarity setup` (one-time), the agent can run these commands and render
-a diagram for you.
-
-If not, run them manually as part of your development flow.
-
-```bash
-clarity show                      # Visualize uncommitted changes
-clarity show -c HEAD              # Visualize the latest commit
-clarity show -c HEAD~3...HEAD     # Visualize a commit range
+```sh
+clarity setup
 ```
 
-Use this output to answer: "What did we actually touch?", "What does the solution look like?" and "Which parts of the system are now coupled?"
+Adds repository instructions so coding agents can use Clarity as part of their
+normal loop.
 
-#### 3) Explore the codebase and debug design decisions: trace specific relationships
+Good agent patterns:
 
-```bash
-clarity show src tests            # Build graph from specific files/directories
-clarity show -w a.go,b.go         # Show all paths between files
+- inspect dependents before refactoring with `--reach up`
+- run `clarity show -f mermaid` after edits
+- generate `clarity show -u` for a shareable review artifact
+- use the graph to catch unexpected coupling before commit
+
+## Output
+
+```sh
+clarity show -f dot
+clarity show -f mermaid
+clarity show -u
 ```
 
-**Note:** Use the `-u` flag, as in `clarity show -u` to generate a shareable visualization URL.
+DOT is the default. Mermaid works well in docs, IDEs, and agent UIs. `-u`
+creates a browser-friendly visualization URL.
 
-> **💡 Tip:** During design discussions, use actual graphs to explain or challenge design decisions with evidence instead of intuition.
+## Language Support
 
-#### When to Use `watch` vs `show`
+Clarity supports dependency extraction for:
 
-If your coding agent is configured using `clarity setup`, running `clarity show` manually is optional.
-
-| Use case                                                     | Command                 | Why                                                                            |
-|--------------------------------------------------------------|-------------------------|--------------------------------------------------------------------------------|
-| You are actively coding and want continuous feedback         | `clarity watch`         | Keeps a live view updated as files change so you can catch design drift early. |
-| You want a point-in-time view of current uncommitted work    | `clarity show`          | Produces a snapshot of what your current changes impact.                       |
-| You are reviewing committed history (single commit or range) | `clarity show -c <rev>` | Focuses analysis on specific commits for review or debugging.                  |
-| You want a shareable/browser-friendly view                   | `clarity show -u`       | Generates a visualization URL you can open or share.                           |
-
-### Agent Workflow
-
-If you use a coding agent, set up Clarity once so the agent can include design checks in its normal loop.
-
-1. Run `clarity setup` in your repository.
-2. Confirm `AGENTS.md` includes Clarity instructions.
-3. Ask your agent to run `clarity show` after meaningful changes and use the output in its review.
-
-<p align="center">
-  <img src="docs/images/clarity+codex-app.png" alt="Clarity graph in Codex app">
-  <small>Clarity highlights impacted files and related tests so you can review design impact before commit.</small>
-</p>
-
-Clarity works across desktop and CLI-based agent workflows.
-In desktop products, agents can render Mermaid diagrams inline.
-In CLI workflows, agents are configured to open a generated visualization URL in a new browser tab when showing design output.
-
-## Supported Languages
-
-- C
-- C++
-- C#
+- C, C++, C#
 - Dart
 - Go
-- JavaScript
-- Java
-- Kotlin
-- Markdown (`.md`, `.markdown`) — relative and site-absolute links between docs
-- Python
-- Ruby
+- Java, Kotlin, Scala
+- JavaScript, TypeScript, Svelte
+- Markdown
+- Python, Ruby
 - Rust
-- Scala
-- Svelte
 - Swift
-- TypeScript
 - Zig
 
----
+Support quality varies by language. Run:
+
+```sh
+clarity languages
+```
+
+to see the current maturity and extension list.
+
+## Experimental Surfaces
+
+```sh
+clarity cycles
+clarity workspace
+```
+
+`cycles` reports circular file dependencies.
+
+`workspace` builds Go module and Rust crate relationship graphs.
+
+These surfaces are useful, but their output may change.
+
+## What Clarity Is Not
+
+Clarity is not a replacement for tests, type checks, linters, or code review.
+
+It does not provide:
+
+- full symbol-level call graphs
+- runtime behavior analysis
+- API contract verification
+- semantic correctness guarantees
+
+It is a structural verification tool: it shows coupling, impact, boundaries,
+cycles, and change shape.
 
 ## License
 
 This project is licensed under the [GNU Affero General Public License v3.0](LICENSE).
 
-Copyright © 2026-present, Legacy Code Headquarters (OPC) Private Limited. All rights reserved.
+Copyright (c) 2026-present, Legacy Code Headquarters (OPC) Private Limited. All
+rights reserved.
