@@ -47,7 +47,6 @@ func NewCommand() *cobra.Command {
 	cmd.Flags().StringSliceVar(&opts.pruneFiles, "prune", nil, "Show node but skip its subtree (requires --reach)")
 	cmd.Flags().BoolVar(&opts.all, "all", false, "Render the whole live working tree")
 	cmd.Flags().BoolVar(&opts.collapse, "collapse", false, "Collapse files into the modules declared in .clarity/modules.json")
-	cmd.Flags().BoolVar(&opts.modules, "modules", false, "Collapse files into the modules declared in .clarity/modules.json")
 	cmd.Flags().StringVarP(
 		&opts.direction,
 		"orientation",
@@ -77,7 +76,6 @@ func NewCommand() *cobra.Command {
 func deprecateLegacyWatchFlags(cmd *cobra.Command) {
 	deprecations := map[string]string{
 		"input":     "pass paths positionally instead",
-		"modules":   "use --collapse",
 		"direction": "use --reach",
 	}
 	for name, message := range deprecations {

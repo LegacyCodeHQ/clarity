@@ -131,7 +131,7 @@ func TestShowCommand_ModulesFlagAppliesConfig(t *testing.T) {
   ]
 }`)
 
-	out := runShow(t, "-i", srcDir, "-r", repoDir, "-f", "dot", "--modules")
+	out := runShow(t, "-i", srcDir, "-r", repoDir, "-f", "dot", "--collapse")
 	if !strings.Contains(out, `"support"`) {
 		t.Fatalf("expected --modules to collapse into module node \"support\", got:\n%s", out)
 	}

@@ -40,7 +40,6 @@ type graphOptions struct {
 	collapse        bool
 	pruneFiles      []string
 	alsoPatterns    []string
-	modules         bool
 	moduleSelect    string
 	moduleDirection string
 	edgeLabels      bool
@@ -124,7 +123,6 @@ func NewCommand() *cobra.Command {
 	cmd.Flags().StringSliceVar(&opts.pruneFiles, "prune", nil, "Show node but skip its subtree (requires --file; shown with dashed border)")
 	cmd.Flags().StringSliceVar(&opts.alsoPatterns, "also", nil, "Include files matching glob patterns that connect to --file graph (requires --file)")
 	cmd.Flags().BoolVar(&opts.collapse, "collapse", false, "Collapse files into the modules declared in .clarity/modules.json")
-	cmd.Flags().BoolVar(&opts.modules, "modules", false, "Collapse files into the modules declared in .clarity/modules.json (off by default)")
 	cmd.Flags().StringVarP(&opts.moduleSelect, "module", "m", "", "Render the named module's files inside a box, alongside any files already in scope such as working-set changes (quote names with spaces)")
 	cmd.Flags().StringVarP(&opts.moduleDirection, "direction", "d", opts.moduleDirection, "With --module, also show the module's immediate dependents/dependencies as context: none (default), in, out, both")
 	cmd.Flags().BoolVar(&opts.edgeLabels, "label", false, "Add deterministic short labels to edges")
@@ -140,7 +138,6 @@ func deprecateLegacyFlags(cmd *cobra.Command) {
 		"input":     "pass paths positionally instead",
 		"file":      "use a positional path with --reach down",
 		"level":     "use --depth",
-		"modules":   "use --collapse",
 		"direction": "use --reach",
 	}
 	for name, message := range deprecations {
@@ -474,10 +471,6 @@ func commonPathPrefix(paths []string) string {
 }
 
 func validateGraphOptions(opts *graphOptions) error {
-	if opts.modules {
-		opts.collapse = true
-	}
-
 	if opts.collapse && opts.moduleSelect != "" {
 		return fmt.Errorf("--collapse cannot be used with --module")
 	}

@@ -186,9 +186,6 @@ func buildGraph(repoPath string, opts *watchOptions, formatter formatters.Format
 var errNoUncommittedChanges = fmt.Errorf("no uncommitted changes")
 
 func validateWatchGraphOptions(opts *watchOptions) error {
-	if opts.modules {
-		opts.collapse = true
-	}
 	opts.reach = strings.ToLower(strings.TrimSpace(opts.reach))
 	switch opts.reach {
 	case "", watchReachDown, watchReachUp, watchReachBoth:

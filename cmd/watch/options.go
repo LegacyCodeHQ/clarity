@@ -19,7 +19,6 @@ type watchOptions struct {
 	pruneFiles      []string
 	all             bool
 	collapse        bool
-	modules         bool
 	edgeLabels      bool
 	noStats         bool
 	noPhantom       bool
