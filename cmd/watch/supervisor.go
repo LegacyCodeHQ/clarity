@@ -7,7 +7,6 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
-	"strings"
 	"sync"
 	"time"
 
@@ -23,12 +22,6 @@ const (
 	modePrimary repoMode = "primary"
 	modeLinked  repoMode = "linked"
 )
-
-// gitdirAppearTimeout bounds how long the meta-watcher waits for a freshly
-// created `<common>/worktrees/<name>/gitdir` file to appear before giving up
-// on registering that worktree. `git worktree add` writes it within
-// milliseconds, but we add headroom for slow disks/CI.
-const gitdirAppearTimeout = 2 * time.Second
 
 // worktreeReconcileInterval backs up fsnotify delivery with a lightweight
 // registry scan so stale worktree entries or dropped events do not strand the
@@ -141,12 +134,11 @@ func runSupervisor(ctx context.Context, cwd string, opts *watchOptions, b *broke
 	}
 
 	sup := &supervisor{
-		b:              b,
-		opts:           opts,
-		formatter:      formatter,
-		rootPath:       repos[0].Path,
-		watchers:       make(map[string]context.CancelFunc),
-		subdirToRepoID: make(map[string]string),
+		b:         b,
+		opts:      opts,
+		formatter: formatter,
+		rootPath:  repos[0].Path,
+		watchers:  make(map[string]context.CancelFunc),
 	}
 
 	// In primary mode, install the meta-watcher BEFORE spawning initial
@@ -187,9 +179,8 @@ type supervisor struct {
 	commonDir string
 	rootPath  string
 
-	mu             sync.Mutex
-	watchers       map[string]context.CancelFunc // repoID -> cancel
-	subdirToRepoID map[string]string             // worktree-subdir name -> repoID
+	mu       sync.Mutex
+	watchers map[string]context.CancelFunc // repoID -> cancel
 }
 
 func (s *supervisor) spawnWatcher(parent context.Context, desc protocol.RepoDescriptor) {
@@ -246,10 +237,11 @@ func (s *supervisor) shutdown() {
 	}
 }
 
-// runMetaWatcher installs an fsnotify watch on `<common>/worktrees/`. CREATE
-// events fire when `git worktree add` registers a new linked worktree; REMOVE
-// events fire on `git worktree remove`. Each registered subdir is mapped to a
-// repoID so removals can tear down the right watcher.
+// runMetaWatcher installs an fsnotify watch on `<common>/worktrees/`. Any event
+// there — `git worktree add`, `remove`, or `move` — is treated as a bare trigger
+// to reconcile: the watch carries no per-event logic, since `git worktree list`
+// (via reconcileWorktrees) is the single source of truth for the tab set. A
+// periodic tick backstops dropped fsnotify events.
 // `ready` is closed once the fsnotify watch is in place, so callers can
 // sequence work that must not race with the watch installation.
 func (s *supervisor) runMetaWatcher(ctx context.Context, ready chan<- struct{}) error {
@@ -276,20 +268,7 @@ func (s *supervisor) runMetaWatcher(ctx context.Context, ready chan<- struct{}) 
 		return fmt.Errorf("meta-watcher add %s: %w", worktreesDir, err)
 	}
 
-	// Seed the subdir → repoID map so REMOVE events on already-watched trees
-	// can find their target.
-	if entries, err := os.ReadDir(worktreesDir); err == nil {
-		for _, e := range entries {
-			if !e.IsDir() {
-				continue
-			}
-			if path := readWorktreeGitdir(filepath.Join(worktreesDir, e.Name())); path != "" && pathExists(path) {
-				id := repoIDFor(path, false)
-				s.rememberWorktreeSubdirName(e.Name(), id)
-			}
-		}
-	}
-
+	// The watch is installed; let startup proceed.
 	closeReady()
 	reconcileTicker := time.NewTicker(worktreeReconcileInterval)
 	defer reconcileTicker.Stop()
@@ -298,16 +277,9 @@ func (s *supervisor) runMetaWatcher(ctx context.Context, ready chan<- struct{}) 
 		select {
 		case <-ctx.Done():
 			return nil
-		case ev, ok := <-watcher.Events:
+		case _, ok := <-watcher.Events:
 			if !ok {
 				return nil
-			}
-			subdir := filepath.Base(ev.Name)
-			switch {
-			case ev.Has(fsnotify.Create):
-				s.handleWorktreeCreate(ctx, ev.Name, subdir)
-			case ev.Has(fsnotify.Remove) || ev.Has(fsnotify.Rename):
-				s.handleWorktreeRemove(subdir)
 			}
 			s.reconcileWorktrees(ctx)
 		case err, ok := <-watcher.Errors:
@@ -319,46 +291,6 @@ func (s *supervisor) runMetaWatcher(ctx context.Context, ready chan<- struct{}) 
 			s.reconcileWorktrees(ctx)
 		}
 	}
-}
-
-func (s *supervisor) handleWorktreeCreate(ctx context.Context, subdirPath, subdirName string) {
-	gitdirPath, deadline := "", time.Now().Add(gitdirAppearTimeout)
-	for time.Now().Before(deadline) {
-		gitdirPath = readWorktreeGitdir(subdirPath)
-		if gitdirPath != "" {
-			break
-		}
-		time.Sleep(50 * time.Millisecond)
-	}
-	if gitdirPath == "" {
-		return
-	}
-	if !pathExists(gitdirPath) {
-		return
-	}
-
-	desc := descriptorForLinked(git.Worktree{
-		Path:   gitdirPath,
-		Branch: currentBranchFor(gitdirPath),
-	})
-
-	s.rememberWorktreeSubdirName(subdirName, desc.ID)
-	already := s.hasWatcher(desc.ID)
-	if already {
-		return
-	}
-	s.spawnWatcher(ctx, desc)
-}
-
-func (s *supervisor) handleWorktreeRemove(subdirName string) {
-	s.mu.Lock()
-	repoID, ok := s.subdirToRepoID[subdirName]
-	delete(s.subdirToRepoID, subdirName)
-	s.mu.Unlock()
-	if !ok {
-		return
-	}
-	s.finishWatcher(repoID)
 }
 
 func (s *supervisor) reconcileWorktrees(ctx context.Context) {
@@ -376,11 +308,6 @@ func (s *supervisor) reconcileWorktrees(ctx context.Context) {
 		desc := descriptorForLinked(w)
 		seen[desc.ID] = true
 		if !s.hasWatcher(desc.ID) {
-			// Resolve the worktree's gitdir (a git subprocess) only when this is
-			// a newly discovered worktree; for already-watched trees the subdir
-			// mapping is already recorded, so the steady-state tick is just one
-			// `git worktree list`.
-			s.rememberWorktreeSubdir(w.Path, desc.ID)
 			s.spawnWatcher(ctx, desc)
 		}
 	}
@@ -406,37 +333,4 @@ func (s *supervisor) linkedWatchersMissingFrom(seen map[string]bool) []string {
 		}
 	}
 	return missing
-}
-
-func (s *supervisor) rememberWorktreeSubdir(worktreePath, repoID string) {
-	gitDir, err := git.GetGitDir(worktreePath)
-	if err != nil {
-		return
-	}
-	s.rememberWorktreeSubdirName(filepath.Base(gitDir), repoID)
-}
-
-func (s *supervisor) rememberWorktreeSubdirName(subdirName, repoID string) {
-	if subdirName == "" || subdirName == "." || subdirName == string(filepath.Separator) {
-		return
-	}
-	s.mu.Lock()
-	s.subdirToRepoID[subdirName] = repoID
-	s.mu.Unlock()
-}
-
-// readWorktreeGitdir reads `<subdirPath>/gitdir` — a one-line file written by
-// `git worktree add` containing the absolute path to the worktree's `.git`
-// file (which itself sits at `<worktree>/.git`). Returns the worktree's
-// working-tree path (the parent of that `.git`), or "" if unreadable.
-func readWorktreeGitdir(subdirPath string) string {
-	raw, err := os.ReadFile(filepath.Join(subdirPath, "gitdir"))
-	if err != nil {
-		return ""
-	}
-	gitFilePath := strings.TrimSpace(string(raw))
-	if gitFilePath == "" {
-		return ""
-	}
-	return filepath.Dir(gitFilePath)
 }

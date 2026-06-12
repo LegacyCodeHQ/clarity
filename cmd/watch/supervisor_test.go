@@ -144,12 +144,11 @@ func TestSupervisor_ReconcileDiscoversWorktreeWithoutFsnotify(t *testing.T) {
 	defer cancel()
 
 	s := &supervisor{
-		b:              b,
-		opts:           &watchOptions{},
-		formatter:      formatter,
-		rootPath:       repo,
-		watchers:       make(map[string]context.CancelFunc),
-		subdirToRepoID: make(map[string]string),
+		b:         b,
+		opts:      &watchOptions{},
+		formatter: formatter,
+		rootPath:  repo,
+		watchers:  make(map[string]context.CancelFunc),
 	}
 
 	// Added with no fsnotify meta-watcher in the picture, so only an explicit
@@ -253,11 +252,10 @@ func TestSupervisor_VanishedWorktreeSelfFinishes(t *testing.T) {
 	require.NoError(t, err)
 
 	sup := &supervisor{
-		b:              b,
-		opts:           &watchOptions{},
-		formatter:      formatter,
-		watchers:       make(map[string]context.CancelFunc),
-		subdirToRepoID: make(map[string]string),
+		b:         b,
+		opts:      &watchOptions{},
+		formatter: formatter,
+		watchers:  make(map[string]context.CancelFunc),
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
