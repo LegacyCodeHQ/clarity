@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"sync"
@@ -285,6 +286,13 @@ func (s *supervisor) runMetaWatcher(ctx context.Context, ready chan<- struct{}) 
 		case err, ok := <-watcher.Errors:
 			if !ok {
 				return nil
+			}
+			// kqueue reports the worktrees dir being removed (e.g. the last
+			// linked worktree was pruned) as a benign ENOENT; reconcile handles
+			// the actual teardown, so don't spam stderr.
+			if isMissingPath(err) {
+				slog.Debug("meta-watched path removed", "error", err)
+				continue
 			}
 			fmt.Fprintf(os.Stderr, "meta-watcher error: %v\n", err)
 		case <-reconcileTicker.C:

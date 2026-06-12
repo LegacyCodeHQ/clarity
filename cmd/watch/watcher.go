@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -84,6 +85,13 @@ func watchAndRebuild(ctx context.Context, repoID, repoPath string, opts *watchOp
 		case err, ok := <-watcher.Errors:
 			if !ok {
 				return nil
+			}
+			// kqueue (macOS) reports a removed or replaced watched directory as
+			// an ENOENT error rather than a Remove event. It is benign: the path
+			// is already gone and its watch is self-pruned, so don't spam stderr.
+			if isMissingPath(err) {
+				slog.Debug("watched path removed", "error", err)
+				continue
 			}
 			fmt.Fprintf(os.Stderr, "watcher error: %v\n", err)
 
