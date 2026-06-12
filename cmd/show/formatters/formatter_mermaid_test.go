@@ -35,8 +35,8 @@ func TestMermaidFormatter_BasicFlowchart(t *testing.T) {
 }
 
 func TestMermaidFormatter_RenamedNodeShowsMarkerAndStyle(t *testing.T) {
-	// Parity with the DOT formatter: a renamed node carries the "(renamed)"
-	// marker and a dashed style. The Mermaid formatter previously dropped both.
+	// Parity with the DOT formatter: a renamed node carries the lifecycle icon
+	// on its file-name row and a dashed style.
 	graph := testFileGraphMermaid(t, map[string][]string{
 		"/project/old.dart": {},
 		"/project/app.dart": {"/project/old.dart"},
@@ -50,7 +50,7 @@ func TestMermaidFormatter_RenamedNodeShowsMarkerAndStyle(t *testing.T) {
 	output, err := formatter.Format(graph, RenderOptions{})
 	require.NoError(t, err)
 
-	require.Contains(t, output, "(renamed)")
+	require.Contains(t, output, "✏️ old.dart")
 	require.Contains(t, output, "classDef renamedFile")
 }
 

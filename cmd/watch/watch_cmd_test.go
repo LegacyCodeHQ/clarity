@@ -817,7 +817,8 @@ func TestBuildGraph_IncludesDeletedSubtree(t *testing.T) {
 
 	assert.Contains(t, dot, "obsolete.ts")
 	assert.Contains(t, dot, "child.ts")
-	assert.Contains(t, dot, "(deleted)")
+	assert.Contains(t, dot, "🗑️ obsolete.ts")
+	assert.Contains(t, dot, "🗑️ child.ts")
 	assert.Contains(t, dot, `"dead/obsolete.ts" -> "dead/child.ts"`)
 	assert.Contains(t, dot, `color="#cc3333"`)
 }
@@ -825,7 +826,7 @@ func TestBuildGraph_IncludesDeletedSubtree(t *testing.T) {
 func TestBuildGraph_DeletedIsolatedFileStillRendered(t *testing.T) {
 	// A deleted file that nothing imports (and that imports nothing) is isolated,
 	// but a deletion is information the developer wants to see -- it must still
-	// render as "(deleted)", not be pruned away.
+	// render with the deleted icon, not be pruned away.
 	dir := t.TempDir()
 	initGitRepo(t, dir)
 	orphan := filepath.Join(dir, "orphan.ts")
@@ -841,7 +842,7 @@ func TestBuildGraph_DeletedIsolatedFileStillRendered(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Contains(t, dot, "orphan.ts")
-	assert.Contains(t, dot, "(deleted)")
+	assert.Contains(t, dot, "🗑️ orphan.ts")
 }
 
 func TestBuildGraph_RenameReflectsGitState(t *testing.T) {
@@ -871,7 +872,7 @@ func TestBuildGraph_RenameReflectsGitState(t *testing.T) {
 		require.NoError(t, err)
 		// git sees a deletion and an untracked add — show both, not a rename.
 		assert.Contains(t, dot, "chart.ts")
-		assert.Contains(t, dot, "(deleted)")
+		assert.Contains(t, dot, "🗑️ chart.ts")
 		assert.Contains(t, dot, "ScatterPlot.ts")
 		assert.NotContains(t, dot, "✏️")
 		assert.NotContains(t, dot, "(renamed)")
@@ -882,8 +883,8 @@ func TestBuildGraph_RenameReflectsGitState(t *testing.T) {
 		runGit(t, dir, "add", "-A") // git now reports a rename (status R)
 		dot, err := buildGraph(dir, &watchOptions{}, formatter)
 		require.NoError(t, err)
-		assert.Contains(t, dot, "ScatterPlot.ts")
-		assert.Contains(t, dot, "(✏️ chart.ts)")
+		assert.Contains(t, dot, "✏️ ScatterPlot.ts")
+		assert.Contains(t, dot, "(from chart.ts)")
 		assert.NotContains(t, dot, "(deleted)")
 		assert.NotContains(t, dot, `"chart.ts" -> "ScatterPlot.ts"`)
 	})
@@ -992,7 +993,7 @@ func TestWatchAndRebuild_DetectsFileRename(t *testing.T) {
 	assert.Contains(t, snap, "ScatterPlot.ts", "post-rename graph missing new file name")
 	// Unstaged: git reports a deletion plus an untracked add, not a rename, so the
 	// graph shows both faithfully rather than guessing a rename.
-	assert.Contains(t, snap, "(deleted)", "old path should render as deleted while unstaged")
+	assert.Contains(t, snap, "🗑️ chart.ts", "old path should render as deleted while unstaged")
 	assert.NotContains(t, snap, "✏️", "an unstaged move must not be reported as a rename")
 }
 

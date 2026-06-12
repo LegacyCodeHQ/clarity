@@ -59,8 +59,8 @@ func TestFormatterParity_NodeStates(t *testing.T) {
 		{"test", "lightgreen", "classDef testFile"},
 		{"module", "shape=component", "classDef moduleNode"},
 		{"pruned", "color=gray", "classDef prunedFile"},
-		{"renamed", "(renamed)", "classDef renamedFile"},
-		{"deleted", "(deleted)", "classDef deletedFile"},
+		{"renamed", "✏️ old.dart", "classDef renamedFile"},
+		{"deleted", "🗑️ del.dart", "classDef deletedFile"},
 	}
 	for _, c := range cases {
 		require.Containsf(t, dot, c.dotWant, "DOT missing %s styling", c.state)
@@ -95,13 +95,33 @@ func TestFormatterParity_RenameAnnotation(t *testing.T) {
 	require.NoError(t, err)
 
 	for _, want := range []string{
-		"(✏️ graph_cmd.go)",
-		"(🚚 external/)",
-		"(🚚 ✏️ parser/foo.go)",
+		"✏️ show_cmd.go",
+		"(from graph_cmd.go)",
+		"🚚 binding.go",
+		"(from external/)",
+		"🚚 ✏️ bar.go",
+		"(from parser/foo.go)",
 	} {
 		require.Containsf(t, dot, want, "DOT missing %q", want)
 		require.Containsf(t, mermaid, want, "Mermaid missing %q", want)
 	}
+}
+
+func TestFormatterParity_DeletedIconPrefixesNodeName(t *testing.T) {
+	g := parityFileGraph(t, map[string][]string{
+		"/p/app.go":  {"/p/dead.go"},
+		"/p/dead.go": {},
+	})
+	md := g.Meta.Files["/p/dead.go"]
+	md.State = depgraph.FileStateDeleted
+	g.Meta.Files["/p/dead.go"] = md
+
+	dot, mermaid := renderBoth(t, g)
+
+	require.Contains(t, dot, "🗑️ dead.go", "DOT deleted node should prefix the file name")
+	require.Contains(t, mermaid, "🗑️ dead.go", "Mermaid deleted node should prefix the file name")
+	require.NotContains(t, dot, "(deleted)", "DOT deleted state should not live in a description row")
+	require.NotContains(t, mermaid, "(deleted)", "Mermaid deleted state should not live in a description row")
 }
 
 // TestFormatterParity_PhantomNodes asserts the phantom test-sibling capability

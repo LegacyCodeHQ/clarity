@@ -284,8 +284,8 @@ func TestGraphCommit_RendersDeletedFileNode(t *testing.T) {
 	if !strings.Contains(output, "obsolete.ts") {
 		t.Fatalf("expected deleted obsolete.ts node in output, got:\n%s", output)
 	}
-	if !strings.Contains(output, "(deleted)") {
-		t.Fatalf("expected obsolete.ts to be marked (deleted), got:\n%s", output)
+	if !strings.Contains(output, "🗑️ obsolete.ts") {
+		t.Fatalf("expected obsolete.ts to be marked with the deleted icon, got:\n%s", output)
 	}
 	if !strings.Contains(output, `keeper.ts" -> "`) {
 		t.Fatalf("expected edge from keeper.ts to the deleted node, got:\n%s", output)
@@ -331,8 +331,8 @@ func TestGraphCommit_DeletedFileKeepsPreDeletionIncomingEdge(t *testing.T) {
 	}
 
 	output := stdout.String()
-	if !strings.Contains(output, "(deleted)") {
-		t.Fatalf("expected leaf.ts marked (deleted), got:\n%s", output)
+	if !strings.Contains(output, "🗑️ leaf.ts") {
+		t.Fatalf("expected leaf.ts marked with the deleted icon, got:\n%s", output)
 	}
 	// The pre-deletion dependency importer.ts -> leaf.ts is reconstructed from the
 	// parent even though the commit removed the import.
@@ -378,8 +378,8 @@ func TestGraphCommit_RendersRenameAsSingleNode(t *testing.T) {
 	// A rename collapses to a single new-path node annotated with its origin —
 	// no separate old node, no rename edge, no deletion marker.
 	output := stdout.String()
-	if !strings.Contains(output, "(✏️ old.ts)") {
-		t.Fatalf("expected new.ts annotated as renamed from old.ts, got:\n%s", output)
+	if !strings.Contains(output, "✏️ new.ts") || !strings.Contains(output, "(from old.ts)") {
+		t.Fatalf("expected new.ts marked as renamed from old.ts, got:\n%s", output)
 	}
 	if strings.Contains(output, `"old.ts"`) {
 		t.Fatalf("expected no separate old.ts node, got:\n%s", output)

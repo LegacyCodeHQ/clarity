@@ -236,7 +236,7 @@ func majorityType(counts map[string]int) string {
 
 // nodeLabelLines resolves a node's label into ordered visual rows. It mirrors
 // the label both formatters built independently, including module file counts,
-// churn stats with the new-file sprout, and the deleted/renamed markers.
+// churn stats, and lifecycle icons on the file-name row.
 func nodeLabelLines(g depgraph.FileDependencyGraph, name, source, basePath string) []string {
 	md, ok := g.Meta.Files[source]
 	if !ok {
@@ -247,14 +247,10 @@ func nodeLabelLines(g depgraph.FileDependencyGraph, name, source, basePath strin
 		return strings.Split(moduleNodeLabel(name, md, "\n"), "\n")
 	}
 
-	lines := []string{name}
+	displayName := lifecycleNodeName(name, source, basePath, md)
+	lines := []string{displayName}
 	if md.Stats != nil {
 		stats := *md.Stats
-		prefix := name
-		if stats.IsNew {
-			prefix = fmt.Sprintf("🪴 %s", name)
-		}
-
 		var parts []string
 		if stats.Additions > 0 {
 			parts = append(parts, fmt.Sprintf("+%d", stats.Additions))
@@ -265,19 +261,10 @@ func nodeLabelLines(g depgraph.FileDependencyGraph, name, source, basePath strin
 
 		switch {
 		case len(parts) > 0:
-			lines = []string{prefix, strings.Join(parts, " ")}
+			lines = []string{displayName, strings.Join(parts, " ")}
 		case stats.IsNew:
-			lines = []string{prefix}
+			lines = []string{displayName}
 		}
-	}
-
-	switch md.State {
-	case depgraph.FileStateDeleted:
-		lines = append(lines, "(deleted)")
-	case depgraph.FileStateRenamed:
-		lines = append(lines, "(renamed)")
-	case depgraph.FileStatePresent:
-		// no marker
 	}
 
 	// A collapsed rename renders as the single new-path node, annotated with the
@@ -289,21 +276,57 @@ func nodeLabelLines(g depgraph.FileDependencyGraph, name, source, basePath strin
 	return lines
 }
 
-// renameAnnotation describes a path change the way a developer thinks of it,
-// from the old and new paths git reported, using an icon as the verb to stay
-// terse: ✏️ a rename (basename change) shows the old name, 🚚 a move (directory
-// change) shows the old directory, and 🚚✏️ both shows the old path. Paths are
-// relative to basePath, matching the node names.
-func renameAnnotation(oldPath, newPath, basePath string) string {
-	oldRel := nodeKey(oldPath, basePath)
-	newRel := nodeKey(newPath, basePath)
+func lifecycleNodeName(name, source, basePath string, md depgraph.FileMetadata) string {
+	var icons []string
+	if md.Stats != nil && md.Stats.IsNew {
+		icons = append(icons, "🪴")
+	}
 	switch {
-	case filepath.Dir(oldRel) == filepath.Dir(newRel):
-		return fmt.Sprintf("(✏️ %s)", filepath.Base(oldRel))
-	case filepath.Base(oldRel) == filepath.Base(newRel):
-		return fmt.Sprintf("(🚚 %s/)", filepath.Dir(oldRel))
+	case md.State == depgraph.FileStateDeleted:
+		icons = append(icons, "🗑️")
+	case md.RenamedFrom != "":
+		icons = append(icons, renameIcons(md.RenamedFrom, source, basePath)...)
+	case md.State == depgraph.FileStateRenamed:
+		icons = append(icons, "✏️")
+	}
+	if len(icons) == 0 {
+		return name
+	}
+	return strings.Join(append(icons, name), " ")
+}
+
+func renamePathParts(oldPath, newPath, basePath string) (oldRel, newRel string, renamed, moved bool) {
+	oldRel = nodeKey(oldPath, basePath)
+	newRel = nodeKey(newPath, basePath)
+	renamed = filepath.Base(oldRel) != filepath.Base(newRel)
+	moved = filepath.Dir(oldRel) != filepath.Dir(newRel)
+	return oldRel, newRel, renamed, moved
+}
+
+func renameIcons(oldPath, newPath, basePath string) []string {
+	_, _, renamed, moved := renamePathParts(oldPath, newPath, basePath)
+	var icons []string
+	if moved {
+		icons = append(icons, "🚚")
+	}
+	if renamed {
+		icons = append(icons, "✏️")
+	}
+	return icons
+}
+
+// renameAnnotation describes the previous location/name for a collapsed rename.
+// The lifecycle icon belongs on the file-name row; this row is only the old-path
+// context. Paths are relative to basePath, matching the node names.
+func renameAnnotation(oldPath, newPath, basePath string) string {
+	oldRel, _, renamed, moved := renamePathParts(oldPath, newPath, basePath)
+	switch {
+	case renamed && !moved:
+		return fmt.Sprintf("(from %s)", filepath.Base(oldRel))
+	case moved && !renamed:
+		return fmt.Sprintf("(from %s/)", filepath.Dir(oldRel))
 	default:
-		return fmt.Sprintf("(🚚 ✏️ %s)", oldRel)
+		return fmt.Sprintf("(from %s)", oldRel)
 	}
 }
 
