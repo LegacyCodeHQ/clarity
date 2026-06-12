@@ -38,7 +38,6 @@ type graphOptions struct {
 	reach           string
 	all             bool
 	collapse        bool
-	scope           string
 	pruneFiles      []string
 	alsoPatterns    []string
 	modules         bool
@@ -50,8 +49,6 @@ type graphOptions struct {
 }
 
 const (
-	scopeDownstream = "downstream"
-
 	reachDown = "down"
 	reachUp   = "up"
 	reachBoth = "both"
@@ -73,7 +70,6 @@ func NewCommand() *cobra.Command {
 		outputFormat:    formatters.OutputFormatDOT.String(),
 		orientation:     formatters.DefaultDirection.StringLower(),
 		depthLevel:      1,
-		scope:           scopeDownstream,
 		moduleDirection: moduleDirectionNone,
 	}
 
@@ -125,7 +121,6 @@ func NewCommand() *cobra.Command {
 	cmd.Flags().IntVarP(&opts.depthLevel, "depth", "l", opts.depthLevel, "Depth for --reach (0 = unlimited)")
 	cmd.Flags().StringVar(&opts.reach, "reach", "", "Walk dependencies from the anchor: up, down, both")
 	cmd.Flags().BoolVar(&opts.all, "all", false, "Render the whole tree at this snapshot")
-	cmd.Flags().StringVar(&opts.scope, "scope", opts.scope, "Dependency scope for --file (downstream only)")
 	cmd.Flags().StringSliceVar(&opts.pruneFiles, "prune", nil, "Show node but skip its subtree (requires --file; shown with dashed border)")
 	cmd.Flags().StringSliceVar(&opts.alsoPatterns, "also", nil, "Include files matching glob patterns that connect to --file graph (requires --file)")
 	cmd.Flags().BoolVar(&opts.collapse, "collapse", false, "Collapse files into the modules declared in .clarity/modules.json")
@@ -141,7 +136,7 @@ func NewCommand() *cobra.Command {
 }
 
 func hideLegacyFlags(cmd *cobra.Command) {
-	for _, name := range []string{"input", "file", "level", "scope", "modules", "direction"} {
+	for _, name := range []string{"input", "file", "level", "modules", "direction"} {
 		_ = cmd.Flags().MarkHidden(name)
 	}
 }
@@ -502,14 +497,6 @@ func validateGraphOptions(opts *graphOptions) error {
 		opts.excludeExts = excludeExts
 	}
 
-	scope := strings.ToLower(strings.TrimSpace(opts.scope))
-	switch scope {
-	case scopeDownstream:
-		opts.scope = scope
-	default:
-		return fmt.Errorf("unknown scope: %s (valid options: %s)", opts.scope, scopeDownstream)
-	}
-
 	reach := strings.ToLower(strings.TrimSpace(opts.reach))
 	switch reach {
 	case "":
@@ -517,9 +504,6 @@ func validateGraphOptions(opts *graphOptions) error {
 		opts.reach = reach
 	default:
 		return fmt.Errorf("unknown reach: %s (valid options: up, down, both)", opts.reach)
-	}
-	if opts.reach == reachDown {
-		opts.scope = scopeDownstream
 	}
 
 	if opts.reach != "" && opts.targetFile == "" && len(opts.includes) == 1 {

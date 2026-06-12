@@ -805,7 +805,7 @@ func TestGraphCommit_WithFile_UsesCommitContent(t *testing.T) {
 		t.Fatalf("os.WriteFile() error = %v", err)
 	}
 
-	out := runShow(t, "-r", repoDir, "-c", "HEAD", "-p", "a.ts", "--scope", "downstream", "-l", "0", "-f", "dot")
+	out := runShow(t, "-r", repoDir, "-c", "HEAD", "-p", "a.ts", "-l", "0", "-f", "dot")
 	if !strings.Contains(out, `"b.ts"`) {
 		t.Fatalf("expected --commit -p to read a.ts content from HEAD and include b.ts, got:\n%s", out)
 	}
@@ -829,7 +829,7 @@ func TestGraphCommit_WithFile_UsesCommitTreeUniverse(t *testing.T) {
 	gitRun(t, repoDir, "add", ".")
 	gitRun(t, repoDir, "commit", "-m", "add dependent")
 
-	out := runShow(t, "-r", repoDir, "-c", "HEAD", "-p", "a.ts", "--scope", "downstream", "-l", "0", "-f", "dot")
+	out := runShow(t, "-r", repoDir, "-c", "HEAD", "-p", "a.ts", "-l", "0", "-f", "dot")
 	if !strings.Contains(out, `"b.ts"`) {
 		t.Fatalf("expected --commit -p to traverse unchanged dependencies from the commit tree, got:\n%s", out)
 	}
@@ -939,7 +939,6 @@ func TestGraphFileScopeDownstream_LevelZero_IncludesTransitiveOutgoingOnly(t *te
 	cmd.SetArgs([]string{
 		"-r", repoDir,
 		"-p", "a.ts",
-		"--scope", "downstream",
 		"-l", "0",
 		"-f", "dot",
 	})
@@ -1008,19 +1007,6 @@ func writeTypeScriptReachFixture(t *testing.T) string {
 		}
 	}
 	return repoDir
-}
-
-func TestGraphFile_InvalidScope_ReturnsError(t *testing.T) {
-	cmd := NewCommand()
-	cmd.SetArgs([]string{"-p", "a.ts", "--scope", "sideways"})
-
-	err := cmd.Execute()
-	if err == nil {
-		t.Fatalf("expected error for invalid --scope")
-	}
-	if !strings.Contains(err.Error(), "unknown scope: sideways") {
-		t.Fatalf("expected unknown scope error, got: %v", err)
-	}
 }
 
 func TestGraphBetween_CannotBeUsedWithReach(t *testing.T) {
