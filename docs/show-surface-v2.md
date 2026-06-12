@@ -153,11 +153,16 @@ flags. Recommended path: **additive + deprecate.**
 
 ## `watch`
 
-`watch` becomes "`show` over a live working-tree snapshot" — same grammar,
-re-rendered on change. This is **future state**: today `watch` exposes only `-i`,
-filters, format/orientation, port/repo, `--no-phantom`. Reaching parity means
-routing `watch` through the same anchor/lens/render grammar — a deliberate step,
-not automatic.
+`watch` is "`show` over a live working-tree snapshot" — the same grammar,
+re-rendered on change. **Implemented** (`feat: add watch show grammar parity`):
+`watch` now accepts positional `[paths…]`, `--between`, `--module / -m`,
+`--reach`, `--depth / -l`, `--prune`, `--all`, and `--collapse`, alongside the
+existing filters, format/orientation, port/repo, and `--no-phantom`. Legacy
+flags (`--input`, `--modules`, …) are kept as hidden aliases, matching `show`.
+
+The one intentional difference from `show`: `watch` has **no `--commit / -c`**.
+A live view is always the working tree, so there is no historical snapshot to
+select — the SNAPSHOT axis collapses to "the working tree, right now."
 
 ## Deferred
 
