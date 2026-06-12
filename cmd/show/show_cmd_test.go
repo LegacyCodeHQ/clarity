@@ -807,7 +807,7 @@ func TestGraphCommit_WithFile_UsesCommitContent(t *testing.T) {
 
 	out := runShow(t, "-r", repoDir, "-c", "HEAD", "a.ts", "--reach", "down", "-l", "0", "-f", "dot")
 	if !strings.Contains(out, `"b.ts"`) {
-		t.Fatalf("expected --commit -p to read a.ts content from HEAD and include b.ts, got:\n%s", out)
+		t.Fatalf("expected -c with a path and --reach to read a.ts content from HEAD and include b.ts, got:\n%s", out)
 	}
 }
 
@@ -831,7 +831,7 @@ func TestGraphCommit_WithFile_UsesCommitTreeUniverse(t *testing.T) {
 
 	out := runShow(t, "-r", repoDir, "-c", "HEAD", "a.ts", "--reach", "down", "-l", "0", "-f", "dot")
 	if !strings.Contains(out, `"b.ts"`) {
-		t.Fatalf("expected --commit -p to traverse unchanged dependencies from the commit tree, got:\n%s", out)
+		t.Fatalf("expected -c with a path and --reach to traverse unchanged dependencies from the commit tree, got:\n%s", out)
 	}
 }
 

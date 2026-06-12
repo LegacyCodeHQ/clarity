@@ -126,7 +126,7 @@ func renderCycles(cycles []depgraph.FileCycle, base string) []renderedCycle {
 }
 
 // cycleURL renders the cycle's files as a focused dependency diagram and returns
-// a shareable visualization URL, mirroring `clarity show -i <files> -u`.
+// a shareable visualization URL, mirroring `clarity show <files> -u`.
 func cycleURL(files []string, base string, contentReader vcs.ContentReader) (string, error) {
 	graph, err := depgraph.BuildDependencyGraph(files, contentReader)
 	if err != nil {

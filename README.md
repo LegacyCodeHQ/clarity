@@ -86,7 +86,7 @@ Use this output to answer: "What did we actually touch?", "What does the solutio
 #### 3) Explore the codebase and debug design decisions: trace specific relationships
 
 ```bash
-clarity show -i src,tests         # Build graph from specific files/directories
+clarity show src tests            # Build graph from specific files/directories
 clarity show -w a.go,b.go         # Show all paths between files
 ```
 

@@ -35,7 +35,7 @@ This project uses `clarity` to visualize code changes, provide design feedback, 
 ```bash
 clarity show                    # Visualize uncommitted changes (most common)
 clarity show -c HEAD            # Visualize changes in last commit
-clarity show -i <files/dirs>    # Build graph from specific files or directories (comma-separated)
+clarity show <files/dirs>       # Build graph from specific files or directories (space-separated)
 clarity show -w <file1,file2>   # Find all paths between two or more files (comma-separated)
 clarity show -f mermaid         # Generate output in mermaid format (default 'dot' Graphviz format)
 clarity show -u                 # Generate visualization URL
