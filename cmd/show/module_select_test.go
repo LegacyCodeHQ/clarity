@@ -156,6 +156,23 @@ func TestShowCommand_ModuleSelectUnknownName(t *testing.T) {
 	}
 }
 
+func TestShowCommand_CollapseCannotBeUsedWithModule(t *testing.T) {
+	repoDir, srcDir := writeJavaPair(t)
+	writeModulesConfig(t, repoDir, `{
+  "modules": [
+    { "name": "support", "files": ["src/main/java/com/example/util/Helper.java"] }
+  ]
+}`)
+
+	err := runShowErr(t, "-i", srcDir, "-r", repoDir, "-f", "dot", "--collapse", "--module", "support")
+	if err == nil {
+		t.Fatal("expected an error when --collapse is used with --module, got nil")
+	}
+	if !strings.Contains(err.Error(), "--collapse cannot be used with --module") {
+		t.Fatalf("expected collapse/module conflict error, got: %v", err)
+	}
+}
+
 func TestShowCommand_ModuleSelectResolvesToNoFiles(t *testing.T) {
 	repoDir, srcDir := writeJavaPair(t)
 	// The declared file does not exist, so the module resolves to nothing.

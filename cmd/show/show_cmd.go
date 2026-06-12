@@ -121,8 +121,8 @@ func NewCommand() *cobra.Command {
 	// Add file flag for showing dependencies of a specific file
 	cmd.Flags().StringVarP(&opts.targetFile, "file", "p", "", "Show dependencies for a specific file")
 	// Add level flag for limiting dependency depth
-	cmd.Flags().IntVarP(&opts.depthLevel, "level", "l", opts.depthLevel, "Depth level for dependencies (used with --file, 0 = unlimited)")
-	cmd.Flags().IntVar(&opts.depthLevel, "depth", opts.depthLevel, "Depth for --reach (0 = unlimited)")
+	cmd.Flags().IntVar(&opts.depthLevel, "level", opts.depthLevel, "Depth level for dependencies (used with --file, 0 = unlimited)")
+	cmd.Flags().IntVarP(&opts.depthLevel, "depth", "l", opts.depthLevel, "Depth for --reach (0 = unlimited)")
 	cmd.Flags().StringVar(&opts.reach, "reach", "", "Walk dependencies from the anchor: up, down, both")
 	cmd.Flags().BoolVar(&opts.all, "all", false, "Render the whole tree at this snapshot")
 	cmd.Flags().StringVar(&opts.scope, "scope", opts.scope, "Dependency scope for --file (downstream only)")
@@ -135,8 +135,15 @@ func NewCommand() *cobra.Command {
 	cmd.Flags().BoolVar(&opts.edgeLabels, "label", false, "Add deterministic short labels to edges")
 	cmd.Flags().BoolVar(&opts.noStats, "no-stats", false, "Skip file addition/deletion statistics for faster rendering")
 	cmd.Flags().BoolVar(&opts.noPhantom, "no-phantom", false, "Suppress phantom test nodes (Rust files with #[cfg(test)] regions are rendered as a single node)")
+	hideLegacyFlags(cmd)
 
 	return cmd
+}
+
+func hideLegacyFlags(cmd *cobra.Command) {
+	for _, name := range []string{"input", "file", "level", "scope", "modules", "direction"} {
+		_ = cmd.Flags().MarkHidden(name)
+	}
 }
 
 func runGraph(cmd *cobra.Command, opts *graphOptions) error {

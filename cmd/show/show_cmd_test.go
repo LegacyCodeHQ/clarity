@@ -85,6 +85,18 @@ func TestGraphReachDown_AliasesFileScope(t *testing.T) {
 	}
 }
 
+func TestGraphReachUp_IncludesFileDependents(t *testing.T) {
+	repoDir := writeTypeScriptReachFixture(t)
+
+	out := runShow(t, "-r", repoDir, "a.ts", "--reach", "up", "--depth", "0", "-f", "dot")
+	if !strings.Contains(out, `"a.ts"`) || !strings.Contains(out, `"x.ts"`) {
+		t.Fatalf("expected --reach up to include upstream dependent x.ts, got:\n%s", out)
+	}
+	if strings.Contains(out, `"b.ts"`) || strings.Contains(out, `"c.ts"`) {
+		t.Fatalf("expected --reach up to exclude downstream dependencies b.ts and c.ts, got:\n%s", out)
+	}
+}
+
 func TestGraphAllCollapse_AliasesModules(t *testing.T) {
 	repoDir, _ := writeJavaPair(t)
 	writeModulesConfig(t, repoDir, `{
