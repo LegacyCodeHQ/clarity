@@ -25,6 +25,25 @@ func (level MaturityLevel) DisplayName() string {
 	}
 }
 
+// MachineName returns a stable, machine-readable slug for the maturity level,
+// suitable for JSON output and programmatic consumers. Unlike DisplayName it is
+// lowercase and underscore-separated, and unlike the underlying iota value it is
+// stable across reordering of the enum.
+func (level MaturityLevel) MachineName() string {
+	switch level {
+	case MaturityUntested:
+		return "untested"
+	case MaturityBasicTests:
+		return "basic_tests"
+	case MaturityActivelyTested:
+		return "actively_tested"
+	case MaturityStable:
+		return "stable"
+	default:
+		return "unknown"
+	}
+}
+
 func (level MaturityLevel) Symbol() string {
 	switch level {
 	case MaturityUntested:

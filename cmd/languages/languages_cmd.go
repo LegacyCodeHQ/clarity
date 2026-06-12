@@ -1,6 +1,7 @@
 package languages
 
 import (
+	"encoding/json"
 	"fmt"
 	"strings"
 	"text/tabwriter"
@@ -11,25 +12,75 @@ import (
 	"github.com/spf13/cobra"
 )
 
+type languageInfo struct {
+	Language   string   `json:"language"`
+	Maturity   string   `json:"maturity"`
+	Extensions []string `json:"extensions"`
+}
+
+type languagesOutput struct {
+	Languages []languageInfo `json:"languages"`
+}
+
+type options struct {
+	format string
+}
+
 // Cmd represents the languages command.
 var Cmd = NewCommand()
 
 // NewCommand returns a new languages command instance.
 func NewCommand() *cobra.Command {
+	opts := &options{
+		format: "text",
+	}
+
 	cmd := &cobra.Command{
 		Use:   "languages",
 		Short: "List all supported languages and file extensions",
 		Long: `List all supported programming languages and their mapped file extensions.
 
 Examples:
-  clarity languages`,
-		RunE: runLanguages,
+  clarity languages
+  clarity languages --format json`,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			return runLanguages(cmd, opts)
+		},
 	}
+
+	cmd.Flags().StringVar(&opts.format, "format", opts.format, "Output format (text, json)")
 
 	return cmd
 }
 
-func runLanguages(cmd *cobra.Command, _ []string) error {
+func runLanguages(cmd *cobra.Command, opts *options) error {
+	switch strings.ToLower(opts.format) {
+	case "json":
+		return renderJSON(cmd)
+	case "text":
+		return renderText(cmd)
+	default:
+		return fmt.Errorf("unknown format: %s (valid options: text, json)", opts.format)
+	}
+}
+
+func renderJSON(cmd *cobra.Command) error {
+	languages := registry.SupportedLanguages()
+	entries := make([]languageInfo, 0, len(languages))
+	for _, language := range languages {
+		entries = append(entries, languageInfo{
+			Language:   language.Name,
+			Maturity:   language.Maturity.MachineName(),
+			Extensions: language.Extensions,
+		})
+	}
+
+	enc := json.NewEncoder(cmd.OutOrStdout())
+	enc.SetIndent("", "  ")
+	return enc.Encode(languagesOutput{Languages: entries})
+}
+
+func renderText(cmd *cobra.Command) error {
 	languages := registry.SupportedLanguages()
 
 	if _, err := fmt.Fprintln(cmd.OutOrStdout()); err != nil {
