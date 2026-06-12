@@ -654,6 +654,57 @@ func TestBuildGraph_ModuleOnCleanTree(t *testing.T) {
 	assert.Contains(t, dot, "a.ts")
 }
 
+func TestBuildGraph_ModuleWithPathsFramesWithinScope(t *testing.T) {
+	dir := t.TempDir()
+	initGitRepo(t, dir)
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, ".clarity"), 0o755))
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, "src"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, ".clarity", "modules.json"), []byte(`{
+  "modules": [ { "name": "core", "files": ["src/a.ts"] } ]
+}`), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "src", "a.ts"), []byte("export const a = 1;\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "src", "b.ts"), []byte("export const b = 2;\n"), 0o644))
+	runGit(t, dir, "add", ".")
+	runGit(t, dir, "commit", "-m", "seed")
+
+	// Paths set the scope; --module frames a box within it (it is not ignored).
+	opts := &watchOptions{includes: []string{"src"}, moduleSelect: "core"}
+	formatter, err := formatters.NewFormatter("dot")
+	require.NoError(t, err)
+	dot, err := buildGraph(dir, opts, formatter)
+	require.NoError(t, err)
+
+	assert.Contains(t, dot, "subgraph cluster")
+	assert.Contains(t, dot, "a.ts")
+	// The non-member is still in scope and rendered — the box frames, not filters.
+	assert.Contains(t, dot, "b.ts")
+}
+
+func TestBuildGraph_ModuleOverlaysWorkingSetChanges(t *testing.T) {
+	dir := t.TempDir()
+	initGitRepo(t, dir)
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, ".clarity"), 0o755))
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, "src"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, ".clarity", "modules.json"), []byte(`{
+  "modules": [ { "name": "core", "files": ["src/a.ts"] } ]
+}`), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "src", "a.ts"), []byte("export const a = 1;\n"), 0o644))
+	runGit(t, dir, "add", ".")
+	runGit(t, dir, "commit", "-m", "seed")
+	// An unrelated uncommitted change: --module should overlay it, not hide it.
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "src", "dirty.ts"), []byte("export const d = 3;\n"), 0o644))
+
+	opts := &watchOptions{moduleSelect: "core"}
+	formatter, err := formatters.NewFormatter("dot")
+	require.NoError(t, err)
+	dot, err := buildGraph(dir, opts, formatter)
+	require.NoError(t, err)
+
+	assert.Contains(t, dot, "subgraph cluster")
+	assert.Contains(t, dot, "a.ts")
+	assert.Contains(t, dot, "dirty.ts")
+}
+
 func TestBuildGraph_BetweenOnCleanTree(t *testing.T) {
 	dir := t.TempDir()
 	initGitRepo(t, dir)

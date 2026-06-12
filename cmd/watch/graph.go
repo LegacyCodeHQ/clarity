@@ -254,14 +254,20 @@ func selectWatchGraphFiles(repoPath string, opts *watchOptions, defaultAnchorFil
 		if err != nil {
 			return nil, nil, nil, nil, err
 		}
+		// --module frames a box within the path scope (parity with show); it is
+		// not a competing anchor, so paths + --module compose rather than error.
+		moduleMembers, err = selectWatchModuleMembers(opts.moduleSelect, modules)
+		if err != nil {
+			return nil, nil, nil, nil, err
+		}
 		if opts.reach != "" {
 			filePaths, err = expandWatchPaths([]string{repoPath}, false)
 			if err != nil {
 				return nil, nil, nil, nil, err
 			}
-			return filePaths, anchorFiles, modules, nil, nil
+			return filePaths, anchorFiles, modules, moduleMembers, nil
 		}
-		return anchorFiles, anchorFiles, modules, nil, nil
+		return unionWatchPaths(anchorFiles, moduleMembers), anchorFiles, modules, moduleMembers, nil
 	}
 
 	if len(opts.betweenFiles) > 0 {
@@ -274,13 +280,9 @@ func selectWatchGraphFiles(repoPath string, opts *watchOptions, defaultAnchorFil
 		if err != nil {
 			return nil, nil, nil, nil, err
 		}
-		selected, selErr := findWatchModule(opts.moduleSelect, modules)
-		if selErr != nil {
-			return nil, nil, nil, nil, selErr
-		}
-		moduleMembers = existingWatchFiles(selected.Files)
-		if len(moduleMembers) == 0 {
-			return nil, nil, nil, nil, fmt.Errorf("module %q resolves to no files", opts.moduleSelect)
+		moduleMembers, err = selectWatchModuleMembers(opts.moduleSelect, modules)
+		if err != nil {
+			return nil, nil, nil, nil, err
 		}
 		anchorFiles = moduleMembers
 		if opts.reach != "" {
@@ -290,7 +292,10 @@ func selectWatchGraphFiles(repoPath string, opts *watchOptions, defaultAnchorFil
 			}
 			return filePaths, anchorFiles, modules, moduleMembers, nil
 		}
-		return moduleMembers, anchorFiles, modules, moduleMembers, nil
+		// Overlay the module box on the working-set changes (parity with show:
+		// "module + uncommitted changes when monitoring"). On a clean tree
+		// defaultAnchorFiles is empty, so this self-scopes to the members.
+		return unionWatchPaths(defaultAnchorFiles, moduleMembers), anchorFiles, modules, moduleMembers, nil
 	}
 
 	if len(defaultAnchorFiles) == 0 {
@@ -383,6 +388,24 @@ func unionWatchPaths(base, extra []string) []string {
 		out = append(out, path)
 	}
 	return out
+}
+
+// selectWatchModuleMembers resolves the named module's existing member files, or
+// returns nil when no module is selected. An unknown name or a module that
+// resolves to no files is an error.
+func selectWatchModuleMembers(name string, modules []depgraph.Module) ([]string, error) {
+	if name == "" {
+		return nil, nil
+	}
+	selected, err := findWatchModule(name, modules)
+	if err != nil {
+		return nil, err
+	}
+	members := existingWatchFiles(selected.Files)
+	if len(members) == 0 {
+		return nil, fmt.Errorf("module %q resolves to no files", name)
+	}
+	return members, nil
 }
 
 func findWatchModule(name string, modules []depgraph.Module) (depgraph.Module, error) {
