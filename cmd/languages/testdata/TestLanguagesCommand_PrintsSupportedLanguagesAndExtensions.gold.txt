@@ -4,6 +4,7 @@
 ◐ C#          .cs
 ◐ Dart        .dart
 ● Go          .go
+◐ HTML        .html, .htm
 ◐ JavaScript  .js, .jsx, .mjs, .cjs
 ◐ Java        .java
 ◐ Kotlin      .kt, .kts

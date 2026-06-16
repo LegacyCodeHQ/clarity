@@ -6,6 +6,7 @@ import (
 	"github.com/LegacyCodeHQ/clarity/depgraph/languages/csharp"
 	"github.com/LegacyCodeHQ/clarity/depgraph/languages/dart"
 	"github.com/LegacyCodeHQ/clarity/depgraph/languages/golang"
+	"github.com/LegacyCodeHQ/clarity/depgraph/languages/html"
 	"github.com/LegacyCodeHQ/clarity/depgraph/languages/java"
 	"github.com/LegacyCodeHQ/clarity/depgraph/languages/javascript"
 	"github.com/LegacyCodeHQ/clarity/depgraph/languages/kotlin"
@@ -27,6 +28,7 @@ var providers = []moduleapi.Provider{
 	csharp.Provider{},
 	dart.Provider{},
 	golang.Provider{},
+	html.Provider{},
 	javascript.Provider{},
 	java.Provider{},
 	kotlin.Provider{},
