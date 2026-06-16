@@ -36,6 +36,13 @@ func (l MarkdownLink) IsImage() bool {
 // we never read attributes from inside code blocks or other syntax.
 var htmlAttrRe = regexp.MustCompile(`(?i)\b(?:src|href)\s*=\s*(?:"([^"]*)"|'([^']*)')`)
 
+// hugoRefRe matches Hugo's `relref`/`ref` link shortcodes, e.g.
+// `{{< relref "path/to/page.md" >}}` or `{{% ref 'page.md' %}}`. Authors write
+// these inside Markdown link destinations (`[text]({{< relref "x.md" >}})`),
+// where tree-sitter parses the destination as `{{<` and never exposes the
+// quoted path, so a dedicated pass is needed to recover it.
+var hugoRefRe = regexp.MustCompile(`(?i)\{\{[<%]\s*(?:relref|ref)\b\s+(?:"([^"]*)"|'([^']*)')`)
+
 // MarkdownLinks reads a Markdown file and returns its extracted link targets.
 func MarkdownLinks(filePath string) ([]MarkdownLink, error) {
 	sourceCode, err := os.ReadFile(filePath)
@@ -66,7 +73,90 @@ func ParseMarkdownLinks(sourceCode []byte) []MarkdownLink {
 		walkInline(inline.RootNode(), sourceCode, add)
 	}
 
+	addHugoRefLinks(sourceCode, tree, add)
+
 	return links
+}
+
+// addHugoRefLinks recovers link targets from Hugo `relref`/`ref` shortcodes,
+// which the Markdown grammar hides inside link destinations. Matches that fall
+// inside code spans or fenced/indented code blocks are skipped so documentation
+// that demonstrates the shortcode syntax does not produce spurious edges.
+func addHugoRefLinks(src []byte, tree *tsmd.MarkdownTree, add func(string, bool)) {
+	codeRanges := collectCodeRanges(tree)
+	for _, m := range hugoRefRe.FindAllSubmatchIndex(src, -1) {
+		if withinRanges(uint32(m[0]), codeRanges) {
+			continue
+		}
+		path := submatch(src, m, 1)
+		if path == "" {
+			path = submatch(src, m, 2)
+		}
+		if path != "" {
+			add(normalizeHugoRefPath(path), false)
+		}
+	}
+}
+
+// normalizeHugoRefPath converts a shortcode path to a form the resolver
+// understands. Explicitly relative (`./`, `../`) and absolute (`/`) paths are
+// left untouched; a bare content path (`docs/page.md`) is content-root relative
+// in Hugo, so it is routed through site-absolute resolution with a leading `/`.
+func normalizeHugoRefPath(path string) string {
+	if strings.HasPrefix(path, "/") ||
+		strings.HasPrefix(path, "./") ||
+		strings.HasPrefix(path, "../") {
+		return path
+	}
+	return "/" + path
+}
+
+// submatch returns the text of capture group n from a FindAllSubmatchIndex
+// match, or "" if the group did not participate.
+func submatch(src []byte, m []int, n int) string {
+	start, end := m[2*n], m[2*n+1]
+	if start < 0 || end < 0 {
+		return ""
+	}
+	return string(src[start:end])
+}
+
+// collectCodeRanges returns the byte ranges of code spans and fenced/indented
+// code blocks across the block and inline trees, used to exclude shortcode
+// matches that appear inside code.
+func collectCodeRanges(tree *tsmd.MarkdownTree) [][2]uint32 {
+	var ranges [][2]uint32
+	collect := func(n *sitter.Node) {
+		var walk func(*sitter.Node)
+		walk = func(node *sitter.Node) {
+			if node == nil {
+				return
+			}
+			switch node.Type() {
+			case "fenced_code_block", "indented_code_block", "code_span":
+				ranges = append(ranges, [2]uint32{node.StartByte(), node.EndByte()})
+			}
+			for i := 0; i < int(node.ChildCount()); i++ {
+				walk(node.Child(i))
+			}
+		}
+		walk(n)
+	}
+	collect(tree.BlockTree().RootNode())
+	for _, inline := range tree.InlineTrees() {
+		collect(inline.RootNode())
+	}
+	return ranges
+}
+
+// withinRanges reports whether offset falls inside any of the given byte ranges.
+func withinRanges(offset uint32, ranges [][2]uint32) bool {
+	for _, r := range ranges {
+		if offset >= r[0] && offset < r[1] {
+			return true
+		}
+	}
+	return false
 }
 
 // walkBlocks walks the block-level tree to extract destinations from

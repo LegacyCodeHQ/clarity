@@ -107,6 +107,30 @@ func TestParseMarkdownLinks_IgnoresFencedAndInlineCode(t *testing.T) {
 	assert.NotContains(t, paths, "./fenced.md")
 }
 
+// Hugo cross-references its content with the `relref`/`ref` shortcodes
+// (`[text]({{< relref "path/to/page.md" >}})`) rather than plain Markdown link
+// destinations. Tree-sitter parses the link destination as `{{<` and stops at
+// the first space, so the actual path is invisible to the inline-link handler.
+// The shortcode path is content-root relative, so it is normalized to a
+// site-absolute link ("/path/to/page.md") for resolution.
+func TestParseMarkdownLinks_HugoRelrefShortcode(t *testing.T) {
+	source := "" +
+		"See [_JSON Format_]({{< relref \"documentation/tooldevelopers/graphdatastructure/jsonformat.md\" >}}).\n" +
+		"Also [_Coordinate System_]({{< relref \"coordinatesystem.md\">}}) with no space.\n" +
+		"And the [_ref_ variant]({{% ref 'reference/options.md' %}}).\n" +
+		"Explicit relative [sibling]({{< relref \"./other.md\" >}}).\n" +
+		"```\n{{< relref \"in/code/fence.md\" >}}\n```\n"
+
+	paths := extractPaths(ParseMarkdownLinks([]byte(source)))
+
+	assert.Contains(t, paths, "/documentation/tooldevelopers/graphdatastructure/jsonformat.md")
+	assert.Contains(t, paths, "/coordinatesystem.md")
+	assert.Contains(t, paths, "/reference/options.md")
+	assert.Contains(t, paths, "./other.md")
+	assert.NotContains(t, paths, "/in/code/fence.md",
+		"shortcodes inside fenced code blocks must not be extracted")
+}
+
 func TestResolveMarkdownLinkPath_RelativeFile(t *testing.T) {
 	supplied := map[string]bool{
 		"/project/docs/guide.md":     true,
