@@ -15,8 +15,8 @@
     "knip:report": "npx --yes knip@5 --config knip.json --no-exit-code --reporter compact"
   },
   "devDependencies": {
-    "@sveltejs/vite-plugin-svelte": "^5.0.2",
-    "@tailwindcss/vite": "^4.1.18",
+    "@sveltejs/vite-plugin-svelte": "^7.1.2",
+    "@tailwindcss/vite": "^4.3.1",
     "@tsconfig/svelte": "^5.0.4",
     "@vitest/ui": "^4.0.18",
     "autoprefixer": "^10.4.24",
@@ -30,7 +30,7 @@
     "tailwindcss": "^4.1.18",
     "tslib": "^2.8.1",
     "typescript": "^5.7.2",
-    "vite": "^6.4.2",
+    "vite": "^8.0.16",
     "vitest": "^4.1.0"
   },
   "dependencies": {
