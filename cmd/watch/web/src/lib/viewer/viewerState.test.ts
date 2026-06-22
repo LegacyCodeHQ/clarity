@@ -95,11 +95,23 @@ describe('applySourceSelection', () => {
     expect(nanID.selectedCollectionSnapshotIndex).toBe(0);
   });
 
-  it('selects finite collection id and resets collection index', () => {
+  it('selects finite collection id and lands on its most recent snapshot', () => {
     const state: ViewerState = {
       ...baseState(),
       selectedCollectionSnapshotIndex: 4,
       pastCollections: [collection(123, [snapshot(1), snapshot(2)])],
+    };
+
+    const next = applySourceSelection(state, "collection:123");
+
+    expect(next.selectedCollectionID).toBe(123);
+    expect(next.selectedCollectionSnapshotIndex).toBe(1);
+  });
+
+  it('lands on the most recent snapshot for an empty collection', () => {
+    const state: ViewerState = {
+      ...baseState(),
+      pastCollections: [collection(123, [])],
     };
 
     const next = applySourceSelection(state, "collection:123");
@@ -273,6 +285,28 @@ describe('getViewModel', () => {
     expect(vm.sourceOptions.map((option) => option.value)).toEqual(["collection:10"]);
     expect(vm.timeline.liveButtonDisabled).toBe(true);
     expect(vm.renderDot).toBe("digraph w {}");
+  });
+
+  it('shows the most recent snapshot of the most recent session when the worktree is deleted', () => {
+    const state = mergePayload(baseState(), {
+      repos: [
+        { id: "primary", path: "/p", label: "primary", isPrimary: true, active: true },
+        { id: "wt-aaaaaaaa", path: "/wt", label: "wt", isPrimary: false, active: false },
+      ],
+      workingSnapshots: [snapshot(1, "digraph p {}", "primary")],
+      pastCollections: [
+        collection(10, [snapshot(2, "digraph old1 {}", "wt-aaaaaaaa"), snapshot(3, "digraph old2 {}", "wt-aaaaaaaa")], "wt-aaaaaaaa"),
+        collection(20, [snapshot(4, "digraph new1 {}", "wt-aaaaaaaa"), snapshot(5, "digraph new2 {}", "wt-aaaaaaaa"), snapshot(6, "digraph new3 {}", "wt-aaaaaaaa")], "wt-aaaaaaaa"),
+      ],
+    });
+
+    const vm = getViewModel(selectRepo(state, "wt-aaaaaaaa"), () => "10:00:00");
+
+    // Auto-selects the most recent session (collection 20)...
+    expect(vm.sourceValue).toBe("collection:20");
+    // ...and lands on its most recent (last) snapshot, not the first.
+    expect(vm.state.selectedCollectionSnapshotIndex).toBe(2);
+    expect(vm.renderDot).toBe("digraph new3 {}");
   });
 
   it('treats deleted worktree working snapshots as frozen instead of live', () => {

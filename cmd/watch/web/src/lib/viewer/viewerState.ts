@@ -182,8 +182,12 @@ export function normalizeState(state: Partial<ViewerState>): ViewerState {
     && next.workingSnapshots.length === 0
     && next.pastCollections.length > 0
   ) {
-    next.selectedCollectionID = next.pastCollections[next.pastCollections.length - 1]!.id;
-    next.selectedCollectionSnapshotIndex = 0;
+    const latest = next.pastCollections[next.pastCollections.length - 1]!;
+    next.selectedCollectionID = latest.id;
+    // Land on the most recent snapshot of the session, not the first — the
+    // removed worktree's final state is what the user expects to see.
+    const latestSnapshots = latest.snapshots || [];
+    next.selectedCollectionSnapshotIndex = latestSnapshots.length > 0 ? latestSnapshots.length - 1 : 0;
   }
 
   if (next.selectedCollectionID === null) {
@@ -354,10 +358,15 @@ export function applySourceSelection(state: ViewerState, selected: string): View
     return applyLiveSelection(state);
   }
 
+  // Land on the most recent snapshot of the chosen session, consistent with
+  // live mode (which shows the newest working snapshot) and the worktree-
+  // removal auto-select. The slider still lets the user scrub back to the start.
+  const target = state.pastCollections.find((c) => c.id === selectedID);
+  const snapshots = target ? target.snapshots || [] : [];
   return normalizeState({
     ...state,
     selectedCollectionID: selectedID,
-    selectedCollectionSnapshotIndex: 0,
+    selectedCollectionSnapshotIndex: snapshots.length > 0 ? snapshots.length - 1 : 0,
   });
 }
 
