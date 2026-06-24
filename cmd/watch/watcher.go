@@ -153,6 +153,11 @@ func stopAndDrainTimer(timer *time.Timer) {
 }
 
 func publishCurrentGraph(repoID, repoPath string, opts *watchOptions, b *broker, formatter formatters.Formatter) {
+	if isLinkedWorktreeTeardownSnapshot(repoPath) {
+		b.markRepoFinished(repoID)
+		return
+	}
+
 	dot, err := buildGraph(repoPath, opts, formatter)
 	if errors.Is(err, errNoUncommittedChanges) {
 		b.clearWorkingSet(repoID)
@@ -163,6 +168,62 @@ func publishCurrentGraph(repoID, repoPath string, opts *watchOptions, b *broker,
 		return
 	}
 	b.publish(repoID, dot)
+}
+
+func isLinkedWorktreeTeardownSnapshot(repoPath string) bool {
+	if !pathExists(repoPath) {
+		return false
+	}
+
+	isPrimary, err := git.IsPrimaryWorktree(repoPath)
+	if err != nil || isPrimary {
+		return false
+	}
+
+	nonDeletedChanges, err := git.GetUncommittedFiles(repoPath)
+	if err != nil || len(nonDeletedChanges) > 0 {
+		return false
+	}
+
+	deletedFiles, err := git.GetUncommittedDeletedFiles(repoPath)
+	if err != nil || len(deletedFiles) == 0 {
+		return false
+	}
+
+	trackedFiles, err := git.ListTrackedFiles(repoPath)
+	if err != nil {
+		return false
+	}
+
+	trackedSource := supportedPathSet(trackedFiles)
+	if len(trackedSource) == 0 {
+		return false
+	}
+	deletedSource := supportedPathSet(deletedFiles)
+
+	return samePathSet(trackedSource, deletedSource)
+}
+
+func supportedPathSet(paths []string) map[string]bool {
+	set := make(map[string]bool)
+	for _, path := range paths {
+		if registry.IsSupportedLanguageExtension(filepath.Ext(path)) {
+			set[filepath.Clean(path)] = true
+		}
+	}
+	return set
+}
+
+func samePathSet(left, right map[string]bool) bool {
+	if len(left) != len(right) {
+		return false
+	}
+	for path := range left {
+		if !right[path] {
+			return false
+		}
+	}
+	return true
 }
 
 func isRelevantChange(event fsnotify.Event) bool {

@@ -913,6 +913,47 @@ func TestPublishCurrentGraph_NoUncommittedChangesClearsWorkingSnapshots(t *testi
 	}
 }
 
+func TestPublishCurrentGraph_LinkedWorktreeTeardownMarksRepoFinished(t *testing.T) {
+	primary := t.TempDir()
+	initGitRepo(t, primary)
+
+	require.NoError(t, os.MkdirAll(filepath.Join(primary, "src"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(primary, "src", "app.ts"), []byte("export const app = 1;\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(primary, "src", "util.ts"), []byte("export const util = 1;\n"), 0o644))
+	runGit(t, primary, "add", ".")
+	runGit(t, primary, "commit", "-m", "seed source")
+
+	linked := filepath.Join(t.TempDir(), "linked")
+	runGit(t, primary, "worktree", "add", "-b", "teardown-test", linked)
+
+	b := newBroker()
+	b.registerRepo(protocol.RepoDescriptor{
+		ID:        "wt-teardown",
+		Path:      linked,
+		Label:     "linked",
+		IsPrimary: false,
+		Active:    true,
+	})
+	b.publish("wt-teardown", "digraph { clean }")
+
+	require.NoError(t, os.RemoveAll(filepath.Join(linked, "src")))
+
+	formatter, err := formatters.NewFormatter("dot")
+	require.NoError(t, err)
+	publishCurrentGraph("wt-teardown", linked, &watchOptions{}, b, formatter)
+
+	b.mu.Lock()
+	payload, ok := b.currentPayloadLocked()
+	b.mu.Unlock()
+	require.True(t, ok)
+	require.Len(t, payload.Repos, 1)
+	assert.False(t, payload.Repos[0].Active, "linked worktree teardown should finish the repo")
+	assert.Empty(t, payload.WorkingSnapshots, "teardown must not publish a deleted-file working snapshot")
+	require.Len(t, payload.PastCollections, 1)
+	require.Len(t, payload.PastCollections[0].Snapshots, 1)
+	assert.Equal(t, "digraph { clean }", payload.PastCollections[0].Snapshots[0].DOT)
+}
+
 func TestListenWithPortFallback_PicksNextAvailablePort(t *testing.T) {
 	occupied, err := net.Listen("tcp", ":0")
 	require.NoError(t, err)
