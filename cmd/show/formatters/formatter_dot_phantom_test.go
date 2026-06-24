@@ -80,10 +80,12 @@ func TestDOT_PhantomNode_Watch_TestOnly(t *testing.T) {
 
 	assert.Contains(t, out, `"/project/src/lib.rs::tests" [label="lib.rs\n+2"`)
 
-	// Prod node dashed (context only).
+	// The phantom node's count already communicates that only the in-file test region changed;
+	// keep the actual file node visually solid.
 	prodLine := lineWithSourceKey(out, `"/project/src/lib.rs"`, "[")
 	require.NotEmpty(t, prodLine)
-	assert.Contains(t, prodLine, "style=\"filled,dashed\"")
+	assert.Contains(t, prodLine, "style=filled")
+	assert.NotContains(t, prodLine, "dashed")
 }
 
 func TestDOT_PhantomNode_AbsentWhenProdOnlyChange(t *testing.T) {

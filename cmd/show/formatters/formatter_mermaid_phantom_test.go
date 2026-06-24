@@ -49,8 +49,8 @@ func TestMermaid_PhantomNode_Watch_TestOnly(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Contains(t, out, "+2", "phantom node should carry test-side count")
-	assert.Contains(t, out, "classDef phantomProdContext stroke:#666666,stroke-dasharray: 5 5")
-	assert.Contains(t, out, "class n0 phantomProdContext")
+	assert.NotContains(t, out, "phantomProdContext", "prod node should stay solid for test-only changes")
+	assert.NotContains(t, out, "class n0 phantomProdContext")
 }
 
 func TestMermaid_PhantomNode_AbsentWhenProdOnly(t *testing.T) {

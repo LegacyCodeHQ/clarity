@@ -110,7 +110,6 @@ func (f mermaidFormatter) Format(g depgraph.FileDependencyGraph, opts RenderOpti
 
 	phantomIDs := make(map[string]string)
 	var phantomNodes []string
-	var prodContextNodes []string
 	for _, source := range filePaths {
 		node := scene.Nodes[source]
 		if node.Phantom == nil {
@@ -140,10 +139,6 @@ func (f mermaidFormatter) Format(g depgraph.FileDependencyGraph, opts RenderOpti
 		phantomLabel = strings.ReplaceAll(phantomLabel, "\"", "#quot;")
 		sb.WriteString(fmt.Sprintf("    %s[\"%s\"]\n", phantomID, phantomLabel))
 		phantomNodes = append(phantomNodes, phantomID)
-
-		if node.Phantom.Stats != nil && !node.Phantom.ProdChanged {
-			prodContextNodes = append(prodContextNodes, prodID)
-		}
 	}
 
 	// Define edges
@@ -239,7 +234,7 @@ func (f mermaidFormatter) Format(g depgraph.FileDependencyGraph, opts RenderOpti
 		}
 	}
 
-	hasStyles := len(testNodes) > 0 || len(majorityExtensionNodes) > 0 || len(cycleNodes) > 0 || len(cycleEdgeIndices) > 0 || len(deletedEdgeIndices) > 0 || len(prunedNodes) > 0 || len(phantomNodes) > 0 || len(prodContextNodes) > 0 || len(moduleNodes) > 0 || len(deletedNodes) > 0 || len(renamedNodes) > 0 || len(renamedEdgeIndices) > 0
+	hasStyles := len(testNodes) > 0 || len(majorityExtensionNodes) > 0 || len(cycleNodes) > 0 || len(cycleEdgeIndices) > 0 || len(deletedEdgeIndices) > 0 || len(prunedNodes) > 0 || len(phantomNodes) > 0 || len(moduleNodes) > 0 || len(deletedNodes) > 0 || len(renamedNodes) > 0 || len(renamedEdgeIndices) > 0
 	var stylesSB strings.Builder
 
 	// Define style classes
@@ -295,10 +290,6 @@ func (f mermaidFormatter) Format(g depgraph.FileDependencyGraph, opts RenderOpti
 	if len(phantomNodes) > 0 {
 		stylesSB.WriteString("    classDef phantomTest fill:#90EE90,stroke:#228B22,stroke-dasharray: 1 4,color:#000000\n")
 		stylesSB.WriteString(fmt.Sprintf("    class %s phantomTest\n", strings.Join(phantomNodes, ",")))
-	}
-	if len(prodContextNodes) > 0 {
-		stylesSB.WriteString("    classDef phantomProdContext stroke:#666666,stroke-dasharray: 5 5\n")
-		stylesSB.WriteString(fmt.Sprintf("    class %s phantomProdContext\n", strings.Join(prodContextNodes, ",")))
 	}
 	for _, idx := range phantomEdgeIndices {
 		stylesSB.WriteString(fmt.Sprintf("    linkStyle %d stroke:#228B22,stroke-dasharray: 5 5\n", idx))

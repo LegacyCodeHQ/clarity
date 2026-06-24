@@ -94,10 +94,6 @@ func (f *dotFormatter) Format(g depgraph.FileDependencyGraph, opts RenderOptions
 
 			nodeLabel := strings.Join(node.LabelLines, "\n")
 
-			prodIsContext := node.Phantom != nil &&
-				node.Phantom.Stats != nil &&
-				!node.Phantom.ProdChanged
-
 			target := &outerDecls
 			if memberNodeKeys[sourceNodeKey] {
 				target = &clusterDecls
@@ -127,8 +123,6 @@ func (f *dotFormatter) Format(g depgraph.FileDependencyGraph, opts RenderOptions
 					target.WriteString(fmt.Sprintf("  %q [label=%q, style=\"filled,dashed\", fillcolor=%s, color=gray];\n", sourceNodeKey, nodeLabel, color))
 				case node.InCycle:
 					target.WriteString(fmt.Sprintf("  %q [label=%q, style=filled, fillcolor=%s, color=red];\n", sourceNodeKey, nodeLabel, color))
-				case prodIsContext:
-					target.WriteString(fmt.Sprintf("  %q [label=%q, style=\"filled,dashed\", fillcolor=%s];\n", sourceNodeKey, nodeLabel, color))
 				default:
 					target.WriteString(fmt.Sprintf("  %q [label=%q, style=filled, fillcolor=%s];\n", sourceNodeKey, nodeLabel, color))
 				}
