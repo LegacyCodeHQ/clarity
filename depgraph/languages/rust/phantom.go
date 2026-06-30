@@ -31,12 +31,35 @@ type PhantomDecision struct {
 // not strip string literals or `// }` comments. Hand-crafted Rust that places
 // a `}` inside a string in the test region can mis-balance the count.
 func FindTestRegion(content []byte) (startLine, endLine int, ok bool) {
-	if len(content) == 0 {
+	ranges := findTestRanges(content)
+	if len(ranges) == 0 {
 		return 0, 0, false
+	}
+	startLine = ranges[0].start
+	endLine = ranges[0].end
+	for _, r := range ranges[1:] {
+		if r.start < startLine {
+			startLine = r.start
+		}
+		if r.end > endLine {
+			endLine = r.end
+		}
+	}
+	return startLine, endLine, true
+}
+
+type lineRange struct {
+	start int
+	end   int
+}
+
+func findTestRanges(content []byte) []lineRange {
+	if len(content) == 0 {
+		return nil
 	}
 
 	lines := strings.Split(string(content), "\n")
-	minStart, maxEnd := -1, -1
+	ranges := make([]lineRange, 0, 2)
 
 	i := 0
 	for i < len(lines) {
@@ -56,19 +79,11 @@ func FindTestRegion(content []byte) (startLine, endLine int, ok bool) {
 		}
 
 		itemEnd := findItemEnd(lines, j)
-		if minStart == -1 || attrStart < minStart {
-			minStart = attrStart
-		}
-		if itemEnd+1 > maxEnd {
-			maxEnd = itemEnd + 1
-		}
+		ranges = append(ranges, lineRange{start: attrStart, end: itemEnd + 1})
 		i = itemEnd + 1
 	}
 
-	if minStart == -1 {
-		return 0, 0, false
-	}
-	return minStart, maxEnd, true
+	return ranges
 }
 
 // isTestAttr reports whether a single source line is an attribute that gates
@@ -231,8 +246,8 @@ func findItemEnd(lines []string, start int) int {
 // additions). Either content may be nil/empty: oldContent is empty for new
 // files; newContent is empty for deletions.
 func SplitDiff(oldContent, newContent []byte, diff vcs.FileDiff) (prod, test vcs.FileStats) {
-	addInTest := makeInRange(newContent)
-	delInTest := makeInRange(oldContent)
+	addInTest := makeInTestRanges(newContent)
+	delInTest := makeInTestRanges(oldContent)
 
 	for _, ln := range diff.Additions {
 		if addInTest(ln) {
@@ -251,12 +266,19 @@ func SplitDiff(oldContent, newContent []byte, diff vcs.FileDiff) (prod, test vcs
 	return prod, test
 }
 
-func makeInRange(content []byte) func(int) bool {
-	start, end, ok := FindTestRegion(content)
-	if !ok {
+func makeInTestRanges(content []byte) func(int) bool {
+	ranges := findTestRanges(content)
+	if len(ranges) == 0 {
 		return func(int) bool { return false }
 	}
-	return func(ln int) bool { return ln >= start && ln <= end }
+	return func(ln int) bool {
+		for _, r := range ranges {
+			if ln >= r.start && ln <= r.end {
+				return true
+			}
+		}
+		return false
+	}
 }
 
 // DecidePhantomShow returns the phantom decision for `clarity show` (point-in-

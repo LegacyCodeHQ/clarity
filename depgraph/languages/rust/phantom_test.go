@@ -252,6 +252,37 @@ func TestSplitDiff(t *testing.T) {
 			wantProd: vcs.FileStats{Additions: 1, Deletions: 1},
 			wantTest: vcs.FileStats{Additions: 2},
 		},
+		{
+			name: "prod between disjoint top-level test functions stays prod",
+			oldContent: `#[test]
+fn first_test() { assert!(true); }
+
+pub fn convert(input: i32) -> i32 {
+    let value = input + 1;
+    value
+}
+
+#[test]
+fn second_test() { assert_eq!(convert(1), 2); }
+`,
+			newContent: `#[test]
+fn first_test() { assert!(true); }
+
+pub fn convert(input: i32) -> i32 {
+    let value = input.saturating_add(1);
+    value.max(0)
+}
+
+#[test]
+fn second_test() { assert_eq!(convert(1), 2); }
+`,
+			diff: vcs.FileDiff{
+				Additions: []int{5, 6},
+				Deletions: []int{5, 6},
+			},
+			wantProd: vcs.FileStats{Additions: 2, Deletions: 2},
+			wantTest: vcs.FileStats{},
+		},
 	}
 
 	for _, tc := range tests {

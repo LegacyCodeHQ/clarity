@@ -1530,6 +1530,66 @@ func TestGraphRust_PhantomDefaultOn(t *testing.T) {
 	}
 }
 
+func TestGraphRust_CommitPhantomSplitsProdStats(t *testing.T) {
+	repoDir := t.TempDir()
+	gitInitRepo(t, repoDir)
+
+	const initial = `pub fn add(a: i32, b: i32) -> i32 {
+    a + b
+}
+
+pub fn subtract(a: i32, b: i32) -> i32 {
+    a - b
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn it_adds() { assert_eq!(add(1, 2), 3); }
+}
+`
+	const modified = `pub fn add(a: i32, b: i32) -> i32 {
+    a.saturating_add(b)
+}
+
+pub fn subtract(a: i32, b: i32) -> i32 {
+    a.saturating_sub(b)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn it_adds() { assert_eq!(add(1, 2), 3); }
+    #[test]
+    fn it_subtracts() { assert_eq!(subtract(3, 2), 1); }
+}
+`
+	rsFile := filepath.Join(repoDir, "lib.rs")
+	if err := os.WriteFile(rsFile, []byte(initial), 0o644); err != nil {
+		t.Fatalf("os.WriteFile() error = %v", err)
+	}
+	gitRun(t, repoDir, "add", "lib.rs")
+	gitRun(t, repoDir, "commit", "-m", "initial")
+	if err := os.WriteFile(rsFile, []byte(modified), 0o644); err != nil {
+		t.Fatalf("os.WriteFile() error = %v", err)
+	}
+	gitRun(t, repoDir, "add", "lib.rs")
+	gitRun(t, repoDir, "commit", "-m", "mixed prod and test")
+
+	output := runShow(t, "-r", repoDir, "-c", "HEAD", "-f", "dot")
+	if !strings.Contains(output, `lib.rs\n+2 -2`) {
+		t.Fatalf("expected commit phantom view to show prod-side +2 -2 on lib.rs, got:\n%s", output)
+	}
+	if !strings.Contains(output, "::tests") {
+		t.Fatalf("expected commit phantom view to render a test phantom node, got:\n%s", output)
+	}
+	if !strings.Contains(output, `lib.rs\n+2`) {
+		t.Fatalf("expected commit phantom view to show test-side +2 on phantom node, got:\n%s", output)
+	}
+}
+
 func TestGraphRust_NoPhantomFlag_SuppressesPhantom(t *testing.T) {
 	repoDir := t.TempDir()
 	rsFile := filepath.Join(repoDir, "lib.rs")

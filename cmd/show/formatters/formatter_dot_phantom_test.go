@@ -50,7 +50,7 @@ func TestDOT_PhantomNode_Watch_BothChanged(t *testing.T) {
 		Stats:       &vcs.FileStats{Additions: 1},
 		ProdChanged: true,
 	}
-	fg := buildRustGraph(t, phantom, &vcs.FileStats{Additions: 1})
+	fg := buildRustGraph(t, phantom, &vcs.FileStats{Additions: 2, Deletions: 2})
 
 	formatter := dotFormatter{}
 	out, err := formatter.Format(fg, RenderOptions{})
@@ -64,6 +64,7 @@ func TestDOT_PhantomNode_Watch_BothChanged(t *testing.T) {
 	require.NotEmpty(t, prodLine)
 	assert.Contains(t, prodLine, "style=filled,")
 	assert.NotContains(t, prodLine, "dashed")
+	assert.Contains(t, prodLine, `label="lib.rs\n+2 -2"`, "prod node should show prod-side counts")
 }
 
 func TestDOT_PhantomNode_Watch_TestOnly(t *testing.T) {

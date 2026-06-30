@@ -496,6 +496,59 @@ mod tests {
 	assert.Contains(t, dot, "fillcolor=lightgreen", "phantom node is green")
 }
 
+func TestBuildGraph_RustPhantomSplitsProdStats(t *testing.T) {
+	dir := t.TempDir()
+	initGitRepo(t, dir)
+
+	const initial = `pub fn add(a: i32, b: i32) -> i32 {
+    a + b
+}
+
+pub fn subtract(a: i32, b: i32) -> i32 {
+    a - b
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn it_adds() { assert_eq!(add(1, 2), 3); }
+}
+`
+	const modified = `pub fn add(a: i32, b: i32) -> i32 {
+    a.saturating_add(b)
+}
+
+pub fn subtract(a: i32, b: i32) -> i32 {
+    a.saturating_sub(b)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn it_adds() { assert_eq!(add(1, 2), 3); }
+    #[test]
+    fn it_subtracts() { assert_eq!(subtract(3, 2), 1); }
+}
+`
+	libPath := filepath.Join(dir, "lib.rs")
+	require.NoError(t, os.WriteFile(libPath, []byte(initial), 0o644))
+	requireCmd(t, dir, "git", "add", "lib.rs")
+	requireCmd(t, dir, "git", "commit", "-m", "initial")
+	require.NoError(t, os.WriteFile(libPath, []byte(modified), 0o644))
+
+	opts := &watchOptions{}
+	formatter, err := formatters.NewFormatter("dot")
+	require.NoError(t, err)
+	dot, err := buildGraph(dir, opts, formatter)
+	require.NoError(t, err)
+
+	assert.Contains(t, dot, "lib.rs\\n+2 -2", "prod node should show prod-side additions and deletions")
+	assert.Contains(t, dot, "::tests", "phantom node must appear when test region changed")
+	assert.Contains(t, dot, "lib.rs\\n+2", "phantom node should show test-side additions")
+}
+
 func TestBuildGraph_RustNoPhantomFlag_SuppressesPhantom(t *testing.T) {
 	dir := t.TempDir()
 	initGitRepo(t, dir)
