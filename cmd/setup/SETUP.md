@@ -29,16 +29,20 @@ This project uses `clarity` to visualize code changes, provide design feedback, 
 - Parse the graph structure to verify dependencies and relationships
 - No visualization needed - the text output contains all structural information
 - Use this during refactoring iterations to confirm progress
+- Before refactoring a file, inspect its dependents with `clarity show <file> --reach up`
 
 ### Quick Reference
 
 ```bash
-clarity show                    # Visualize uncommitted changes (most common)
-clarity show -c HEAD            # Visualize changes in last commit
-clarity show <files/dirs>       # Build graph from specific files or directories (space-separated)
-clarity show -w <file1,file2>   # Find all paths between two or more files (comma-separated)
-clarity show -f mermaid         # Generate output in mermaid format (default 'dot' Graphviz format)
-clarity show -u                 # Generate visualization URL
+clarity show                                 # Visualize uncommitted changes (most common)
+clarity show -c HEAD                         # Visualize changes in last commit
+clarity show <files/dirs>                    # Build graph from specific files or directories (space-separated)
+clarity show <file> --reach up               # Find what depends on a file before changing it
+clarity show <file> --reach both --depth 2   # Bounded blast radius around a file
+clarity show --all --collapse                # Whole-tree view collapsed into declared modules
+clarity show --between <a,b>                  # Find all paths between two or more files (comma-separated)
+clarity show -f mermaid                      # Output in mermaid format (default 'dot' Graphviz format)
+clarity show -u                              # Generate visualization URL
 ```
 
 For full reference, use `clarity show -h`
