@@ -1,8 +1,11 @@
-# `clarity show` — command surface redesign (v2.1 spec)
+# `clarity show` — command surface redesign (v2.1)
 
-> Status: design proposal. Not yet implemented. Supersedes the v2 draft;
-> v2.1 corrects the default-anchor semantics under `--commit` and re-frames the
-> implementation work around centralizing snapshot selection.
+> Status: **implemented**. This is the design rationale and migration record for
+> the current `clarity show` / `watch` surface, kept as a historical note: it
+> explains *why* the surface is shaped the way it is and records the old → new
+> migration. It supersedes the v2 draft; v2.1 corrected the default-anchor
+> semantics under `--commit` and re-framed the work around centralizing snapshot
+> selection.
 
 ## Intent
 
@@ -105,11 +108,12 @@ composes *with* an anchor rather than replacing it. It conflicts only with
 
 ## Implementation: the grammar is necessary but **not sufficient**
 
-Renaming flags fixes nothing on its own. The current correctness bugs live in
-the fact that **snapshot selection is decentralized**: three concerns each pick
-their tree independently, so under `--commit` they can disagree.
+Renaming flags fixed nothing on its own. The correctness bugs that motivated
+this work lived in the fact that **snapshot selection was decentralized**: three
+concerns each picked their tree independently, so under `--commit` they could
+disagree.
 
-### The current state under `--commit`
+### The bug, pre-refactor
 
 | Concern | `-c X -p file` | `-c X -m mod --direction` |
 |---|---|---|
@@ -117,37 +121,37 @@ their tree independently, so under `--commit` they can disagree.
 | Module membership | n/a | **filesystem** config + `os.Stat` (`show_cmd.go:1152`) |
 | Content reader | **filesystem** — fallback fires for `targetFile` (`show_cmd.go:752`) | commit tree (`GitCommitContentReader`) ✓ |
 
-So the two views fail *differently*:
-- `-c X -p file` reads file **content** from the working tree, not commit `X`.
-- `-c X -m mod --direction` discovers the neighbor **universe** and **membership**
+So the two views failed *differently*:
+- `-c X -p file` read file **content** from the working tree, not commit `X`.
+- `-c X -m mod --direction` discovered the neighbor **universe** and **membership**
   from the working tree, while reading content from commit `X` — so a file present
-  in the working tree but absent from `X` enters the graph and then content-reads
+  in the working tree but absent from `X` entered the graph and then content-read
   to nothing.
 
-Same root, opposite symptom: there is no single source of truth for "the
+Same root, opposite symptom: there was no single source of truth for "the
 snapshot."
 
 ### The fix
 
-Introduce **one snapshot-scoped resolver** that owns, for the chosen snapshot:
+A **single snapshot-scoped resolver** now owns, for the chosen snapshot:
 1. tree file listing
 2. module membership resolution
 3. the content reader
 
-Then apply anchors and lenses over that resolver. With this in place:
-- `selectContentReader`'s `targetFile` filesystem fallback is deleted.
-- The `--module --direction` whole-repo `expandPaths(repoPath)` reparse is deleted;
-  neighbors are discovered over the already-built graph of the chosen
+Anchors and lenses apply over that resolver. With this in place:
+- `selectContentReader`'s `targetFile` filesystem fallback was deleted.
+- The `--module --direction` whole-repo `expandPaths(repoPath)` reparse was
+  deleted; neighbors are discovered over the already-built graph of the chosen
   snapshot+anchor.
 - Any future lens inherits correct snapshot behavior for free.
 
-### Also delete / make explicit
+### Also deleted / made explicit
 
-- **`--modules` / `--module` silent precedence** (`show_cmd.go:197, 293 vs 309`):
-  passing both silently prefers `--module`. Replace with an explicit
-  `--collapse` ⊻ `--module` validation error.
-- **Vestigial `--scope` enum** (`show_cmd.go:117, 473–479`): single value,
-  subsumed by `--reach down`. Remove.
+- **`--modules` / `--module` silent precedence**: passing both used to silently
+  prefer `--module`. Replaced with an explicit `--collapse` ⊻ `--module`
+  validation error.
+- **Vestigial `--scope` enum**: single value, subsumed by `--reach down`.
+  Removed.
 
 ## Migration
 
@@ -190,5 +194,6 @@ select — the SNAPSHOT axis collapses to "the working tree, right now."
 - **Declarative module boundaries** (partition vs. reach) — out of scope here;
   `--module` reads `.clarity/modules.json` as-is. The grammar does not depend on
   resolving that fork.
-- **File-count semantics** — "count what's drawn" falls out once the working-tree
-  reparse in the module path is gone.
+- **File-count semantics** — "count what's drawn" should follow now that the
+  working-tree reparse in the module path is gone (see *The fix*); not yet
+  separately verified.
