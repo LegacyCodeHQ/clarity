@@ -1,6 +1,6 @@
 // Package clarityconfig loads the opt-in configuration stored under a repo's
 // .clarity directory. It is the single source of truth for module declarations
-// so every consumer (`clarity show --modules`, `clarity show --module <name>`,
+// so every consumer (`clarity show --collapse`, `clarity show --module <name>`,
 // and `clarity modules`) resolves the same set and cannot drift apart.
 package clarityconfig
 

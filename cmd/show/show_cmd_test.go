@@ -1136,16 +1136,16 @@ func TestGraphFile_PruneDoesNotBlockNodesReachableViaOtherPaths(t *testing.T) {
 	}
 }
 
-func TestGraphFile_PruneWithoutFile_ReturnsError(t *testing.T) {
+func TestGraphFile_PruneWithoutReach_ReturnsError(t *testing.T) {
 	cmd := NewCommand()
 	cmd.SetArgs([]string{"--prune", "b.ts"})
 
 	err := cmd.Execute()
 	if err == nil {
-		t.Fatalf("expected error when --prune is used without --file")
+		t.Fatalf("expected error when --prune is used without --reach")
 	}
 	if !strings.Contains(err.Error(), "--prune requires --reach") {
-		t.Fatalf("expected prune requires file error, got: %v", err)
+		t.Fatalf("expected prune requires reach error, got: %v", err)
 	}
 }
 
@@ -1352,16 +1352,16 @@ func TestGraphFile_Also_ExcludesUnconnectedFiles(t *testing.T) {
 	}
 }
 
-func TestGraphFile_Also_WithoutFile_ReturnsError(t *testing.T) {
+func TestGraphFile_Also_WithoutReach_ReturnsError(t *testing.T) {
 	cmd := NewCommand()
 	cmd.SetArgs([]string{"--also", "*.test.ts"})
 
 	err := cmd.Execute()
 	if err == nil {
-		t.Fatalf("expected error when --also is used without --file")
+		t.Fatalf("expected error when --also is used without --reach")
 	}
 	if !strings.Contains(err.Error(), "--also requires a single path with --reach") {
-		t.Fatalf("expected also requires file error, got: %v", err)
+		t.Fatalf("expected also requires reach error, got: %v", err)
 	}
 }
 

@@ -133,7 +133,7 @@ func TestShowCommand_ModulesFlagAppliesConfig(t *testing.T) {
 
 	out := runShow(t, srcDir, "-r", repoDir, "-f", "dot", "--collapse")
 	if !strings.Contains(out, `"support"`) {
-		t.Fatalf("expected --modules to collapse into module node \"support\", got:\n%s", out)
+		t.Fatalf("expected --collapse to collapse into module node \"support\", got:\n%s", out)
 	}
 	if strings.Contains(out, "Helper.java") {
 		t.Fatalf("expected Helper.java collapsed into module, but it is still a node:\n%s", out)
@@ -148,7 +148,7 @@ func TestShowCommand_ModulesOffByDefault(t *testing.T) {
   ]
 }`)
 
-	// Without --modules the config is ignored, even though modules.json exists.
+	// Without --collapse the config is ignored, even though modules.json exists.
 	out := runShow(t, srcDir, "-r", repoDir, "-f", "dot")
 	if strings.Contains(out, `"support"`) {
 		t.Fatalf("expected modules off by default, but module node present:\n%s", out)

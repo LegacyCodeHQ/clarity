@@ -1393,7 +1393,7 @@ func countDeletedFiles(fg depgraph.FileDependencyGraph) int {
 }
 
 // nodeCountLabel summarizes the graph's node composition for the title. With
-// --modules the graph is a mix of collapsed module nodes and plain file nodes,
+// --collapse the graph is a mix of collapsed module nodes and plain file nodes,
 // so we report each present count rather than mislabeling every node as a
 // "file". Zero-valued terms are dropped; it is empty when there is nothing to
 // report (the caller supplies an "0 files" fallback).
