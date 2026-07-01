@@ -236,6 +236,27 @@ revision.
   `clarity watch a b`.
 - `clarity watch --direction` was removed; use `--orientation`.
 
+## Downstream consumer audit (`CLR-12`)
+
+The superepo was swept for consumers that shell out to Clarity or describe its
+CLI. Findings:
+
+- **Clarity Desktop** (`clarity/clarity-desktop/`) — already on the new surface.
+  Directory graphs pass positional paths (`show -r <root> <dirs…>`) and file
+  graphs use `show -r <root> <file> --reach down --depth 0` (`src/commands.rs`,
+  `src/app/clarity_desktop.rs`). Its remaining `--file` argument targets the
+  `one23` binary, not Clarity, and its `extensions` read is the current
+  `clarity languages` JSON field. No change needed.
+- **Superepo root `AGENTS.md` / `CLAUDE.md`** — reference only `clarity show`
+  and `clarity watch` generically, with no removed flags. No change needed.
+- **`websites/`** — no Clarity CLI references. No change needed.
+- **Historical artifacts left as-is** — `north-star/Progress/Direction.md` (a
+  dated journal entry), `spikes/structure-research/` (a completed research
+  spike's methodology/learnings), and this repo's `docs/reports/`
+  security audit record the surface as it was when written; rewriting them would
+  falsify the record. `.claude/settings.local.json` is a git-ignored local
+  permission cache, not a shipped consumer.
+
 ## Release-readiness notes
 
 This comparison satisfies the surface-diff portion of `CLR-7`. The new surface
