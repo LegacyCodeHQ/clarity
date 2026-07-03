@@ -201,6 +201,112 @@ struct Pipeline {
 	assert.ElementsMatch(t, []string{operatorPath}, imports)
 }
 
+func TestResolveSwiftProjectImports_NoEdgeForFunctionLocalDeclaration(t *testing.T) {
+	// CLR-15 variant 1: a type declared inside a function body must not be
+	// treated as an external reference to a same-named top-level type in
+	// another file.
+	tmpDir := t.TempDir()
+	appDir := filepath.Join(tmpDir, "Sources", "App")
+	require.NoError(t, os.MkdirAll(appDir, 0o755))
+
+	consumerPath := filepath.Join(appDir, "Consumer.swift")
+	require.NoError(t, os.WriteFile(consumerPath, []byte(`
+import Foundation
+
+struct Consumer {
+    func make() -> Int {
+        struct Alpha {
+            let value: Int
+        }
+        return Alpha(value: 1).value
+    }
+}
+`), 0o644))
+
+	alphaPath := filepath.Join(appDir, "Alpha.swift")
+	require.NoError(t, os.WriteFile(alphaPath, []byte("import Foundation\n\nstruct Alpha {}\n"), 0o644))
+
+	reader := vcs.FilesystemContentReader()
+	supplied := map[string]bool{
+		consumerPath: true,
+		alphaPath:    true,
+	}
+
+	imports, err := ResolveSwiftProjectImports(consumerPath, consumerPath, supplied, reader)
+	require.NoError(t, err)
+	assert.Empty(t, imports)
+}
+
+func TestResolveSwiftProjectImports_NoEdgeForNestedTypeUsedUnqualified(t *testing.T) {
+	// CLR-15 variant 2: a nested type referenced unqualified within its
+	// enclosing type must resolve to the nested declaration, not to a
+	// same-named top-level type in another file.
+	tmpDir := t.TempDir()
+	appDir := filepath.Join(tmpDir, "Sources", "App")
+	require.NoError(t, os.MkdirAll(appDir, 0o755))
+
+	betaPath := filepath.Join(appDir, "Beta.swift")
+	require.NoError(t, os.WriteFile(betaPath, []byte(`
+import Foundation
+
+struct Beta {
+    struct Alpha {
+        let value: Int
+    }
+
+    func make() -> Alpha {
+        return Alpha(value: 1)
+    }
+}
+`), 0o644))
+
+	alphaPath := filepath.Join(appDir, "Alpha.swift")
+	require.NoError(t, os.WriteFile(alphaPath, []byte("import Foundation\n\nstruct Alpha {}\n"), 0o644))
+
+	reader := vcs.FilesystemContentReader()
+	supplied := map[string]bool{
+		betaPath:  true,
+		alphaPath: true,
+	}
+
+	imports, err := ResolveSwiftProjectImports(betaPath, betaPath, supplied, reader)
+	require.NoError(t, err)
+	assert.Empty(t, imports)
+}
+
+func TestResolveSwiftProjectImports_NoEdgeForNestedDeclarationCollision(t *testing.T) {
+	// CLR-15 variant 3: a file that only declares a nested type (and references
+	// nothing external) must not get an edge to another file declaring a
+	// same-named top-level type.
+	tmpDir := t.TempDir()
+	appDir := filepath.Join(tmpDir, "Sources", "App")
+	require.NoError(t, os.MkdirAll(appDir, 0o755))
+
+	scopePath := filepath.Join(appDir, "Scope.swift")
+	require.NoError(t, os.WriteFile(scopePath, []byte(`
+import Foundation
+
+struct Scope {
+    struct Duplicated {
+        let value: Int
+    }
+}
+`), 0o644))
+
+	duplicatedPath := filepath.Join(appDir, "Duplicated.swift")
+	require.NoError(t, os.WriteFile(duplicatedPath, []byte("import Foundation\n\nstruct Duplicated {}\n"), 0o644))
+
+	reader := vcs.FilesystemContentReader()
+	supplied := map[string]bool{
+		scopePath:      true,
+		duplicatedPath: true,
+	}
+
+	imports, err := ResolveSwiftProjectImports(scopePath, scopePath, supplied, reader)
+	require.NoError(t, err)
+	assert.Empty(t, imports)
+}
+
 func TestResolveSwiftProjectImports_FlatLayoutContentViewDependsOnModels(t *testing.T) {
 	tmpDir := t.TempDir()
 	appDir := filepath.Join(tmpDir, "clarity-desktop")

@@ -157,12 +157,11 @@ func ExtractSwiftReferencedSymbols(sourceCode []byte) []string {
 	}
 	defer tree.Close()
 
-	declared := make(map[string]bool)
-	for _, name := range ParseSwiftTopLevelSymbolNames(sourceCode) {
-		if name != "" {
-			declared[name] = true
-		}
-	}
+	// Exclude names declared anywhere in this file, not just at the top level
+	// (CLR-15): a type/func/const declared at an inner or local scope must not
+	// be treated as an external reference to a same-named top-level declaration
+	// in another file.
+	declared := collectSwiftDeclaredNames(tree.RootNode(), sourceCode)
 
 	seen := make(map[string]bool)
 	var result []string
@@ -359,6 +358,55 @@ func isTopLevelSwiftSymbolDeclaration(node *sitter.Node) bool {
 	default:
 		return false
 	}
+}
+
+func isSwiftDeclarationNode(node *sitter.Node) bool {
+	if node == nil {
+		return false
+	}
+	switch node.Type() {
+	case "class_declaration",
+		"struct_declaration",
+		"enum_declaration",
+		"protocol_declaration",
+		"actor_declaration",
+		"typealias_declaration",
+		"function_declaration",
+		"property_declaration",
+		"operator_declaration":
+		return true
+	default:
+		return false
+	}
+}
+
+// collectSwiftDeclaredNames returns every name declared anywhere in the tree,
+// regardless of scope (top-level, nested, or function-local). Extension
+// declarations are skipped so that `extension Foo` still counts as a reference
+// to the extended type Foo rather than a declaration of it — but declarations
+// nested inside an extension body are still collected.
+func collectSwiftDeclaredNames(root *sitter.Node, sourceCode []byte) map[string]bool {
+	declared := make(map[string]bool)
+
+	var walk func(*sitter.Node)
+	walk = func(n *sitter.Node) {
+		if n == nil {
+			return
+		}
+		if isSwiftDeclarationNode(n) && !isSwiftExtensionDeclaration(n) {
+			for _, name := range swiftDeclarationNames(n, sourceCode) {
+				if name != "" {
+					declared[name] = true
+				}
+			}
+		}
+		for i := 0; i < int(n.ChildCount()); i++ {
+			walk(n.Child(i))
+		}
+	}
+
+	walk(root)
+	return declared
 }
 
 // swiftDeclarationNames returns the declared name(s) for a top-level declaration
