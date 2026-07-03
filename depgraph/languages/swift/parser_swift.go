@@ -113,6 +113,88 @@ func ParseSwiftTopLevelTypeNames(sourceCode []byte) []string {
 	return names
 }
 
+// ParseSwiftTopLevelSymbolNames returns the names of all top-level declarations
+// in Swift source: types plus top-level functions, constants/variables, and
+// custom operators. This is the declaration side of cross-file reference
+// resolution (CLR-14): global funcs, lets, and operators can be referenced
+// across files just like types.
+func ParseSwiftTopLevelSymbolNames(sourceCode []byte) []string {
+	tree, err := parseSwift(sourceCode)
+	if err != nil {
+		return []string{}
+	}
+	defer tree.Close()
+
+	var names []string
+	seen := make(map[string]bool)
+
+	root := tree.RootNode()
+	for i := 0; i < int(root.ChildCount()); i++ {
+		child := root.Child(i)
+		if !isTopLevelSwiftSymbolDeclaration(child) {
+			continue
+		}
+		for _, name := range swiftDeclarationNames(child, sourceCode) {
+			if name == "" || seen[name] {
+				continue
+			}
+			seen[name] = true
+			names = append(names, name)
+		}
+	}
+
+	return names
+}
+
+// ExtractSwiftReferencedSymbols returns referenced symbol names in Swift source:
+// type identifiers plus bare identifiers (function/constant references) and
+// custom operators. Names declared at the top level of this file are excluded
+// so a file is never treated as depending on itself.
+func ExtractSwiftReferencedSymbols(sourceCode []byte) []string {
+	tree, err := parseSwift(sourceCode)
+	if err != nil {
+		return []string{}
+	}
+	defer tree.Close()
+
+	declared := make(map[string]bool)
+	for _, name := range ParseSwiftTopLevelSymbolNames(sourceCode) {
+		if name != "" {
+			declared[name] = true
+		}
+	}
+
+	seen := make(map[string]bool)
+	var result []string
+
+	var walk func(*sitter.Node)
+	walk = func(n *sitter.Node) {
+		if n == nil {
+			return
+		}
+
+		if n.Type() == "import_declaration" {
+			return
+		}
+
+		if isSwiftReferenceNode(n) {
+			name := strings.TrimSpace(n.Content(sourceCode))
+			if name != "" && !declared[name] && !seen[name] {
+				seen[name] = true
+				result = append(result, name)
+			}
+		}
+
+		for i := 0; i < int(n.ChildCount()); i++ {
+			walk(n.Child(i))
+		}
+	}
+
+	walk(tree.RootNode())
+
+	return result
+}
+
 // ExtractSwiftTypeIdentifiers returns referenced type-like identifiers in Swift source.
 func ExtractSwiftTypeIdentifiers(sourceCode []byte) []string {
 	tree, err := parseSwift(sourceCode)
@@ -250,6 +332,116 @@ func findFirstDescendantOfType(node *sitter.Node, types ...string) *sitter.Node 
 	}
 
 	return walk(node)
+}
+
+func isTopLevelSwiftSymbolDeclaration(node *sitter.Node) bool {
+	if node == nil || node.Parent() == nil {
+		return false
+	}
+	parentType := node.Parent().Type()
+	if parentType != "source_file" && parentType != "program" {
+		return false
+	}
+	if isSwiftExtensionDeclaration(node) {
+		return false
+	}
+	switch node.Type() {
+	case "class_declaration",
+		"struct_declaration",
+		"enum_declaration",
+		"protocol_declaration",
+		"actor_declaration",
+		"typealias_declaration",
+		"function_declaration",
+		"property_declaration",
+		"operator_declaration":
+		return true
+	default:
+		return false
+	}
+}
+
+// swiftDeclarationNames returns the declared name(s) for a top-level declaration
+// node. Types and operators yield a single name; a property declaration can bind
+// several names (e.g. `let (a, b) = ...`).
+func swiftDeclarationNames(node *sitter.Node, sourceCode []byte) []string {
+	if node == nil {
+		return nil
+	}
+	switch node.Type() {
+	case "function_declaration":
+		// The name follows the `func` keyword: either an identifier or, for
+		// operator functions, a custom operator token.
+		if name := firstDirectChildContent(node, sourceCode, "simple_identifier", "identifier", "custom_operator"); name != "" {
+			return []string{name}
+		}
+	case "operator_declaration":
+		if name := firstDirectChildContent(node, sourceCode, "custom_operator"); name != "" {
+			return []string{name}
+		}
+	case "property_declaration":
+		return swiftPropertyBindingNames(node, sourceCode)
+	default:
+		if name := extractSwiftDeclarationName(node, sourceCode); name != "" {
+			return []string{name}
+		}
+	}
+	return nil
+}
+
+// swiftPropertyBindingNames collects the identifiers bound by a property
+// declaration's pattern, ignoring the initializer expression on the right.
+func swiftPropertyBindingNames(node *sitter.Node, sourceCode []byte) []string {
+	var names []string
+	for i := 0; i < int(node.ChildCount()); i++ {
+		child := node.Child(i)
+		if child == nil || child.Type() != "pattern" {
+			continue
+		}
+		collectSwiftSimpleIdentifiers(child, sourceCode, &names)
+	}
+	return names
+}
+
+func collectSwiftSimpleIdentifiers(node *sitter.Node, sourceCode []byte, out *[]string) {
+	if node == nil {
+		return
+	}
+	if node.Type() == "simple_identifier" || node.Type() == "identifier" {
+		if name := strings.TrimSpace(node.Content(sourceCode)); name != "" {
+			*out = append(*out, name)
+		}
+		return
+	}
+	for i := 0; i < int(node.ChildCount()); i++ {
+		collectSwiftSimpleIdentifiers(node.Child(i), sourceCode, out)
+	}
+}
+
+func firstDirectChildContent(node *sitter.Node, sourceCode []byte, types ...string) string {
+	if node == nil {
+		return ""
+	}
+	typeSet := make(map[string]bool, len(types))
+	for _, t := range types {
+		typeSet[t] = true
+	}
+	for i := 0; i < int(node.ChildCount()); i++ {
+		child := node.Child(i)
+		if child != nil && typeSet[child.Type()] {
+			return strings.TrimSpace(child.Content(sourceCode))
+		}
+	}
+	return ""
+}
+
+func isSwiftReferenceNode(node *sitter.Node) bool {
+	switch node.Type() {
+	case "type_identifier", "simple_type_identifier", "simple_identifier", "identifier", "user_type", "custom_operator":
+		return true
+	default:
+		return false
+	}
 }
 
 func isSwiftIdentifierNode(node *sitter.Node) bool {

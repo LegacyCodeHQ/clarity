@@ -26,7 +26,7 @@ func ResolveSwiftProjectImports(
 	}
 
 	moduleIndex := buildSwiftModuleIndex(suppliedFiles)
-	typeReferences := ExtractSwiftTypeIdentifiers(content)
+	typeReferences := ExtractSwiftReferencedSymbols(content)
 	if len(typeReferences) == 0 {
 		return []string{}, nil
 	}
@@ -159,7 +159,7 @@ func fileDeclaresReferencedType(
 		if err != nil {
 			typeIndex[filePath] = nil
 		} else {
-			typeIndex[filePath] = ParseSwiftTopLevelTypeNames(content)
+			typeIndex[filePath] = ParseSwiftTopLevelSymbolNames(content)
 		}
 	}
 

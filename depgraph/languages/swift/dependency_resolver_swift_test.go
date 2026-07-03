@@ -80,6 +80,127 @@ func TestResolveSwiftProjectImports_FlatLayoutResolvesTypeReference(t *testing.T
 	assert.ElementsMatch(t, []string{featurePath}, imports)
 }
 
+func TestResolveSwiftProjectImports_TopLevelFunctionReference(t *testing.T) {
+	// CLR-14: a file that calls a top-level (global) function declared in
+	// another file must produce a file->file edge. Mirrors the Strata repro
+	// where DiffView.swift calls numberedRows/sideBySideRows declared as
+	// global funcs in Diff.swift, yet Diff.swift showed zero incoming edges.
+	tmpDir := t.TempDir()
+	appDir := filepath.Join(tmpDir, "Sources", "StrataKit")
+	require.NoError(t, os.MkdirAll(appDir, 0o755))
+
+	diffPath := filepath.Join(appDir, "Diff.swift")
+	require.NoError(t, os.WriteFile(diffPath, []byte(`
+import Foundation
+
+func sideBySideRows(_ text: String) -> [String] {
+    return [text]
+}
+
+func numberedRows(_ rows: [String]) -> [String] {
+    return rows
+}
+`), 0o644))
+
+	viewPath := filepath.Join(appDir, "DiffView.swift")
+	require.NoError(t, os.WriteFile(viewPath, []byte(`
+import SwiftUI
+
+struct DiffView: View {
+    var body: some View {
+        let rows = numberedRows(sideBySideRows("hello"))
+        return Text(rows.joined())
+    }
+}
+`), 0o644))
+
+	reader := vcs.FilesystemContentReader()
+	supplied := map[string]bool{
+		diffPath: true,
+		viewPath: true,
+	}
+
+	imports, err := ResolveSwiftProjectImports(viewPath, viewPath, supplied, reader)
+	require.NoError(t, err)
+	assert.ElementsMatch(t, []string{diffPath}, imports)
+}
+
+func TestResolveSwiftProjectImports_TopLevelConstantReference(t *testing.T) {
+	// CLR-14: a file that references a top-level (global) let/var declared in
+	// another file must produce a file->file edge.
+	tmpDir := t.TempDir()
+	appDir := filepath.Join(tmpDir, "Sources", "StrataKit")
+	require.NoError(t, os.MkdirAll(appDir, 0o755))
+
+	constantsPath := filepath.Join(appDir, "Constants.swift")
+	require.NoError(t, os.WriteFile(constantsPath, []byte(`
+import Foundation
+
+let defaultTabWidth = 4
+`), 0o644))
+
+	consumerPath := filepath.Join(appDir, "Formatter.swift")
+	require.NoError(t, os.WriteFile(consumerPath, []byte(`
+import Foundation
+
+struct Formatter {
+    func indent() -> Int {
+        return defaultTabWidth * 2
+    }
+}
+`), 0o644))
+
+	reader := vcs.FilesystemContentReader()
+	supplied := map[string]bool{
+		constantsPath: true,
+		consumerPath:  true,
+	}
+
+	imports, err := ResolveSwiftProjectImports(consumerPath, consumerPath, supplied, reader)
+	require.NoError(t, err)
+	assert.ElementsMatch(t, []string{constantsPath}, imports)
+}
+
+func TestResolveSwiftProjectImports_CustomOperatorReference(t *testing.T) {
+	// CLR-14: a file that uses a custom operator declared/implemented in
+	// another file must produce a file->file edge.
+	tmpDir := t.TempDir()
+	appDir := filepath.Join(tmpDir, "Sources", "StrataKit")
+	require.NoError(t, os.MkdirAll(appDir, 0o755))
+
+	operatorPath := filepath.Join(appDir, "Operators.swift")
+	require.NoError(t, os.WriteFile(operatorPath, []byte(`
+import Foundation
+
+infix operator |>: AdditionPrecedence
+
+func |> (value: Int, transform: (Int) -> Int) -> Int {
+    return transform(value)
+}
+`), 0o644))
+
+	consumerPath := filepath.Join(appDir, "Pipeline.swift")
+	require.NoError(t, os.WriteFile(consumerPath, []byte(`
+import Foundation
+
+struct Pipeline {
+    func run() -> Int {
+        return 3 |> { $0 + 1 }
+    }
+}
+`), 0o644))
+
+	reader := vcs.FilesystemContentReader()
+	supplied := map[string]bool{
+		operatorPath: true,
+		consumerPath: true,
+	}
+
+	imports, err := ResolveSwiftProjectImports(consumerPath, consumerPath, supplied, reader)
+	require.NoError(t, err)
+	assert.ElementsMatch(t, []string{operatorPath}, imports)
+}
+
 func TestResolveSwiftProjectImports_FlatLayoutContentViewDependsOnModels(t *testing.T) {
 	tmpDir := t.TempDir()
 	appDir := filepath.Join(tmpDir, "clarity-desktop")
