@@ -4,7 +4,6 @@
 [![License](https://img.shields.io/github/license/LegacyCodeHQ/clarity-cli)](LICENSE)
 [![Release](https://img.shields.io/github/v/release/LegacyCodeHQ/clarity-cli)](https://github.com/LegacyCodeHQ/clarity-cli/releases)
 [![npm version](https://img.shields.io/npm/v/@legacycodehq/clarity)](https://www.npmjs.com/package/@legacycodehq/clarity)
-[![Go Report Card](https://goreportcard.com/badge/github.com/LegacyCodeHQ/clarity)](https://goreportcard.com/report/github.com/LegacyCodeHQ/clarity)
 
 See the structure of a code change before you commit it.
 
