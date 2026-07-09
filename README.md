@@ -243,7 +243,7 @@ cycles, and change shape.
 
 ## License
 
-This project is licensed under the [GNU Affero General Public License v3.0](LICENSE).
+This project is licensed under the [Apache License, Version 2.0](LICENSE).
 
 Copyright (c) 2026-present, Legacy Code Headquarters (OPC) Private Limited. All
 rights reserved.

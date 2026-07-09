@@ -1,0 +1,14 @@
+Copyright 2026-present, Legacy Code Headquarters (OPC) Private Limited.
+
+This product is licensed under the Apache License, Version 2.0.
+
+This product bundles third-party software:
+
+  - dompurify (via mermaid), available under "MPL-2.0 OR Apache-2.0";
+    used here under the Apache License, Version 2.0.
+  - tree-sitter grammars vendored via github.com/smacker/go-tree-sitter,
+    and a tree-sitter Zig grammar copied under internal/tree_sitter/zig,
+    all under the MIT License.
+
+The full license texts for bundled dependencies are retained with their
+respective source distributions.

@@ -2,7 +2,7 @@
   "name": "@legacycodehq/clarity",
   "version": "0.0.0-dev",
   "description": "Clarity CLI npm wrapper package",
-  "license": "AGPL-3.0-only",
+  "license": "Apache-2.0",
   "homepage": "https://github.com/LegacyCodeHQ/clarity-cli",
   "repository": {
     "type": "git",
