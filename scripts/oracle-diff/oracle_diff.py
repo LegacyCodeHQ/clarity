@@ -172,11 +172,23 @@ def main():
     unexplained = only_oracle - expected
     blind_spot = clarity - oracle - cross
 
+    # Recall is measured against IN-SCOPE oracle edges: the raw oracle set
+    # minus the containment edges Clarity does not model by design. Dividing by
+    # the raw set penalises a repo for using a legitimate idiom -- lever-cli
+    # scored 89% purely because issue.rs declares ten submodules without
+    # re-exporting them, while having no actual misses.
+    #
+    # Note `expected` is a subset of oracle-only, so parent->child edges that
+    # Clarity *does* draw (via a `pub use`) stay counted on both sides.
+    in_scope = oracle - expected
     agree = len(oracle & clarity)
+
     print(f"targets    {len(targets)}  ({', '.join(t['module'] for t in targets)})")
-    print(f"oracle     {len(oracle)}")
+    print(f"oracle     {len(oracle)}   ({len(in_scope)} in scope, "
+          f"{len(expected)} excluded by design)")
     print(f"clarity    {len(clarity)}")
-    print(f"agree      {agree}" + (f"   recall {agree / len(oracle):.0%}" if oracle else ""))
+    print(f"agree      {agree}" + (f"   recall {agree / len(in_scope):.0%} of in-scope edges"
+                                   if in_scope else ""))
     print()
     print(f"UNEXPLAINED oracle-only edges: {len(unexplained)}   <-- candidate Clarity misses")
     for a, b in sorted(unexplained):

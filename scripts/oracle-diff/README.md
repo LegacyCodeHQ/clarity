@@ -24,6 +24,13 @@ which is rarely the build you are testing.
 
 ## Reading the output
 
+`recall` is measured against **in-scope** oracle edges — the raw oracle set minus
+the containment edges Clarity does not model by design. Dividing by the raw set
+penalises a repo for using a legitimate idiom: lever-cli scored 89% purely
+because `issue.rs` declares ten submodules without re-exporting them, while
+having no actual misses. The header prints both figures so the exclusion is
+visible rather than assumed.
+
 The two tools do not measure the same relation, so the two directions of the
 diff mean different things and are reported separately. Do not collapse them
 into a single "differences" number.
