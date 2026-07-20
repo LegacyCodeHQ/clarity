@@ -11,7 +11,7 @@
 ◐ Markdown    .md, .markdown
 ◐ Python      .py
 ◐ Ruby        .rb
-◐ Rust        .rs
+● Rust        .rs
 ◐ Scala       .scala
 ○ Svelte      .svelte
 ◐ Swift       .swift
