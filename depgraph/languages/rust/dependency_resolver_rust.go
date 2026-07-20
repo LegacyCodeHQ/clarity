@@ -338,19 +338,19 @@ func resolveRustCrateRootCandidates(crateRoot string, suppliedFiles map[string]b
 // like `src/app.rs`, `mod foo;` resolves to `src/app/foo.rs`, and
 // `use foo::Bar;` from app.rs targets that file.
 func (r *ProjectImportResolver) resolveRustSiblingSubmoduleCandidates(sourceFile, path string) []string {
-	if isRustDirectoryModuleFile(sourceFile) {
-		return nil
-	}
 	parts := strings.Split(path, "::")
 	if len(parts) == 0 || parts[0] == "" {
 		return nil
 	}
-	base := filepath.Base(sourceFile)
-	stem := strings.TrimSuffix(base, ".rs")
-	if stem == "" || stem == base {
+	if !strings.HasSuffix(sourceFile, ".rs") {
 		return nil
 	}
-	siblingDir := filepath.Join(filepath.Dir(sourceFile), stem)
+	// Uniform paths (Rust 2018+) let a `use` begin with a module the file
+	// itself declares. Where those children live depends on the layout:
+	// `app.rs` declares them in `app/`, while `lib.rs`/`mod.rs` declare them
+	// beside itself. Previously directory-module files bailed out entirely, so
+	// `pub use daemon::heartbeat;` in lib.rs resolved to nothing.
+	siblingDir := rustModuleOwnedDir(sourceFile)
 	candidates := resolveRustModuleCandidates(siblingDir, parts, r.suppliedFiles)
 	if len(parts) > 1 && len(candidates) == 0 {
 		candidates = append(candidates, resolveRustModuleCandidates(siblingDir, parts[:len(parts)-1], r.suppliedFiles)...)

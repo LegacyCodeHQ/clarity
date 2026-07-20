@@ -620,3 +620,28 @@ func TestResolveRustProjectImports_ReExportThroughDirDotRsModule(t *testing.T) {
 	require.NoError(t, err)
 	assert.Contains(t, imports, innerFile, "re-export should resolve through to the defining file")
 }
+
+// CLR-26: re-exporting a submodule (`pub use daemon::heartbeat;`) must yield an
+// edge to the submodule's file. Symbol re-exports from the same parent work.
+func TestResolveRustProjectImports_ModuleReExport(t *testing.T) {
+	tmpDir := t.TempDir()
+	crateRoot := filepath.Join(tmpDir, "mycrate")
+	srcDir := filepath.Join(crateRoot, "src")
+	require.NoError(t, os.MkdirAll(filepath.Join(srcDir, "daemon"), 0755))
+
+	cargoToml := filepath.Join(crateRoot, "Cargo.toml")
+	libFile := filepath.Join(srcDir, "lib.rs")
+	daemonMod := filepath.Join(srcDir, "daemon", "mod.rs")
+	heartbeatFile := filepath.Join(srcDir, "daemon", "heartbeat.rs")
+
+	require.NoError(t, os.WriteFile(cargoToml, []byte("[package]\nname = \"mycrate\"\n"), 0644))
+	require.NoError(t, os.WriteFile(libFile, []byte("pub mod daemon;\npub use daemon::heartbeat;\n"), 0644))
+	require.NoError(t, os.WriteFile(daemonMod, []byte("pub mod heartbeat;\n"), 0644))
+	require.NoError(t, os.WriteFile(heartbeatFile, []byte("pub fn beat() {}\n"), 0644))
+
+	supplied := map[string]bool{cargoToml: true, libFile: true, daemonMod: true, heartbeatFile: true}
+
+	imports, err := ResolveRustProjectImports(libFile, libFile, supplied, os.ReadFile)
+	require.NoError(t, err)
+	assert.Contains(t, imports, heartbeatFile, "module re-export should reach the submodule file")
+}
