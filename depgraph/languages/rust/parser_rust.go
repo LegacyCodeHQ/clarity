@@ -38,6 +38,11 @@ const (
 type RustImport struct {
 	Path string
 	Kind RustImportKind
+	// Nested is true when the statement was written inside an inner `mod`
+	// block or a function body rather than at file scope. Such an import is
+	// still a real dependency, but it is private to that inner scope — it can
+	// never be a `pub use` re-export of the file's own module.
+	Nested bool
 }
 
 // RustImports parses a Rust file and returns its imports.
@@ -84,10 +89,17 @@ func parseRustImportsFast(sourceCode []byte) ([]RustImport, bool) {
 	var stmt []byte
 
 	depth := 0
+	// Brace depth at which the pending statement started. Statements nested
+	// inside an inner `mod` block or a function body still declare real
+	// coupling, so we parse them too, but relative (`self::`/`super::`) paths
+	// and `mod` declarations mean something different there — see
+	// parseRustImportStatementBytes.
+	stmtDepth := 0
 	// True once we've entered a `{` whose enclosing statement is a `use`. We
 	// then have to preserve the brace group's contents in `stmt` so
-	// `parseTopLevelRustImportStatementBytes` can expand them — unlike other
-	// brace contexts (function bodies, struct literals) which we skip over.
+	// `parseRustImportStatementBytes` can expand them — unlike other brace
+	// contexts (function bodies, struct literals) which start a fresh
+	// statement.
 	inUseBrace := false
 	inLineComment := false
 	inBlockComment := 0
@@ -171,11 +183,15 @@ func parseRustImportsFast(sourceCode []byte) ([]RustImport, bool) {
 
 		switch c {
 		case '{':
-			if depth == 0 {
+			if !inUseBrace {
 				if isLikelyUsePrefix(stmt) {
 					inUseBrace = true
 				} else {
+					// A block that is not a `use` group — a `mod` body, a
+					// function body, a struct literal. Descend into it and
+					// begin a fresh statement at the deeper level.
 					stmt = stmt[:0]
+					stmtDepth = depth + 1
 				}
 			}
 			if inUseBrace {
@@ -189,22 +205,21 @@ func parseRustImportsFast(sourceCode []byte) ([]RustImport, bool) {
 			}
 			if inUseBrace {
 				stmt = append(stmt, c)
-			}
-			continue
-		}
-
-		if depth > 0 {
-			if inUseBrace {
-				stmt = append(stmt, c)
+			} else {
+				// Leaving a block; anything unterminated inside it is not a
+				// statement of the enclosing scope.
+				stmt = stmt[:0]
+				stmtDepth = depth
 			}
 			continue
 		}
 
 		if c == ';' {
-			if imps, ok := parseTopLevelRustImportStatementBytes(stmt); ok {
+			if imps, ok := parseRustImportStatementBytes(stmt, stmtDepth); ok {
 				imports = append(imports, imps...)
 			}
 			stmt = stmt[:0]
+			stmtDepth = depth
 			inUseBrace = false
 			continue
 		}
@@ -221,7 +236,18 @@ func parseRustImportsFast(sourceCode []byte) ([]RustImport, bool) {
 	return imports, true
 }
 
-func parseTopLevelRustImportStatementBytes(stmt []byte) ([]RustImport, bool) {
+// parseRustImportStatementBytes interprets a single statement. depth is the
+// brace depth the statement was written at: 0 is file scope, anything deeper is
+// inside an inner `mod` block or a function body. Nested statements still
+// declare real coupling, but two shapes are scope-sensitive and so are dropped
+// rather than misattributed to the file:
+//
+//   - `self::`/`super::` are relative to the enclosing module. Inside
+//     `mod status { … }`, `super::X` is the file itself, not its parent, so
+//     resolving it as a file-scope path invents an edge to the wrong module.
+//   - `mod foo;` inside an inner module names a file under that module's own
+//     directory, not a sibling of the current file.
+func parseRustImportStatementBytes(stmt []byte, depth int) ([]RustImport, bool) {
 	s := trimSpaceBytes(stmt)
 	if len(s) == 0 {
 		return nil, false
@@ -243,7 +269,10 @@ func parseTopLevelRustImportStatementBytes(stmt []byte) ([]RustImport, bool) {
 			if len(p) == 0 {
 				continue
 			}
-			result = append(result, RustImport{Path: string(p), Kind: RustImportUse})
+			if depth > 0 && isRustModuleRelativePath(p) {
+				continue
+			}
+			result = append(result, RustImport{Path: string(p), Kind: RustImportUse, Nested: depth > 0})
 		}
 		if len(result) == 0 {
 			return nil, false
@@ -254,8 +283,11 @@ func parseTopLevelRustImportStatementBytes(stmt []byte) ([]RustImport, bool) {
 		if len(name) == 0 {
 			return nil, false
 		}
-		return []RustImport{{Path: string(name), Kind: RustImportExternCrate}}, true
+		return []RustImport{{Path: string(name), Kind: RustImportExternCrate, Nested: depth > 0}}, true
 	case bytes.HasPrefix(s, []byte("mod ")):
+		if depth > 0 {
+			return nil, false
+		}
 		name := leadingRustIdentBytes(trimSpaceBytes(s[len("mod "):]))
 		if len(name) == 0 {
 			return nil, false
@@ -264,6 +296,22 @@ func parseTopLevelRustImportStatementBytes(stmt []byte) ([]RustImport, bool) {
 	default:
 		return nil, false
 	}
+}
+
+// isRustModuleRelativePath reports whether a use path is resolved relative to
+// the module it is written in (`self::…`, `super::…`, or a bare `self`/`super`)
+// rather than to the crate root or an external crate.
+func isRustModuleRelativePath(path []byte) bool {
+	for _, prefix := range [][]byte{[]byte("self"), []byte("super")} {
+		if !bytes.HasPrefix(path, prefix) {
+			continue
+		}
+		rest := path[len(prefix):]
+		if len(rest) == 0 || bytes.HasPrefix(rest, []byte("::")) {
+			return true
+		}
+	}
+	return false
 }
 
 func trimSpaceBytes(b []byte) []byte {

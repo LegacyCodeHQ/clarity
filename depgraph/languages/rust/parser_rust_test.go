@@ -52,7 +52,7 @@ use std::fmt;
 	assert.Equal(t, RustImportUse, imports[0].Kind)
 }
 
-func TestParseRustImports_FiltersNestedImports(t *testing.T) {
+func TestParseRustImports_CapturesImportsInFunctionBodies(t *testing.T) {
 	source := `
 use crate::top::level;
 
@@ -65,11 +65,81 @@ mod nested;
 	imports, err := ParseRustImports([]byte(source))
 	require.NoError(t, err)
 
-	assert.Len(t, imports, 2)
-	assert.Equal(t, "crate::top::level", imports[0].Path)
-	assert.Equal(t, RustImportUse, imports[0].Kind)
-	assert.Equal(t, "nested", imports[1].Path)
-	assert.Equal(t, RustImportModDecl, imports[1].Kind)
+	assert.Equal(t, []RustImport{
+		{Path: "crate::top::level", Kind: RustImportUse},
+		{Path: "crate::nested::only", Kind: RustImportUse, Nested: true},
+		{Path: "nested", Kind: RustImportModDecl},
+	}, imports)
+}
+
+// Regression for CLR-22: `use crate::X` inside an inner `mod` block, where the
+// dependency is then reached only through the alias the import binds, produced
+// no import at all.
+func TestParseRustImports_CapturesImportsInNestedModBlocks(t *testing.T) {
+	source := `
+use crate::db;
+
+pub mod status {
+    use crate::daily::{self, Day, IssueSummary};
+
+    pub async fn run() {
+        let activity = daily::load().await;
+    }
+}
+`
+	imports, err := ParseRustImports([]byte(source))
+	require.NoError(t, err)
+
+	assert.Equal(t, []RustImport{
+		{Path: "crate::db", Kind: RustImportUse},
+		{Path: "crate::daily", Kind: RustImportUse, Nested: true},
+		{Path: "crate::daily::Day", Kind: RustImportUse, Nested: true},
+		{Path: "crate::daily::IssueSummary", Kind: RustImportUse, Nested: true},
+		// From the separate qualified-path pass, not the `use` scanner.
+		{Path: "daily::load", Kind: RustImportUse},
+	}, imports)
+}
+
+// `self::` and `super::` are relative to the enclosing module, so inside an
+// inner `mod` block they mean something different than they do at file scope —
+// `super::` there is the file itself, not its parent. Promoting them would
+// invent edges, so nested relative imports are dropped.
+func TestParseRustImports_DropsNestedRelativeImports(t *testing.T) {
+	source := `
+use crate::db;
+
+pub mod status {
+    use super::*;
+    use super::Helper;
+    use self::inner::Thing;
+    use crate::daily::Day;
+}
+`
+	imports, err := ParseRustImports([]byte(source))
+	require.NoError(t, err)
+
+	assert.Equal(t, []RustImport{
+		{Path: "crate::db", Kind: RustImportUse},
+		{Path: "crate::daily::Day", Kind: RustImportUse, Nested: true},
+	}, imports)
+}
+
+// `mod foo;` inside an inner `mod` block resolves relative to that inner
+// module's directory, not the file's, so it is not a file-level mod decl.
+func TestParseRustImports_DropsNestedModDeclarations(t *testing.T) {
+	source := `
+mod top;
+
+pub mod outer {
+    mod inner;
+}
+`
+	imports, err := ParseRustImports([]byte(source))
+	require.NoError(t, err)
+
+	assert.Equal(t, []RustImport{
+		{Path: "top", Kind: RustImportModDecl},
+	}, imports)
 }
 
 func TestParseRustImports_VisibilityAndScopedUseList(t *testing.T) {

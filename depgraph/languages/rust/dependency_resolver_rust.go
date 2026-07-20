@@ -251,6 +251,14 @@ func (r *ProjectImportResolver) resolveRustReExportedSymbol(sourceFile, baseDir 
 		if imp.Kind != RustImportUse {
 			continue
 		}
+		// A re-export has to live at the module file's own scope. An import
+		// inside an inner `mod` block (a `#[cfg(test)] mod tests`, say) is
+		// private to that block and re-exports nothing, so following it here
+		// would attribute the edge to whatever that inner module happened to
+		// import rather than to the prefix module that defines the symbol.
+		if imp.Nested {
+			continue
+		}
 		if lastRustPathSegment(imp.Path) != symbol {
 			continue
 		}
