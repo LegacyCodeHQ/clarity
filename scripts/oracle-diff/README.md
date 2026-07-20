@@ -33,6 +33,12 @@ that Clarity did not, after removing known-intended differences. Treat each as a
 candidate Clarity bug and reproduce it in a minimal fixture before filing; the
 mapping layer here is not authoritative.
 
+Some of these are **oracle artifacts**, not Clarity bugs. On ripgrep the oracle
+reports `core/search.rs -> core/flags/hiargs.rs`, but search.rs contains no
+occurrence of "flags" at all and imports only `std` and external crates — there
+is nothing for Clarity to have missed. Always check the source before believing
+the oracle. "The oracle says so" is not evidence on its own.
+
 **Expected divergences** — `mod X;` declarations. cargo-modules reports these;
 Clarity does not draw them, by design. A `mod` declaration is containment, not
 dependency: if consumers reach the child directly, Clarity already draws that
