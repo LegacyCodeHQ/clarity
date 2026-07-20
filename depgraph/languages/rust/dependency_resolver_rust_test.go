@@ -595,3 +595,28 @@ func TestResolveRustProjectImports_UseCratePathSymbolDoesNotExpandSiblings(t *te
 	assert.NotContains(t, imports, realGitFile, "real_git.rs is a sibling that consumer.rs never references")
 	assert.NotContains(t, imports, submoduleFile, "submodule.rs is a sibling that consumer.rs never references")
 }
+
+// CLR-24: a `pub use` re-export is followed through to the defining file when
+// the module is `foo/mod.rs`, but not when it is `foo.rs` beside a `foo/` dir.
+func TestResolveRustProjectImports_ReExportThroughDirDotRsModule(t *testing.T) {
+	tmpDir := t.TempDir()
+	crateRoot := filepath.Join(tmpDir, "mycrate")
+	srcDir := filepath.Join(crateRoot, "src")
+	require.NoError(t, os.MkdirAll(filepath.Join(srcDir, "facade"), 0755))
+
+	cargoToml := filepath.Join(crateRoot, "Cargo.toml")
+	libFile := filepath.Join(srcDir, "lib.rs")
+	facadeFile := filepath.Join(srcDir, "facade.rs") // owns src/facade/
+	innerFile := filepath.Join(srcDir, "facade", "inner.rs")
+
+	require.NoError(t, os.WriteFile(cargoToml, []byte("[package]\nname = \"mycrate\"\n"), 0644))
+	require.NoError(t, os.WriteFile(libFile, []byte("mod facade;\nuse crate::facade::Thing;\n"), 0644))
+	require.NoError(t, os.WriteFile(facadeFile, []byte("mod inner;\npub use inner::Thing;\n"), 0644))
+	require.NoError(t, os.WriteFile(innerFile, []byte("pub struct Thing;\n"), 0644))
+
+	supplied := map[string]bool{cargoToml: true, libFile: true, facadeFile: true, innerFile: true}
+
+	imports, err := ResolveRustProjectImports(libFile, libFile, supplied, os.ReadFile)
+	require.NoError(t, err)
+	assert.Contains(t, imports, innerFile, "re-export should resolve through to the defining file")
+}

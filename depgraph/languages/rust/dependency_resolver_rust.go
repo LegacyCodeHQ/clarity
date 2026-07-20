@@ -245,7 +245,7 @@ func (r *ProjectImportResolver) resolveRustReExportedSymbol(sourceFile, baseDir 
 		return nil
 	}
 
-	moduleDir := filepath.Dir(moduleFile)
+	moduleDir := rustModuleOwnedDir(moduleFile)
 	var resolved []string
 	for _, imp := range imports {
 		if imp.Kind != RustImportUse {
@@ -751,6 +751,19 @@ func normalizeCargoCrateName(name string) string {
 func isRustDirectoryModuleFile(path string) bool {
 	base := filepath.Base(path)
 	return base == "mod.rs" || base == "lib.rs" || base == "main.rs"
+}
+
+// rustModuleOwnedDir returns the directory whose child modules belong to
+// moduleFile. The two layouts differ: `foo/mod.rs` owns the directory it sits
+// in, while `foo.rs` owns the sibling `foo/` directory. Using filepath.Dir for
+// both resolves `foo.rs`'s children one level too high, so a relative path in
+// a `pub use inner::Thing;` re-export is looked up beside foo.rs instead of
+// inside foo/.
+func rustModuleOwnedDir(moduleFile string) string {
+	if isRustDirectoryModuleFile(moduleFile) {
+		return filepath.Dir(moduleFile)
+	}
+	return strings.TrimSuffix(moduleFile, ".rs")
 }
 
 func firstRustPathSegment(path string) string {
