@@ -670,3 +670,80 @@ func TestResolveRustProjectImports_BareModuleImportKeepsModRs(t *testing.T) {
 	require.NoError(t, err)
 	assert.Contains(t, imports, modFile, "db_path() is defined in config/mod.rs")
 }
+
+// --- CLR-29: crate source root is not always <manifest-dir>/src -------------
+
+// writeRustCrate lays out a crate and returns (cargoToml, suppliedFiles).
+// files maps repo-relative paths to contents.
+func writeRustCrate(t *testing.T, root string, manifest string, files map[string]string) map[string]bool {
+	t.Helper()
+	require.NoError(t, os.MkdirAll(root, 0755))
+	cargoToml := filepath.Join(root, "Cargo.toml")
+	require.NoError(t, os.WriteFile(cargoToml, []byte(manifest), 0644))
+	supplied := map[string]bool{cargoToml: true}
+	for rel, content := range files {
+		full := filepath.Join(root, rel)
+		require.NoError(t, os.MkdirAll(filepath.Dir(full), 0755))
+		require.NoError(t, os.WriteFile(full, []byte(content), 0644))
+		supplied[full] = true
+	}
+	return supplied
+}
+
+// A [[bin]] whose path lives outside src/ (ripgrep's layout).
+func TestResolveRustProjectImports_CustomBinTargetPath(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "mycrate")
+	supplied := writeRustCrate(t, root, `[package]
+name = "mycrate"
+
+[[bin]]
+path = "crates/core/main.rs"
+name = "rg"
+`, map[string]string{
+		"crates/core/main.rs":          "mod flags;\n",
+		"crates/core/flags/mod.rs":     "pub mod lowargs;\npub mod defs;\n",
+		"crates/core/flags/defs.rs":    "use crate::flags::lowargs::BinaryMode;\n",
+		"crates/core/flags/lowargs.rs": "pub struct BinaryMode;\n",
+	})
+
+	src := filepath.Join(root, "crates/core/flags/defs.rs")
+	imports, err := ResolveRustProjectImports(src, src, supplied, os.ReadFile)
+	require.NoError(t, err)
+	assert.Contains(t, imports, filepath.Join(root, "crates/core/flags/lowargs.rs"))
+}
+
+// A [lib] with a custom path.
+func TestResolveRustProjectImports_CustomLibTargetPath(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "mycrate")
+	supplied := writeRustCrate(t, root, `[package]
+name = "mycrate"
+
+[lib]
+path = "lib/entry.rs"
+`, map[string]string{
+		"lib/entry.rs":  "mod helper;\n",
+		"lib/helper.rs": "pub fn help() {}\n",
+		"lib/user.rs":   "use crate::helper::help;\n",
+	})
+
+	src := filepath.Join(root, "lib/user.rs")
+	imports, err := ResolveRustProjectImports(src, src, supplied, os.ReadFile)
+	require.NoError(t, err)
+	assert.Contains(t, imports, filepath.Join(root, "lib/helper.rs"))
+}
+
+// The conventional layout must keep working, including when a manifest
+// declares no explicit target at all.
+func TestResolveRustProjectImports_ConventionalLayoutStillResolves(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "mycrate")
+	supplied := writeRustCrate(t, root, "[package]\nname = \"mycrate\"\n", map[string]string{
+		"src/lib.rs":    "mod helper;\nmod user;\n",
+		"src/helper.rs": "pub fn help() {}\n",
+		"src/user.rs":   "use crate::helper::help;\n",
+	})
+
+	src := filepath.Join(root, "src/user.rs")
+	imports, err := ResolveRustProjectImports(src, src, supplied, os.ReadFile)
+	require.NoError(t, err)
+	assert.Contains(t, imports, filepath.Join(root, "src/helper.rs"))
+}

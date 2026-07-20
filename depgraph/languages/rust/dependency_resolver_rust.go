@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"fmt"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 
@@ -15,6 +16,7 @@ type ProjectImportResolver struct {
 	contentReader vcs.ContentReader
 
 	crateRootCache     sync.Map // directory path -> crate root (or "")
+	targetDirsCache    sync.Map // crate root -> []string (custom target source dirs)
 	crateNameCache     sync.Map // crate root -> map[string]bool
 	depCrateRootsCache sync.Map // crate root -> map[importName]crateRoot
 	modDepsCache       sync.Map // mod.rs path -> []string
@@ -99,7 +101,7 @@ func (r *ProjectImportResolver) resolveRustUsePath(sourceFile, importPath string
 			return nil
 		}
 		crateRoot = root
-		baseDir = filepath.Join(root, "src")
+		baseDir = r.rustCrateSourceDir(root, sourceFile)
 		rootedInLocalCrate = true
 		parts = parts[1:]
 	case "self", "super":
@@ -142,7 +144,7 @@ func (r *ProjectImportResolver) resolveRustUsePath(sourceFile, importPath string
 		parts = strings.Split(path, "::")
 		if r.isLocalRustCrateImport(firstSegment, root) {
 			crateRoot = root
-			baseDir = filepath.Join(root, "src")
+			baseDir = r.rustCrateSourceDir(root, sourceFile)
 			rootedInLocalCrate = true
 		} else if depCrateRoot, ok := r.resolveRustDependencyCrateRoot(firstSegment, root); ok {
 			crateRoot = depCrateRoot
@@ -433,6 +435,80 @@ func (r *ProjectImportResolver) findRustCrateRoot(sourceFile string) (string, bo
 		r.crateRootCache.Store(d, "")
 	}
 	return "", false
+}
+
+// rustCrateSourceDir returns the directory that `crate::` paths resolve
+// against for sourceFile. That is usually <crateRoot>/src, but Cargo lets a
+// [lib] or [[bin]] target set an arbitrary `path`, and then the crate's module
+// tree is rooted at that file's directory instead. ripgrep declares
+// `[[bin]] path = "crates/core/main.rs"` in its top-level manifest, so every
+// `crate::` import under crates/core/ resolved against a src/ that does not
+// exist.
+func (r *ProjectImportResolver) rustCrateSourceDir(crateRoot, sourceFile string) string {
+	defaultDir := filepath.Join(crateRoot, "src")
+	for _, dir := range r.rustCustomTargetDirs(crateRoot) {
+		if dir == defaultDir {
+			continue
+		}
+		if rel, err := filepath.Rel(dir, sourceFile); err == nil &&
+			rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+			return dir
+		}
+	}
+	return defaultDir
+}
+
+// rustCustomTargetDirs lists the source directories of explicitly declared
+// [lib] / [[bin]] targets, most specific first so a nested target wins over an
+// enclosing one.
+func (r *ProjectImportResolver) rustCustomTargetDirs(crateRoot string) []string {
+	if cached, ok := r.targetDirsCache.Load(crateRoot); ok {
+		return cached.([]string)
+	}
+
+	var dirs []string
+	if r.contentReader != nil {
+		if content, err := r.contentReader(filepath.Join(crateRoot, "Cargo.toml")); err == nil {
+			for _, rel := range parseRustTargetPaths(string(content)) {
+				dirs = append(dirs, filepath.Dir(filepath.Join(crateRoot, rel)))
+			}
+		}
+	}
+	sort.Slice(dirs, func(i, j int) bool { return len(dirs[i]) > len(dirs[j]) })
+
+	r.targetDirsCache.Store(crateRoot, dirs)
+	return dirs
+}
+
+// parseRustTargetPaths pulls the `path = "..."` of every [lib] and [[bin]]
+// section out of a Cargo.toml. Only those sections are considered — a `path`
+// under [dependencies.foo] means something else entirely.
+func parseRustTargetPaths(content string) []string {
+	var paths []string
+	inTargetSection := false
+
+	for _, line := range strings.Split(content, "\n") {
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "#") {
+			continue
+		}
+		if strings.HasPrefix(trimmed, "[") {
+			section := strings.Trim(trimmed, "[]")
+			inTargetSection = section == "lib" || section == "bin"
+			continue
+		}
+		if !inTargetSection {
+			continue
+		}
+		key, value, found := strings.Cut(trimmed, "=")
+		if !found || strings.TrimSpace(key) != "path" {
+			continue
+		}
+		if p := strings.Trim(strings.TrimSpace(value), `"'`); p != "" {
+			paths = append(paths, filepath.FromSlash(p))
+		}
+	}
+	return paths
 }
 
 func (r *ProjectImportResolver) isLocalRustCrateImport(firstSegment, crateRoot string) bool {
