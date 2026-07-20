@@ -271,3 +271,17 @@ func TestParseRustImports_RawStringContentIsNotAReference(t *testing.T) {
 		assert.NotContains(t, imp.Path, "ghost", "raw string content must not produce edges")
 	}
 }
+
+// CLR-28: when the scanner fails, fall back to tree-sitter rather than
+// reporting an empty import set.
+func TestParseRustImports_FallsBackWhenScannerFails(t *testing.T) {
+	// An unterminated string leaves the scanner unbalanced by construction.
+	source := "use crate::alpha::Thing;\nfn f() { let s = \"unterminated;\n"
+	_, ok := parseRustImportsFast([]byte(source))
+	require.False(t, ok, "precondition: scanner must fail on this input")
+
+	imports, err := ParseRustImports([]byte(source))
+	require.NoError(t, err)
+	assert.Contains(t, imports, RustImport{Path: "crate::alpha::Thing", Kind: RustImportUse},
+		"top-level use should survive via the tree-sitter fallback")
+}

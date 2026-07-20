@@ -59,9 +59,16 @@ func RustImports(filePath string) ([]RustImport, error) {
 func ParseRustImports(sourceCode []byte) ([]RustImport, error) {
 	var imports []RustImport
 
+	// The byte scanner is the default; tree-sitter is the fallback when it
+	// cannot lex the file, matching what python/typescript/javascript do with
+	// their own fast paths. Ignoring `ok` here turned any construct the
+	// scanner does not model into a silent, whole-file loss of `use` edges,
+	// indistinguishable from a file that genuinely imports nothing.
+	fastOK := false
 	if os.Getenv("CLARITY_RUST_IMPORTS_PARSER") != "tree" {
-		imports, _ = parseRustImportsFast(sourceCode)
-	} else {
+		imports, fastOK = parseRustImportsFast(sourceCode)
+	}
+	if !fastOK {
 		parser, _ := rustParserPool.Get().(*sitter.Parser)
 		if parser == nil {
 			parser = sitter.NewParser()
