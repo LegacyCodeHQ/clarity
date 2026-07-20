@@ -645,3 +645,28 @@ func TestResolveRustProjectImports_ModuleReExport(t *testing.T) {
 	require.NoError(t, err)
 	assert.Contains(t, imports, heartbeatFile, "module re-export should reach the submodule file")
 }
+
+// CLR-25: `use crate::foo;` where foo/mod.rs defines the items being used must
+// yield an edge to mod.rs itself, not only to its children.
+func TestResolveRustProjectImports_BareModuleImportKeepsModRs(t *testing.T) {
+	tmpDir := t.TempDir()
+	crateRoot := filepath.Join(tmpDir, "mycrate")
+	srcDir := filepath.Join(crateRoot, "src")
+	require.NoError(t, os.MkdirAll(filepath.Join(srcDir, "config"), 0755))
+
+	cargoToml := filepath.Join(crateRoot, "Cargo.toml")
+	libFile := filepath.Join(srcDir, "lib.rs")
+	modFile := filepath.Join(srcDir, "config", "mod.rs")
+	typesFile := filepath.Join(srcDir, "config", "types.rs")
+
+	require.NoError(t, os.WriteFile(cargoToml, []byte("[package]\nname = \"mycrate\"\n"), 0644))
+	require.NoError(t, os.WriteFile(libFile, []byte("use crate::config;\nfn f() { config::db_path(); }\n"), 0644))
+	require.NoError(t, os.WriteFile(modFile, []byte("pub mod types;\npub fn db_path() {}\n"), 0644))
+	require.NoError(t, os.WriteFile(typesFile, []byte("pub struct AppConfig;\n"), 0644))
+
+	supplied := map[string]bool{cargoToml: true, libFile: true, modFile: true, typesFile: true}
+
+	imports, err := ResolveRustProjectImports(libFile, libFile, supplied, os.ReadFile)
+	require.NoError(t, err)
+	assert.Contains(t, imports, modFile, "db_path() is defined in config/mod.rs")
+}

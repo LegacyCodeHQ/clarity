@@ -534,12 +534,14 @@ func (r *ProjectImportResolver) expandRustModRsCandidates(candidates []string) [
 			continue
 		}
 
-		modChildren := r.expandRustModRsDependencies(candidate)
-		if len(modChildren) == 0 {
-			expanded = append(expanded, candidate)
-			continue
-		}
-		expanded = append(expanded, modChildren...)
+		// Keep the mod.rs itself as well as its children. A bare
+		// `use crate::config;` names the module file directly, and the items
+		// reached through it (`config::db_path()`) are as likely to be defined
+		// in mod.rs as re-exported from a child. Dropping mod.rs here pointed
+		// the edge at a child that defines nothing the importer uses, while
+		// omitting the file that does.
+		expanded = append(expanded, candidate)
+		expanded = append(expanded, r.expandRustModRsDependencies(candidate)...)
 	}
 
 	return expanded
