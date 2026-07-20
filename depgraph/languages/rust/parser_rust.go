@@ -169,6 +169,10 @@ func parseRustImportsFast(sourceCode []byte) ([]RustImport, bool) {
 			i++
 			continue
 		}
+		if end, isRaw := skipRustRawString(sourceCode, i); isRaw {
+			i = end - 1 // the loop's i++ lands just past the closing delimiter
+			continue
+		}
 		if c == '"' {
 			inString = true
 			continue
@@ -521,6 +525,62 @@ func isLikelyUsePrefix(stmt []byte) bool {
 	return bytes.Contains(stmt, []byte("use "))
 }
 
+// skipRustRawString reports whether a raw string literal starts at i and, if
+// so, returns the index just past its closing delimiter. Raw strings have no
+// escape processing and are terminated by a quote followed by the same number
+// of hashes that opened them: r"..", r#".."#, r###"..."###, and the byte
+// variants br"..", br#".."#.
+//
+// Without this the scanner treats the opening quote as an ordinary string,
+// mis-tracks the terminator, and can end the file in an unbalanced state — at
+// which point every `use` in that file is lost.
+func skipRustRawString(sourceCode []byte, i int) (int, bool) {
+	start := i
+	if sourceCode[i] == 'b' {
+		i++
+		if i >= len(sourceCode) {
+			return 0, false
+		}
+	}
+	if sourceCode[i] != 'r' {
+		return 0, false
+	}
+	// `r` must begin a token — otherwise this is the tail of an identifier
+	// such as `for` or `my_var`.
+	if start > 0 && isRustIdentChar(sourceCode[start-1]) {
+		return 0, false
+	}
+	i++
+
+	hashes := 0
+	for i < len(sourceCode) && sourceCode[i] == '#' {
+		hashes++
+		i++
+	}
+	if i >= len(sourceCode) || sourceCode[i] != '"' {
+		return 0, false
+	}
+	i++
+
+	for i < len(sourceCode) {
+		if sourceCode[i] != '"' {
+			i++
+			continue
+		}
+		i++
+		closing := 0
+		for closing < hashes && i+closing < len(sourceCode) && sourceCode[i+closing] == '#' {
+			closing++
+		}
+		if closing == hashes {
+			return i + hashes, true
+		}
+	}
+	// Unterminated raw string: consume to EOF rather than reverting to
+	// ordinary-string scanning, which would misread everything after it.
+	return len(sourceCode), true
+}
+
 func parseRustQualifiedPathRefsFast(sourceCode []byte) []RustImport {
 	cleaned := sanitizeRustSourceForPathMatching(sourceCode)
 	matches := rustQualifiedPathPattern.FindAllIndex(cleaned, -1)
@@ -629,6 +689,17 @@ func sanitizeRustSourceForPathMatching(sourceCode []byte) []byte {
 			cleaned[i+1] = ' '
 			inBlockComment = 1
 			i++
+			continue
+		}
+		if end, isRaw := skipRustRawString(sourceCode, i); isRaw {
+			// Blank the whole literal so `crate::x` written inside a raw
+			// string is treated as data, not as a path reference.
+			for j := i; j < end; j++ {
+				if cleaned[j] != '\n' {
+					cleaned[j] = ' '
+				}
+			}
+			i = end - 1
 			continue
 		}
 		if c == '"' {

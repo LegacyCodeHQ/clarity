@@ -238,3 +238,36 @@ fn run() {
 	assert.Contains(t, imports, importKey("s8_parser::analyze", RustImportUse))
 	assert.Contains(t, imports, importKey("s8_flow::build_flow_graph", RustImportUse))
 }
+
+// CLR-27: a raw string literal left the scanner unbalanced, so every `use` in
+// the file was dropped.
+func TestParseRustImports_RawStringLiterals(t *testing.T) {
+	cases := []struct {
+		name string
+		body string
+	}{
+		{"hashed with embedded quote", "let s = r#\"a \" b\"#;"},
+		{"plain raw", "let s = r\"C:\\path\";"},
+		{"multi hash", "let s = r###\"has \"# inside\"###;"},
+		{"byte raw", "let s = br#\"bytes \" here\"#;"},
+		{"shebang", "let s = r#\"#!/bin/sh\necho hi\"#;"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			source := "use crate::alpha::Thing;\n\nfn f() {\n    " + tc.body + "\n}\n"
+			imports, ok := parseRustImportsFast([]byte(source))
+			require.True(t, ok, "scanner should end balanced")
+			assert.Equal(t, []RustImport{{Path: "crate::alpha::Thing", Kind: RustImportUse}}, imports)
+		})
+	}
+}
+
+// CLR-27: `crate::` text inside a raw string is data, not a reference.
+func TestParseRustImports_RawStringContentIsNotAReference(t *testing.T) {
+	source := "use crate::alpha::Thing;\nfn f() { let s = r#\"see crate::ghost::Missing here\"#; }\n"
+	imports, err := ParseRustImports([]byte(source))
+	require.NoError(t, err)
+	for _, imp := range imports {
+		assert.NotContains(t, imp.Path, "ghost", "raw string content must not produce edges")
+	}
+}
