@@ -384,3 +384,48 @@ struct DependencyGraphView: View {
 	require.NoError(t, err)
 	assert.ElementsMatch(t, []string{modelsPath, viewPath}, imports)
 }
+
+func TestResolveSwiftProjectImports_ExtensionMethodReference(t *testing.T) {
+	// CLR-31: a file that calls a method defined only in an extension body in
+	// another file must produce a file->file edge. Mirrors the Strata repro
+	// where UserFlowParser.swift calls parseStatusBlockLine/openStatusBlock/
+	// isStatusOpener defined in UserFlowParser+Resolve.swift (an extension-only
+	// file), yet that file showed zero incoming edges.
+	tmpDir := t.TempDir()
+	appDir := filepath.Join(tmpDir, "Sources", "StrataKit")
+	require.NoError(t, os.MkdirAll(appDir, 0o755))
+
+	extensionPath := filepath.Join(appDir, "Parser+Resolve.swift")
+	require.NoError(t, os.WriteFile(extensionPath, []byte(`
+import Foundation
+
+extension Parser {
+    mutating func parseStatusBlockLine(_ raw: String, line: Int) {}
+
+    static func isStatusOpener(_ raw: String) -> Bool { return false }
+}
+`), 0o644))
+
+	consumerPath := filepath.Join(appDir, "Parser.swift")
+	require.NoError(t, os.WriteFile(consumerPath, []byte(`
+import Foundation
+
+struct Parser {
+    mutating func run(_ raw: String, line: Int) {
+        if Self.isStatusOpener(raw) {
+            parseStatusBlockLine(raw, line: line)
+        }
+    }
+}
+`), 0o644))
+
+	reader := vcs.FilesystemContentReader()
+	supplied := map[string]bool{
+		extensionPath: true,
+		consumerPath:  true,
+	}
+
+	imports, err := ResolveSwiftProjectImports(consumerPath, consumerPath, supplied, reader)
+	require.NoError(t, err)
+	assert.ElementsMatch(t, []string{extensionPath}, imports)
+}

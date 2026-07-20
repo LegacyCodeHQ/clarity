@@ -131,10 +131,18 @@ func ParseSwiftTopLevelSymbolNames(sourceCode []byte) []string {
 	root := tree.RootNode()
 	for i := 0; i < int(root.ChildCount()); i++ {
 		child := root.Child(i)
-		if !isTopLevelSwiftSymbolDeclaration(child) {
+		var childNames []string
+		switch {
+		case isSwiftExtensionDeclaration(child):
+			// An extension declares nothing of its own name, but its body
+			// members are referenceable across files (CLR-31).
+			childNames = swiftExtensionMemberNames(child, sourceCode)
+		case isTopLevelSwiftSymbolDeclaration(child):
+			childNames = swiftDeclarationNames(child, sourceCode)
+		default:
 			continue
 		}
-		for _, name := range swiftDeclarationNames(child, sourceCode) {
+		for _, name := range childNames {
 			if name == "" || seen[name] {
 				continue
 			}
@@ -481,6 +489,55 @@ func firstDirectChildContent(node *sitter.Node, sourceCode []byte, types ...stri
 		}
 	}
 	return ""
+}
+
+func firstDirectChildOfType(node *sitter.Node, types ...string) *sitter.Node {
+	if node == nil {
+		return nil
+	}
+	typeSet := make(map[string]bool, len(types))
+	for _, t := range types {
+		typeSet[t] = true
+	}
+	for i := 0; i < int(node.ChildCount()); i++ {
+		child := node.Child(i)
+		if child != nil && typeSet[child.Type()] {
+			return child
+		}
+	}
+	return nil
+}
+
+// swiftExtensionMemberNames collects the names of members declared directly in
+// an extension body: the methods, computed properties, nested types, and
+// typealiases the extension adds to the extended type. These are what other
+// files reference when they use the extension (CLR-31), so an extension-only
+// file must contribute them to the declaration index. The extended type name
+// itself is deliberately not collected — `extension Foo` is a *reference* to
+// Foo, not a declaration of it (mirrors collectSwiftDeclaredNames). Only direct
+// body members are collected, not function-local declarations inside method
+// bodies, matching the one-level scope of the top-level collection.
+func swiftExtensionMemberNames(extNode *sitter.Node, sourceCode []byte) []string {
+	body := firstDirectChildOfType(extNode, "class_body", "enum_class_body")
+	if body == nil {
+		return nil
+	}
+	var names []string
+	for i := 0; i < int(body.ChildCount()); i++ {
+		member := body.Child(i)
+		if member == nil {
+			continue
+		}
+		if isSwiftExtensionDeclaration(member) {
+			// A nested extension adds members to some other type; recurse.
+			names = append(names, swiftExtensionMemberNames(member, sourceCode)...)
+			continue
+		}
+		if isSwiftDeclarationNode(member) {
+			names = append(names, swiftDeclarationNames(member, sourceCode)...)
+		}
+	}
+	return names
 }
 
 func isSwiftReferenceNode(node *sitter.Node) bool {
