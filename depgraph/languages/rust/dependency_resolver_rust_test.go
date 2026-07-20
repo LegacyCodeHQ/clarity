@@ -747,3 +747,52 @@ func TestResolveRustProjectImports_ConventionalLayoutStillResolves(t *testing.T)
 	require.NoError(t, err)
 	assert.Contains(t, imports, filepath.Join(root, "src/helper.rs"))
 }
+
+// --- CLR-30: crate-root re-exported symbols --------------------------------
+
+func TestResolveRustProjectImports_CrateRootReExportReachesDefiningFile(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "mycrate")
+	supplied := writeRustCrate(t, root, "[package]\nname = \"mycrate\"\n", map[string]string{
+		"src/lib.rs":      "mod consumer;\nmod walk;\npub use crate::walk::Match;\n",
+		"src/walk.rs":     "pub struct Match;\n",
+		"src/consumer.rs": "use crate::Match;\n",
+	})
+
+	src := filepath.Join(root, "src/consumer.rs")
+	imports, err := ResolveRustProjectImports(src, src, supplied, os.ReadFile)
+	require.NoError(t, err)
+	assert.Contains(t, imports, filepath.Join(root, "src/walk.rs"),
+		"should reach the file defining Match")
+	assert.NotContains(t, imports, filepath.Join(root, "src/lib.rs"),
+		"lib.rs is a conduit here; attributing the dep to it manufactures a cycle")
+}
+
+// A symbol genuinely defined in lib.rs must still resolve to lib.rs.
+func TestResolveRustProjectImports_CrateRootOwnSymbolStillResolvesToLibRs(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "mycrate")
+	supplied := writeRustCrate(t, root, "[package]\nname = \"mycrate\"\n", map[string]string{
+		"src/lib.rs":      "mod consumer;\npub struct Config;\n",
+		"src/consumer.rs": "use crate::Config;\n",
+	})
+
+	src := filepath.Join(root, "src/consumer.rs")
+	imports, err := ResolveRustProjectImports(src, src, supplied, os.ReadFile)
+	require.NoError(t, err)
+	assert.Contains(t, imports, filepath.Join(root, "src/lib.rs"))
+}
+
+// Re-export chains: lib.rs -> mod.rs -> leaf.
+func TestResolveRustProjectImports_CrateRootReExportThroughModule(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "mycrate")
+	supplied := writeRustCrate(t, root, "[package]\nname = \"mycrate\"\n", map[string]string{
+		"src/lib.rs":        "mod consumer;\nmod walk;\npub use crate::walk::Match;\n",
+		"src/walk/mod.rs":   "mod inner;\npub use inner::Match;\n",
+		"src/walk/inner.rs": "pub struct Match;\n",
+		"src/consumer.rs":   "use crate::Match;\n",
+	})
+
+	src := filepath.Join(root, "src/consumer.rs")
+	imports, err := ResolveRustProjectImports(src, src, supplied, os.ReadFile)
+	require.NoError(t, err)
+	assert.Contains(t, imports, filepath.Join(root, "src/walk/inner.rs"))
+}

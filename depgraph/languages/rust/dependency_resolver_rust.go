@@ -187,6 +187,16 @@ resolved:
 		return deduplicateSuppliedFiles(candidates, r.suppliedFiles)
 	}
 	if rootedInLocalCrate && len(parts) == 1 && len(candidates) == 0 {
+		// `use crate::Symbol` — a single segment, so the symbol-path branch
+		// above (guarded on len(parts) > 1) never ran. Check the crate root's
+		// own `pub use` re-exports before assuming the symbol is defined
+		// there: flattening a public API through lib.rs is the standard
+		// library shape, and attributing every consumer's dependency to lib.rs
+		// both loses the real edge and manufactures a cycle, since lib.rs
+		// depends on those consumers in turn.
+		if reExported := r.resolveRustReExportedSymbol(sourceFile, baseDir, parts); len(reExported) > 0 {
+			return reExported
+		}
 		candidates = append(candidates, resolveRustCrateRootCandidates(crateRoot, r.suppliedFiles)...)
 	}
 
