@@ -56,7 +56,9 @@ func TestNewFileDependencyGraph_DetectsCycles(t *testing.T) {
 	require.NoError(t, err)
 
 	require.Len(t, fileGraph.Meta.Cycles, 1)
+	assert.Empty(t, fileGraph.Meta.Cycles[0].BreakSets)
 	assert.Equal(t, []string{"/project/a.go", "/project/b.go", "/project/c.go"}, fileGraph.Meta.Cycles[0].Path)
+	assert.Equal(t, []string{"/project/a.go", "/project/b.go", "/project/c.go"}, fileGraph.Meta.Cycles[0].Nodes)
 
 	assert.True(t, fileGraph.Meta.Edges[depgraph.FileEdge{From: "/project/a.go", To: "/project/b.go"}].InCycle)
 	assert.True(t, fileGraph.Meta.Edges[depgraph.FileEdge{From: "/project/b.go", To: "/project/c.go"}].InCycle)
@@ -79,4 +81,21 @@ func TestNewFileDependencyGraph_MarksAllEdgesInCyclicSCC(t *testing.T) {
 	assert.True(t, fileGraph.Meta.Edges[depgraph.FileEdge{From: "/project/b.go", To: "/project/a.go"}].InCycle)
 	assert.True(t, fileGraph.Meta.Edges[depgraph.FileEdge{From: "/project/a.go", To: "/project/c.go"}].InCycle)
 	assert.True(t, fileGraph.Meta.Edges[depgraph.FileEdge{From: "/project/c.go", To: "/project/a.go"}].InCycle)
+}
+
+func TestNewFileDependencyGraph_CompleteComponent(t *testing.T) {
+	graph := depgraph.MustDependencyGraph(map[string][]string{
+		"/project/a.go": {"/project/b.go", "/project/c.go"},
+		"/project/b.go": {"/project/a.go"},
+		"/project/c.go": {"/project/a.go"},
+	})
+
+	fileGraph, err := depgraph.NewFileDependencyGraph(graph, nil, nil)
+	require.NoError(t, err)
+
+	require.Len(t, fileGraph.Meta.Cycles, 1)
+	component := fileGraph.Meta.Cycles[0]
+	assert.Equal(t, []string{"/project/a.go", "/project/b.go", "/project/c.go"}, component.Nodes)
+	assert.Len(t, component.Edges, 4)
+	assert.Equal(t, []string{"/project/a.go", "/project/b.go"}, component.Path)
 }

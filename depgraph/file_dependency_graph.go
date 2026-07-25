@@ -77,8 +77,8 @@ type PhantomMetadata struct {
 
 // FileEdge identifies a directed edge between two files.
 type FileEdge struct {
-	From string
-	To   string
+	From string `json:"from"`
+	To   string `json:"to"`
 }
 
 // EdgeState describes whether a rendered dependency exists in the current tree
@@ -95,11 +95,26 @@ const (
 type EdgeMetadata struct {
 	InCycle bool
 	State   EdgeState
+	// Evidence explains the source-level relationship that produced this edge.
+	Evidence []DependencyEvidence
 }
 
-// FileCycle describes a representative cycle path for a cyclic SCC.
+// CycleBreakSet is a verified set of edges whose removal makes one cyclic
+// component acyclic.
+type CycleBreakSet struct {
+	Edges []FileEdge
+}
+
+// FileCycle describes one cyclic strongly connected component. Path is one
+// deterministic representative loop; Nodes and Edges describe the complete
+// component. BreakSets contains exact alternative minima for bounded
+// components and a single verified heuristic result for larger components.
 type FileCycle struct {
-	Path []string
+	Path          []string
+	Nodes         []string
+	Edges         []FileEdge
+	BreakSets     []CycleBreakSet
+	BreakSetExact bool
 }
 
 // NewFileDependencyGraph creates a file-annotated graph from a dependency graph, optional file stats,
@@ -225,6 +240,13 @@ func findCyclesAndCycleEdges(adjacency map[string][]string) ([]FileCycle, map[Fi
 				}
 			}
 		}
+		componentEdges := []FileEdge{}
+		for edge := range cycleEdges {
+			if allowed[edge.From] && allowed[edge.To] {
+				componentEdges = append(componentEdges, edge)
+			}
+		}
+		sortFileEdges(componentEdges)
 
 		pathWithClosure := canonicalCyclePath(adjacency, scc)
 		if len(pathWithClosure) < 2 {
@@ -232,7 +254,11 @@ func findCyclesAndCycleEdges(adjacency map[string][]string) ([]FileCycle, map[Fi
 		}
 
 		cyclePath := append([]string(nil), pathWithClosure[:len(pathWithClosure)-1]...)
-		cycles = append(cycles, FileCycle{Path: cyclePath})
+		cycles = append(cycles, FileCycle{
+			Path:  cyclePath,
+			Nodes: append([]string(nil), scc...),
+			Edges: componentEdges,
+		})
 
 	}
 
