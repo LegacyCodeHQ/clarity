@@ -3,6 +3,7 @@
 package cycles
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
@@ -12,6 +13,7 @@ import (
 
 	"github.com/LegacyCodeHQ/clarity/cmd/show/formatters"
 	"github.com/LegacyCodeHQ/clarity/depgraph"
+	"github.com/LegacyCodeHQ/clarity/depgraph/explain"
 	"github.com/LegacyCodeHQ/clarity/depgraph/registry"
 	"github.com/LegacyCodeHQ/clarity/vcs"
 	"github.com/spf13/cobra"
@@ -26,22 +28,27 @@ var Cmd = NewCommand()
 func NewCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "cycles [path...]",
-		Short: "List circular dependencies within a scope (experimental)",
-		Long: `List circular dependencies between files within a scope.
+		Short: "Analyze cyclic components and break sets (experimental)",
+		Long: `List cyclic dependency components between files within a scope.
 
 Scopes to the directories (or files) you pass, defaulting to the current
-directory, and reports every cyclic group of files found within that scope.
-Use it to audit a module you own without walking it directory by directory.
+directory, and reports every strongly connected group found within that scope.
+Each component includes one representative loop and a verified set of dependency
+edges that can be removed to make the component acyclic. Bounded components
+receive exact minimum sets; larger ones receive a labelled heuristic.
 
-With --url, each cycle is rendered as its own focused diagram and the command
-emits a shareable visualization URL beneath it.
+With --url, each complete component is rendered as its own focused diagram and
+the command emits a shareable visualization URL beneath it.
 
 This command is experimental; its output may change.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runCycles(cmd, args)
 		},
 	}
-	cmd.Flags().BoolP("url", "u", false, "Emit a visualization URL for each cycle")
+	cmd.Flags().BoolP("url", "u", false, "Emit a visualization URL for each component")
+	cmd.Flags().Bool("explain", false, "Show every internal edge, evidence, and break alternative")
+	cmd.Flags().Bool("code-only", false, "Exclude documentation relationships (Markdown files)")
+	cmd.Flags().StringP("format", "f", "human", "Output format: human or json")
 	return cmd
 }
 
@@ -51,10 +58,23 @@ func runCycles(cmd *cobra.Command, args []string) error {
 		inputs = []string{"."}
 	}
 	emitURL, _ := cmd.Flags().GetBool("url")
+	explainOutput, _ := cmd.Flags().GetBool("explain")
+	codeOnly, _ := cmd.Flags().GetBool("code-only")
+	outputFormat, _ := cmd.Flags().GetString("format")
+	outputFormat = strings.ToLower(outputFormat)
+	if outputFormat != "human" && outputFormat != "json" {
+		return fmt.Errorf("unsupported format %q (expected human or json)", outputFormat)
+	}
+	if emitURL && outputFormat == "json" {
+		return fmt.Errorf("--url cannot be combined with --format json")
+	}
 
 	files, err := expandInputs(inputs)
 	if err != nil {
 		return err
+	}
+	if codeOnly {
+		files = filterCodeFiles(files)
 	}
 
 	contentReader := vcs.FilesystemContentReader()
@@ -67,24 +87,41 @@ func runCycles(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return fmt.Errorf("failed to analyze dependency graph: %w", err)
 	}
+	depgraph.AnalyzeCycleBreakSets(fileGraph.Meta.Cycles)
+	explain.AttachEvidence(&fileGraph, contentReader)
+	rankBreakSets(fileGraph.Meta.Cycles, fileGraph.Meta.Edges)
 
 	out := cmd.OutOrStdout()
 	scope := strings.Join(inputs, ", ")
 	base := scopeBase(inputs)
-	items := renderCycles(fileGraph.Meta.Cycles, base)
+	items := renderCycles(fileGraph.Meta.Cycles, fileGraph.Meta.Edges, base)
+
+	if outputFormat == "json" {
+		return renderJSON(out, scope, base, codeOnly, items)
+	}
 
 	if len(items) == 0 {
-		fmt.Fprintf(out, "No cycles found in %s.\n", scope)
+		fmt.Fprintf(out, "No cyclic components found in %s.\n", scope)
 		return nil
 	}
 
-	noun := "cycles"
+	noun := "cyclic components"
 	if len(items) == 1 {
-		noun = "cycle"
+		noun = "cyclic component"
 	}
 	fmt.Fprintf(out, "Found %d %s in %s:\n\n", len(items), noun, scope)
 	for i, item := range items {
-		fmt.Fprintf(out, "  %d. %s\n", i+1, item.line)
+		fmt.Fprintf(
+			out,
+			"  %d. %d files, %d internal dependencies\n",
+			i+1,
+			len(item.component.Nodes),
+			len(item.component.Edges))
+		fmt.Fprintf(out, "     Representative loop: %s\n", item.line)
+		renderBreakSummary(out, item, base, explainOutput)
+		if explainOutput {
+			renderEvidence(out, item, base)
+		}
 		if emitURL {
 			url, err := cycleURL(item.files, base, contentReader)
 			if err != nil {
@@ -96,16 +133,86 @@ func runCycles(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
+// rankBreakSets keeps minimum cardinality as the primary guarantee, then
+// orders equivalent alternatives by evidence confidence and reference count.
+// A low-confidence edge is worth investigating before a high-confidence code
+// dependency; among equally trustworthy edges, fewer references imply a
+// smaller likely edit.
+func rankBreakSets(
+	components []depgraph.FileCycle,
+	metadata map[depgraph.FileEdge]depgraph.EdgeMetadata,
+) {
+	for index := range components {
+		sort.SliceStable(components[index].BreakSets, func(i, j int) bool {
+			leftConfidence, leftReferences := breakSetCost(
+				components[index].BreakSets[i],
+				metadata)
+			rightConfidence, rightReferences := breakSetCost(
+				components[index].BreakSets[j],
+				metadata)
+			if leftConfidence != rightConfidence {
+				return leftConfidence < rightConfidence
+			}
+			if leftReferences != rightReferences {
+				return leftReferences < rightReferences
+			}
+			return breakSetKey(components[index].BreakSets[i]) <
+				breakSetKey(components[index].BreakSets[j])
+		})
+	}
+}
+
+func breakSetCost(
+	breakSet depgraph.CycleBreakSet,
+	metadata map[depgraph.FileEdge]depgraph.EdgeMetadata,
+) (int, int) {
+	confidenceCost := 0
+	referenceCost := 0
+	for _, edge := range breakSet.Edges {
+		evidence := metadata[edge].Evidence
+		if len(evidence) == 0 {
+			confidenceCost++
+			referenceCost++
+			continue
+		}
+		referenceCost += len(evidence)
+		for _, item := range evidence {
+			switch item.Confidence {
+			case depgraph.EvidenceConfidenceLow:
+			case depgraph.EvidenceConfidenceMedium:
+				confidenceCost++
+			case depgraph.EvidenceConfidenceHigh:
+				confidenceCost += 2
+			}
+		}
+	}
+	return confidenceCost, referenceCost
+}
+
+func breakSetKey(breakSet depgraph.CycleBreakSet) string {
+	var parts []string
+	for _, edge := range breakSet.Edges {
+		parts = append(parts, edge.From+"\x00"+edge.To)
+	}
+	return strings.Join(parts, "\x01")
+}
+
 // renderedCycle pairs a cycle's display line with the files it spans, so a
 // per-cycle diagram can be rendered for the same cycle the line describes.
 type renderedCycle struct {
-	line  string
-	files []string
+	line      string
+	files     []string
+	component depgraph.FileCycle
+	metadata  map[depgraph.FileEdge]depgraph.EdgeMetadata
 }
 
 // renderCycles turns detected cycles into display items, each line closing the
 // loop back to its first file (a → b → a). Sorted for deterministic output.
-func renderCycles(cycles []depgraph.FileCycle, base string) []renderedCycle {
+func renderCycles(
+	cycles []depgraph.FileCycle,
+	metadata map[depgraph.FileEdge]depgraph.EdgeMetadata,
+	base string,
+) []renderedCycle {
 	items := make([]renderedCycle, 0, len(cycles))
 	for _, cycle := range cycles {
 		if len(cycle.Path) < 2 {
@@ -117,12 +224,185 @@ func renderCycles(cycles []depgraph.FileCycle, base string) []renderedCycle {
 		}
 		names = append(names, relName(base, cycle.Path[0]))
 		items = append(items, renderedCycle{
-			line:  strings.Join(names, cycleArrow),
-			files: cycle.Path,
+			line:      strings.Join(names, cycleArrow),
+			files:     cycle.Nodes,
+			component: cycle,
+			metadata:  metadata,
 		})
 	}
 	sort.Slice(items, func(i, j int) bool { return items[i].line < items[j].line })
 	return items
+}
+
+func renderBreakSummary(out interface{ Write([]byte) (int, error) }, item renderedCycle, base string, explainOutput bool) {
+	if len(item.component.BreakSets) == 0 {
+		return
+	}
+	mode := "heuristic"
+	if item.component.BreakSetExact {
+		mode = "exact"
+	}
+	first := item.component.BreakSets[0]
+	label := "Verified break set"
+	if item.component.BreakSetExact {
+		label = "Smallest break set"
+	}
+	fmt.Fprintf(out, "     %s (%s, %d %s):\n", label, mode, len(first.Edges), pluralEdge(len(first.Edges)))
+	for _, edge := range first.Edges {
+		fmt.Fprintf(out, "       - %s\n", renderEdge(edge, base))
+	}
+	if !explainOutput && len(item.component.BreakSets) > 1 {
+		fmt.Fprintf(
+			out,
+			"     %d retained equivalent minimum alternatives; use --explain to show all.\n",
+			len(item.component.BreakSets)-1)
+	}
+	if explainOutput {
+		for index, alternative := range item.component.BreakSets[1:] {
+			fmt.Fprintf(out, "     Alternative %d:\n", index+2)
+			for _, edge := range alternative.Edges {
+				fmt.Fprintf(out, "       - %s\n", renderEdge(edge, base))
+			}
+		}
+	}
+}
+
+func renderEvidence(out interface{ Write([]byte) (int, error) }, item renderedCycle, base string) {
+	fmt.Fprintln(out, "     Internal dependencies:")
+	for _, edge := range item.component.Edges {
+		fmt.Fprintf(out, "       - %s\n", renderEdge(edge, base))
+		for _, evidence := range item.metadata[edge].Evidence {
+			reference := relName(base, evidence.ReferenceFile)
+			if evidence.ReferenceLine > 0 {
+				reference = fmt.Sprintf("%s:%d", reference, evidence.ReferenceLine)
+			}
+			declaration := relName(base, evidence.DeclarationFile)
+			if evidence.DeclarationLine > 0 {
+				declaration = fmt.Sprintf("%s:%d", declaration, evidence.DeclarationLine)
+			}
+			symbol := evidence.Symbol
+			if symbol == "" {
+				symbol = "(file relationship)"
+			}
+			fmt.Fprintf(
+				out,
+				"         %s %q at %s → %s [%s]\n",
+				evidence.Kind,
+				symbol,
+				reference,
+				declaration,
+				evidence.Confidence)
+		}
+	}
+}
+
+func renderEdge(edge depgraph.FileEdge, base string) string {
+	return relName(base, edge.From) + cycleArrow + relName(base, edge.To)
+}
+
+func pluralEdge(count int) string {
+	if count == 1 {
+		return "edge"
+	}
+	return "edges"
+}
+
+type jsonCyclesOutput struct {
+	Scope      string               `json:"scope"`
+	CodeOnly   bool                 `json:"code_only"`
+	Components []jsonCycleComponent `json:"components"`
+}
+
+type jsonCycleComponent struct {
+	Nodes              []string              `json:"nodes"`
+	Edges              []jsonCycleEdge       `json:"edges"`
+	RepresentativeLoop []string              `json:"representative_loop"`
+	BreakAnalysis      string                `json:"break_analysis"`
+	BreakSets          [][]depgraph.FileEdge `json:"break_sets"`
+}
+
+type jsonCycleEdge struct {
+	From     string                        `json:"from"`
+	To       string                        `json:"to"`
+	Evidence []depgraph.DependencyEvidence `json:"evidence"`
+}
+
+func renderJSON(
+	out interface{ Write([]byte) (int, error) },
+	scope string,
+	base string,
+	codeOnly bool,
+	items []renderedCycle,
+) error {
+	payload := jsonCyclesOutput{Scope: scope, CodeOnly: codeOnly}
+	for _, item := range items {
+		component := jsonCycleComponent{
+			Nodes:              relativeFiles(item.component.Nodes, base),
+			RepresentativeLoop: relativeFiles(item.component.Path, base),
+			BreakAnalysis:      "heuristic",
+		}
+		if item.component.BreakSetExact {
+			component.BreakAnalysis = "exact"
+		}
+		for _, edge := range item.component.Edges {
+			component.Edges = append(component.Edges, jsonCycleEdge{
+				From:     relName(base, edge.From),
+				To:       relName(base, edge.To),
+				Evidence: relativeEvidence(item.metadata[edge].Evidence, base),
+			})
+		}
+		for _, breakSet := range item.component.BreakSets {
+			edges := make([]depgraph.FileEdge, 0, len(breakSet.Edges))
+			for _, edge := range breakSet.Edges {
+				edges = append(edges, depgraph.FileEdge{
+					From: relName(base, edge.From),
+					To:   relName(base, edge.To),
+				})
+			}
+			component.BreakSets = append(component.BreakSets, edges)
+		}
+		payload.Components = append(payload.Components, component)
+	}
+	encoded, err := json.MarshalIndent(payload, "", "  ")
+	if err != nil {
+		return err
+	}
+	_, err = fmt.Fprintln(out, string(encoded))
+	return err
+}
+
+func relativeEvidence(
+	evidence []depgraph.DependencyEvidence,
+	base string,
+) []depgraph.DependencyEvidence {
+	result := make([]depgraph.DependencyEvidence, 0, len(evidence))
+	for _, item := range evidence {
+		item.ReferenceFile = relName(base, item.ReferenceFile)
+		item.DeclarationFile = relName(base, item.DeclarationFile)
+		result = append(result, item)
+	}
+	return result
+}
+
+func relativeFiles(files []string, base string) []string {
+	result := make([]string, 0, len(files))
+	for _, file := range files {
+		result = append(result, relName(base, file))
+	}
+	return result
+}
+
+func filterCodeFiles(files []string) []string {
+	result := make([]string, 0, len(files))
+	for _, file := range files {
+		switch strings.ToLower(filepath.Ext(file)) {
+		case ".md", ".markdown":
+			continue
+		default:
+			result = append(result, file)
+		}
+	}
+	return result
 }
 
 // cycleURL renders the cycle's files as a focused dependency diagram and returns
