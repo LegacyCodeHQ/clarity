@@ -10,6 +10,7 @@ import (
 
 	"github.com/LegacyCodeHQ/clarity/depgraph"
 	"github.com/LegacyCodeHQ/clarity/depgraph/languages/golang"
+	"github.com/LegacyCodeHQ/clarity/depgraph/languages/kotlin"
 	"github.com/LegacyCodeHQ/clarity/depgraph/languages/markdown"
 	"github.com/LegacyCodeHQ/clarity/depgraph/languages/rust"
 	"github.com/LegacyCodeHQ/clarity/depgraph/languages/swift"
@@ -31,6 +32,8 @@ func AttachEvidence(graph *depgraph.FileDependencyGraph, reader vcs.ContentReade
 			continue
 		}
 		switch filepath.Ext(edge.From) {
+		case ".kt", ".kts":
+			metadata.Evidence = kotlinEvidence(edge, reader)
 		case ".js", ".jsx", ".mjs", ".cjs", ".ts", ".tsx", ".mts", ".cts":
 			metadata.Evidence = ecmaScriptEvidence(edge, reader)
 		case ".go":
@@ -52,6 +55,135 @@ func AttachEvidence(graph *depgraph.FileDependencyGraph, reader vcs.ContentReade
 			}}
 		}
 		graph.Meta.Edges[edge] = metadata
+	}
+}
+
+func kotlinEvidence(edge depgraph.FileEdge, reader vcs.ContentReader) []depgraph.DependencyEvidence {
+	source, sourceErr := reader(edge.From)
+	target, targetErr := reader(edge.To)
+	if sourceErr != nil || targetErr != nil {
+		return nil
+	}
+	declarations := kotlin.ParseKotlinDeclarationLocations(target)
+	imports := kotlin.ParseKotlinImportLocations(source)
+	sourcePackage := kotlin.ExtractPackageDeclaration(source)
+	targetPackage := ""
+	if len(declarations) > 0 {
+		targetPackage = declarations[0].Package
+	} else {
+		targetPackage = kotlin.ExtractPackageDeclaration(target)
+	}
+	samePackage := sourcePackage != "" && sourcePackage == targetPackage
+	localNames := make(map[string]string)
+	var evidence []depgraph.DependencyEvidence
+	for _, item := range imports {
+		if !kotlinImportMatchesTarget(item, targetPackage, declarations) {
+			continue
+		}
+		if item.Wildcard {
+			for _, declaration := range declarations {
+				localNames[declaration.Name] = declaration.Name
+			}
+		} else {
+			localNames[item.Local] = item.Imported
+		}
+		declaration := matchingKotlinDeclaration(
+			declarations, item.Imported, item.Local)
+		evidence = append(evidence, depgraph.DependencyEvidence{
+			Symbol:          item.Path,
+			Kind:            "kotlin-import",
+			Relationship:    depgraph.RelationshipImport,
+			ReferenceFile:   edge.From,
+			ReferenceLine:   item.Line,
+			DeclarationFile: edge.To,
+			DeclarationLine: declaration.Line,
+			Confidence:      depgraph.EvidenceConfidenceHigh,
+		})
+	}
+	if samePackage {
+		for _, declaration := range declarations {
+			localNames[declaration.Name] = declaration.Name
+		}
+	}
+	if len(localNames) == 0 {
+		return nil
+	}
+	for _, reference := range kotlin.ExtractKotlinReferenceLocations(source) {
+		imported, ok := localNames[reference.Name]
+		if !ok {
+			continue
+		}
+		declaration := matchingKotlinDeclaration(
+			declarations, imported, reference.Name)
+		scope := "imported"
+		if samePackage {
+			scope = "same-package"
+		}
+		evidence = append(evidence, depgraph.DependencyEvidence{
+			Symbol:          imported,
+			Kind:            "kotlin-" + scope + "-" + reference.Kind,
+			Relationship:    kotlinRelationship(reference.Kind, declaration.Kind),
+			ReferenceFile:   edge.From,
+			ReferenceLine:   reference.Line,
+			DeclarationFile: edge.To,
+			DeclarationLine: declaration.Line,
+			Confidence:      depgraph.EvidenceConfidenceMedium,
+		})
+	}
+	sortEvidence(evidence)
+	return deduplicateEvidence(evidence)
+}
+
+func kotlinImportMatchesTarget(
+	item kotlin.KotlinImportLocation,
+	targetPackage string,
+	declarations []kotlin.KotlinDeclarationLocation,
+) bool {
+	if item.Wildcard {
+		return strings.TrimSuffix(item.Path, ".*") == targetPackage
+	}
+	for _, declaration := range declarations {
+		if item.Imported == declaration.Name &&
+			strings.HasPrefix(item.Path, targetPackage+".") {
+			return true
+		}
+	}
+	return false
+}
+
+func matchingKotlinDeclaration(
+	declarations []kotlin.KotlinDeclarationLocation,
+	imported string,
+	local string,
+) kotlin.KotlinDeclarationLocation {
+	for _, declaration := range declarations {
+		if declaration.Name == imported || declaration.Name == local {
+			return declaration
+		}
+	}
+	return kotlin.KotlinDeclarationLocation{Line: 1}
+}
+
+func kotlinRelationship(
+	referenceKind string,
+	declarationKind string,
+) depgraph.DependencyRelationship {
+	switch referenceKind {
+	case "call":
+		return depgraph.RelationshipCall
+	case "inheritance":
+		return depgraph.RelationshipInheritance
+	case "companion-member":
+		return depgraph.RelationshipCompanionMember
+	case "type-reference":
+		return depgraph.RelationshipTypeReference
+	default:
+		switch declarationKind {
+		case "class", "interface", "object", "typealias":
+			return depgraph.RelationshipTypeReference
+		default:
+			return depgraph.RelationshipSymbolReference
+		}
 	}
 }
 

@@ -278,3 +278,39 @@ func TestAttachEvidence_JavaScriptReExport(t *testing.T) {
 		Confidence:      depgraph.EvidenceConfidenceHigh,
 	})
 }
+
+func TestAttachEvidence_KotlinSamePackageCall(t *testing.T) {
+	dir := t.TempDir()
+	configFile := filepath.Join(dir, "LevelConfig.kt")
+	generatorFile := filepath.Join(dir, "LevelGenerator.kt")
+	require.NoError(t, os.WriteFile(configFile, []byte(`package arena.core
+
+data class LevelConfig(val generator: LevelGenerator)
+`), 0o644))
+	require.NoError(t, os.WriteFile(generatorFile, []byte(`package arena.core
+
+class LevelGenerator(val config: LevelConfig)
+`), 0o644))
+
+	reader := vcs.FilesystemContentReader()
+	graph := depgraph.MustDependencyGraph(map[string][]string{
+		configFile:    {generatorFile},
+		generatorFile: {configFile},
+	})
+	fileGraph, err := depgraph.NewFileDependencyGraph(graph, nil, reader)
+	require.NoError(t, err)
+
+	explain.AttachEvidence(&fileGraph, reader)
+
+	evidence := fileGraph.Meta.Edges[depgraph.FileEdge{From: configFile, To: generatorFile}].Evidence
+	assert.Contains(t, evidence, depgraph.DependencyEvidence{
+		Symbol:          "LevelGenerator",
+		Kind:            "kotlin-same-package-type-reference",
+		Relationship:    depgraph.RelationshipTypeReference,
+		ReferenceFile:   configFile,
+		ReferenceLine:   3,
+		DeclarationFile: generatorFile,
+		DeclarationLine: 3,
+		Confidence:      depgraph.EvidenceConfidenceMedium,
+	})
+}

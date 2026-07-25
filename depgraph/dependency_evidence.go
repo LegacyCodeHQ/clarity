@@ -28,6 +28,7 @@ const (
 	RelationshipSymbolReference    DependencyRelationship = "symbol-reference"
 	RelationshipInheritance        DependencyRelationship = "inheritance"
 	RelationshipExtensionMember    DependencyRelationship = "extension-member"
+	RelationshipCompanionMember    DependencyRelationship = "companion-member"
 	RelationshipSamePackage        DependencyRelationship = "same-package-reference"
 	RelationshipNavigation         DependencyRelationship = "navigation"
 	RelationshipScript             DependencyRelationship = "script"
