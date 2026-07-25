@@ -70,3 +70,49 @@ func TestAttachEvidence_MarkdownLink(t *testing.T) {
 	assert.Equal(t, 1, evidence[0].ReferenceLine)
 	assert.Equal(t, depgraph.EvidenceConfidenceHigh, evidence[0].Confidence)
 }
+
+func TestAttachEvidence_RustModuleAndTypeReferences(t *testing.T) {
+	dir := t.TempDir()
+	mainFile := filepath.Join(dir, "lib.rs")
+	modelFile := filepath.Join(dir, "model.rs")
+	require.NoError(t, os.WriteFile(mainFile, []byte(`mod model;
+use crate::model::Job;
+
+pub fn run(job: Job) {}
+`), 0o644))
+	require.NoError(t, os.WriteFile(modelFile, []byte(`pub struct Job;
+use crate::run;
+`), 0o644))
+
+	reader := vcs.FilesystemContentReader()
+	graph := depgraph.MustDependencyGraph(map[string][]string{
+		mainFile:  {modelFile},
+		modelFile: {mainFile},
+	})
+	fileGraph, err := depgraph.NewFileDependencyGraph(graph, nil, reader)
+	require.NoError(t, err)
+
+	explain.AttachEvidence(&fileGraph, reader)
+
+	evidence := fileGraph.Meta.Edges[depgraph.FileEdge{From: mainFile, To: modelFile}].Evidence
+	assert.Contains(t, evidence, depgraph.DependencyEvidence{
+		Symbol:          "model",
+		Kind:            "rust-module-declaration",
+		Relationship:    depgraph.RelationshipModuleDeclaration,
+		ReferenceFile:   mainFile,
+		ReferenceLine:   1,
+		DeclarationFile: modelFile,
+		DeclarationLine: 1,
+		Confidence:      depgraph.EvidenceConfidenceHigh,
+	})
+	assert.Contains(t, evidence, depgraph.DependencyEvidence{
+		Symbol:          "Job",
+		Kind:            "rust-import",
+		Relationship:    depgraph.RelationshipImport,
+		ReferenceFile:   mainFile,
+		ReferenceLine:   2,
+		DeclarationFile: modelFile,
+		DeclarationLine: 1,
+		Confidence:      depgraph.EvidenceConfidenceHigh,
+	})
+}

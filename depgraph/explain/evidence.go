@@ -5,10 +5,12 @@ import (
 	"bytes"
 	"path/filepath"
 	"sort"
+	"strings"
 	"unicode"
 
 	"github.com/LegacyCodeHQ/clarity/depgraph"
 	"github.com/LegacyCodeHQ/clarity/depgraph/languages/markdown"
+	"github.com/LegacyCodeHQ/clarity/depgraph/languages/rust"
 	"github.com/LegacyCodeHQ/clarity/depgraph/languages/swift"
 	"github.com/LegacyCodeHQ/clarity/vcs"
 )
@@ -27,6 +29,8 @@ func AttachEvidence(graph *depgraph.FileDependencyGraph, reader vcs.ContentReade
 			continue
 		}
 		switch filepath.Ext(edge.From) {
+		case ".rs":
+			metadata.Evidence = rustEvidence(edge, reader)
 		case ".swift":
 			metadata.Evidence = swiftEvidence(edge, reader)
 		case ".md", ".markdown":
@@ -42,6 +46,129 @@ func AttachEvidence(graph *depgraph.FileDependencyGraph, reader vcs.ContentReade
 			}}
 		}
 		graph.Meta.Edges[edge] = metadata
+	}
+}
+
+func rustEvidence(edge depgraph.FileEdge, reader vcs.ContentReader) []depgraph.DependencyEvidence {
+	source, sourceErr := reader(edge.From)
+	target, targetErr := reader(edge.To)
+	if sourceErr != nil || targetErr != nil {
+		return nil
+	}
+
+	declarations := rust.ParseRustDeclarationLocations(target)
+	references := rust.ExtractRustReferenceLocations(source)
+	targetModule := rustModuleName(edge.To)
+	allowedSymbols := make(map[string]bool)
+	for _, reference := range references {
+		if reference.Kind != "import" && reference.Kind != "re-export" {
+			continue
+		}
+		for _, declaration := range declarations {
+			if reference.Name == declaration.Name {
+				allowedSymbols[reference.Name] = true
+			}
+		}
+	}
+	var evidence []depgraph.DependencyEvidence
+	for _, reference := range references {
+		if reference.Kind == "module-declaration" && reference.Name == targetModule {
+			evidence = append(evidence, depgraph.DependencyEvidence{
+				Symbol:          reference.Name,
+				Kind:            "rust-module-declaration",
+				Relationship:    depgraph.RelationshipModuleDeclaration,
+				ReferenceFile:   edge.From,
+				ReferenceLine:   reference.Line,
+				DeclarationFile: edge.To,
+				DeclarationLine: 1,
+				Confidence:      depgraph.EvidenceConfidenceHigh,
+			})
+			continue
+		}
+		matchedDeclaration := false
+		for _, declaration := range declarations {
+			if reference.Name != declaration.Name {
+				continue
+			}
+			if reference.Kind != "import" && reference.Kind != "re-export" &&
+				!allowedSymbols[reference.Name] &&
+				!rustPathContainsModule(reference.Path, targetModule) {
+				continue
+			}
+			matchedDeclaration = true
+			evidence = append(evidence, depgraph.DependencyEvidence{
+				Symbol:          declaration.Name,
+				Kind:            "rust-" + reference.Kind,
+				Relationship:    rustRelationship(reference.Kind),
+				ReferenceFile:   edge.From,
+				ReferenceLine:   reference.Line,
+				DeclarationFile: edge.To,
+				DeclarationLine: declaration.Line,
+				Confidence:      rustEvidenceConfidence(reference.Kind),
+			})
+		}
+		if !matchedDeclaration &&
+			(reference.Kind == "import" || reference.Kind == "re-export") &&
+			reference.Name == targetModule {
+			evidence = append(evidence, depgraph.DependencyEvidence{
+				Symbol:          reference.Name,
+				Kind:            "rust-" + reference.Kind,
+				Relationship:    rustRelationship(reference.Kind),
+				ReferenceFile:   edge.From,
+				ReferenceLine:   reference.Line,
+				DeclarationFile: edge.To,
+				DeclarationLine: 1,
+				Confidence:      depgraph.EvidenceConfidenceHigh,
+			})
+		}
+	}
+	sortEvidence(evidence)
+	return deduplicateEvidence(evidence)
+}
+
+func rustPathContainsModule(path, module string) bool {
+	if path == "" || module == "" {
+		return false
+	}
+	for _, part := range strings.Split(path, "::") {
+		if part == module {
+			return true
+		}
+	}
+	return false
+}
+
+func rustModuleName(path string) string {
+	base := filepath.Base(path)
+	if base == "mod.rs" {
+		return filepath.Base(filepath.Dir(path))
+	}
+	return strings.TrimSuffix(base, filepath.Ext(base))
+}
+
+func rustRelationship(kind string) depgraph.DependencyRelationship {
+	switch kind {
+	case "module-declaration":
+		return depgraph.RelationshipModuleDeclaration
+	case "import":
+		return depgraph.RelationshipImport
+	case "re-export":
+		return depgraph.RelationshipReExport
+	case "call":
+		return depgraph.RelationshipCall
+	case "type-reference":
+		return depgraph.RelationshipTypeReference
+	default:
+		return depgraph.RelationshipSymbolReference
+	}
+}
+
+func rustEvidenceConfidence(kind string) depgraph.EvidenceConfidence {
+	switch kind {
+	case "module-declaration", "import", "re-export":
+		return depgraph.EvidenceConfidenceHigh
+	default:
+		return depgraph.EvidenceConfidenceMedium
 	}
 }
 
