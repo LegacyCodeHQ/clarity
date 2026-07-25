@@ -1,5 +1,9 @@
 # Actionable cycle analysis
 
+> **Experimental API:** The `cycles` command name, flags, relationship
+> taxonomy, Go evidence types, human output, and JSON schema may change without
+> compatibility notice before stabilization.
+
 `clarity cycles [path...]` finds cyclic strongly connected components (SCCs) in
 the scoped file-dependency graph. An SCC is a maximal group in which every file
 can reach every other file. It can contain one loop, many overlapping loops, or
@@ -144,4 +148,3 @@ clarity cycles src --url
 ```
 
 Each URL contains the complete component, not only the representative loop.
-Cycle-related output remains experimental and may evolve.

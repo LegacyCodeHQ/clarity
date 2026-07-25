@@ -41,7 +41,8 @@ receive exact minimum sets; larger ones receive a labelled heuristic.
 With --url, each complete component is rendered as its own focused diagram and
 the command emits a shareable visualization URL beneath it.
 
-This command is experimental; its output may change.`,
+EXPERIMENTAL API: The command name, flags, relationship taxonomy, human output,
+and JSON schema may change without compatibility notice before stabilization.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runCycles(cmd, args)
 		},

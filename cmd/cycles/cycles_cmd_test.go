@@ -166,6 +166,26 @@ func TestCycles_RejectsUnknownRelationshipKind(t *testing.T) {
 	}
 }
 
+func TestCycles_HelpMarksEntireAPISurfaceExperimental(t *testing.T) {
+	cmd := NewCommand()
+	var output bytes.Buffer
+	cmd.SetOut(&output)
+	cmd.SetArgs([]string{"--help"})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("expected help to render, got %v", err)
+	}
+	for _, phrase := range []string{
+		"EXPERIMENTAL API",
+		"command name, flags, relationship taxonomy, human output",
+		"JSON schema may change without compatibility notice",
+	} {
+		if !strings.Contains(output.String(), phrase) {
+			t.Fatalf("expected help to contain %q, got:\n%s", phrase, output.String())
+		}
+	}
+}
+
 func TestRenderEvidence_CapsHumanReferencesWithoutAffectingJSON(t *testing.T) {
 	edge := depgraph.FileEdge{From: "a.go", To: "b.go"}
 	evidence := make([]depgraph.DependencyEvidence, 25)

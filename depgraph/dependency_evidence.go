@@ -3,6 +3,8 @@ package depgraph
 import "sort"
 
 // EvidenceConfidence describes how directly Clarity established a dependency.
+//
+// Experimental: evidence API values may change before stabilization.
 type EvidenceConfidence string
 
 const (
@@ -13,8 +15,11 @@ const (
 
 // DependencyRelationship describes the semantic reason one file depends on
 // another. Unlike Kind, which identifies the language-specific evidence
-// extractor, Relationship is a stable cross-language taxonomy suitable for
-// filtering and automation.
+// extractor, Relationship is a cross-language taxonomy suitable for filtering
+// and automation.
+//
+// Experimental: relationship names and semantics may change before
+// stabilization.
 type DependencyRelationship string
 
 const (
@@ -37,7 +42,9 @@ const (
 )
 
 // DependencyRelationships returns every supported semantic relationship in
-// stable display order.
+// deterministic display order.
+//
+// Experimental: the returned relationship set may change before stabilization.
 func DependencyRelationships() []DependencyRelationship {
 	return []DependencyRelationship{
 		RelationshipResolvedDependency,
@@ -60,6 +67,9 @@ func DependencyRelationships() []DependencyRelationship {
 }
 
 // DependencyEvidence identifies a declaration/reference pair behind an edge.
+//
+// Experimental: this type and its JSON representation may change before
+// stabilization.
 type DependencyEvidence struct {
 	Symbol          string                 `json:"symbol,omitempty"`
 	Kind            string                 `json:"kind"`
@@ -71,8 +81,10 @@ type DependencyEvidence struct {
 	Confidence      EvidenceConfidence     `json:"confidence"`
 }
 
-// EvidenceRelationships returns the stable, deduplicated semantic
+// EvidenceRelationships returns the deterministic, deduplicated semantic
 // relationships represented by source evidence.
+//
+// Experimental: this function may change before stabilization.
 func EvidenceRelationships(evidenceItems []DependencyEvidence) []DependencyRelationship {
 	seen := make(map[DependencyRelationship]bool)
 	for _, evidence := range evidenceItems {

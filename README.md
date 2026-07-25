@@ -236,7 +236,9 @@ cycle-break recommendations. See [actionable cycle analysis](docs/cycles.md).
 
 `workspace` builds Go module and Rust crate relationship graphs.
 
-These surfaces are useful, but their output may change.
+These surfaces are useful, but remain experimental. For `cycles`, the command
+name, flags, relationship taxonomy, Go evidence types, human output, and JSON
+schema may change without compatibility notice before stabilization.
 
 ## What Clarity Is Not
 
