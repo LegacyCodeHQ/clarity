@@ -148,11 +148,17 @@ collapse modules into architecture-level nodes.
 
 ```sh
 clarity cycles src
+clarity cycles src --explain
+clarity cycles src --code-only
+clarity cycles src --format json
 clarity cycles src --url
 ```
 
-Lists circular dependencies within a scope and can produce focused
-visualizations for each cycle.
+Lists complete cyclic dependency components, shows a representative loop, and
+recommends verified dependency-edge break sets (exact minima for bounded
+components and labelled heuristics for larger ones). Explain mode adds the exact
+symbols and source lines behind each edge; code-only mode excludes Markdown
+navigation loops. See [actionable cycle analysis](docs/cycles.md).
 
 ### Keep Feedback Live While Coding
 
@@ -221,7 +227,8 @@ clarity cycles
 clarity workspace
 ```
 
-`cycles` reports circular file dependencies.
+`cycles` reports complete cyclic components, source evidence, and verified
+cycle-break recommendations. See [actionable cycle analysis](docs/cycles.md).
 
 `workspace` builds Go module and Rust crate relationship graphs.
 

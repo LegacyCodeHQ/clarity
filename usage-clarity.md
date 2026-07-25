@@ -23,7 +23,7 @@ Inherited by all subcommands. Extracted from `cmd/root.go`.
 
 | Command | Description |
 |---|---|
-| `cycles [path...]` | List circular dependencies within a scope (experimental) |
+| `cycles [path...]` | Analyze cyclic components and break sets (experimental) |
 | `languages` | List all supported languages and file extensions |
 | `modules` | List the modules declared for this project |
 | `setup` | Add clarity usage instructions to AGENTS.md |
@@ -36,14 +36,16 @@ Inherited by all subcommands. Extracted from `cmd/root.go`.
 
 ## `clarity cycles [path...]`
 
-List circular dependencies between files within a scope.
+List cyclic dependency components between files within a scope.
 
 Scopes to the directories (or files) you pass, defaulting to the current
-directory, and reports every cyclic group of files found within that scope.
-Use it to audit a module you own without walking it directory by directory.
+directory, and reports every strongly connected group found within that scope.
+Each component includes one representative loop and a verified set of dependency
+edges that can be removed to make the component acyclic. Bounded components
+receive exact minimum sets; larger ones receive a labelled heuristic.
 
-With --url, each cycle is rendered as its own focused diagram and the command
-emits a shareable visualization URL beneath it.
+With --url, each complete component is rendered as its own focused diagram and
+the command emits a shareable visualization URL beneath it.
 
 This command is experimental; its output may change.
 
