@@ -7,17 +7,17 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestEdgeRelationships_DeduplicatesAndSorts(t *testing.T) {
-	metadata := depgraph.EdgeMetadata{Evidence: []depgraph.DependencyEvidence{
+func TestEvidenceRelationships_DeduplicatesAndSorts(t *testing.T) {
+	evidence := []depgraph.DependencyEvidence{
 		{Relationship: depgraph.RelationshipTypeReference},
 		{Relationship: depgraph.RelationshipCall},
 		{Relationship: depgraph.RelationshipTypeReference},
 		{},
-	}}
+	}
 
 	assert.Equal(t, []depgraph.DependencyRelationship{
 		depgraph.RelationshipCall,
 		depgraph.RelationshipResolvedDependency,
 		depgraph.RelationshipTypeReference,
-	}, depgraph.EdgeRelationships(metadata))
+	}, depgraph.EvidenceRelationships(evidence))
 }

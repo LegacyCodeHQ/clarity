@@ -47,11 +47,11 @@ type DependencyEvidence struct {
 	Confidence      EvidenceConfidence     `json:"confidence"`
 }
 
-// EdgeRelationships returns the stable, deduplicated semantic relationships
-// represented by an edge's evidence.
-func EdgeRelationships(metadata EdgeMetadata) []DependencyRelationship {
+// EvidenceRelationships returns the stable, deduplicated semantic
+// relationships represented by source evidence.
+func EvidenceRelationships(evidenceItems []DependencyEvidence) []DependencyRelationship {
 	seen := make(map[DependencyRelationship]bool)
-	for _, evidence := range metadata.Evidence {
+	for _, evidence := range evidenceItems {
 		relationship := evidence.Relationship
 		if relationship == "" {
 			relationship = RelationshipResolvedDependency
