@@ -27,32 +27,73 @@ var linkAttributes = map[string]bool{
 	"src":  true,
 }
 
+// HTMLLinkLocation is one file reference from an HTML element attribute.
+type HTMLLinkLocation struct {
+	Element   string
+	Attribute string
+	Path      string
+	Line      int
+}
+
 // ParseHTMLLinks extracts file-reference destinations from `href` / `src`
 // attributes in HTML source. Values are normalized: external URLs, anchors, and
 // non-file references are dropped. Attribute parsing is driven by tree-sitter,
 // so destinations inside comments or element text are never matched.
 func ParseHTMLLinks(sourceCode []byte) []string {
+	locations := ParseHTMLLinkLocations(sourceCode)
+	var links []string
+	seen := make(map[string]bool)
+	for _, location := range locations {
+		if seen[location.Path] {
+			continue
+		}
+		seen[location.Path] = true
+		links = append(links, location.Path)
+	}
+	return links
+}
+
+// ParseHTMLLinkLocations extracts element, attribute, destination, and 1-based
+// source line for every project-file-like HTML reference.
+func ParseHTMLLinkLocations(sourceCode []byte) []HTMLLinkLocation {
 	tree, err := parseHTML(sourceCode)
 	if err != nil {
 		return nil
 	}
 	defer tree.Close()
 
-	var links []string
-	seen := make(map[string]bool)
+	var links []HTMLLinkLocation
 	for _, attr := range findNodesOfType(tree.RootNode(), "attribute") {
 		name := strings.ToLower(attributeName(attr, sourceCode))
 		if !linkAttributes[name] {
 			continue
 		}
 		dest, ok := normalizeLink(attributeValue(attr, sourceCode))
-		if !ok || seen[dest] {
+		if !ok {
 			continue
 		}
-		seen[dest] = true
-		links = append(links, dest)
+		links = append(links, HTMLLinkLocation{
+			Element:   htmlAttributeElement(attr, sourceCode),
+			Attribute: name,
+			Path:      dest,
+			Line:      int(attr.StartPoint().Row) + 1,
+		})
 	}
 	return links
+}
+
+func htmlAttributeElement(attr *sitter.Node, sourceCode []byte) string {
+	if attr == nil {
+		return ""
+	}
+	parent := attr.Parent()
+	if parent == nil {
+		return ""
+	}
+	if tag := findFirstChildOfType(parent, "tag_name"); tag != nil {
+		return strings.ToLower(tag.Content(sourceCode))
+	}
+	return ""
 }
 
 // attributeName returns the lowercased name of an `attribute` node.

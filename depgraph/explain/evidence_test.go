@@ -314,3 +314,50 @@ class LevelGenerator(val config: LevelConfig)
 		Confidence:      depgraph.EvidenceConfidenceMedium,
 	})
 }
+
+func TestAttachEvidence_HTMLNavigationAndScript(t *testing.T) {
+	dir := t.TempDir()
+	indexFile := filepath.Join(dir, "index.html")
+	aboutFile := filepath.Join(dir, "about.html")
+	scriptFile := filepath.Join(dir, "app.js")
+	require.NoError(t, os.WriteFile(indexFile, []byte(`<a href="about.html">About</a>
+<script src="app.js"></script>
+`), 0o644))
+	require.NoError(t, os.WriteFile(aboutFile, []byte(
+		`<a href="index.html">Home</a>`), 0o644))
+	require.NoError(t, os.WriteFile(scriptFile, []byte(`console.log("app");`), 0o644))
+
+	reader := vcs.FilesystemContentReader()
+	graph := depgraph.MustDependencyGraph(map[string][]string{
+		indexFile:  {aboutFile, scriptFile},
+		aboutFile:  {indexFile},
+		scriptFile: {indexFile},
+	})
+	fileGraph, err := depgraph.NewFileDependencyGraph(graph, nil, reader)
+	require.NoError(t, err)
+
+	explain.AttachEvidence(&fileGraph, reader)
+
+	navigation := fileGraph.Meta.Edges[depgraph.FileEdge{From: indexFile, To: aboutFile}].Evidence
+	assert.Contains(t, navigation, depgraph.DependencyEvidence{
+		Symbol:          "about.html",
+		Kind:            "html-a-href",
+		Relationship:    depgraph.RelationshipNavigation,
+		ReferenceFile:   indexFile,
+		ReferenceLine:   1,
+		DeclarationFile: aboutFile,
+		DeclarationLine: 1,
+		Confidence:      depgraph.EvidenceConfidenceHigh,
+	})
+	script := fileGraph.Meta.Edges[depgraph.FileEdge{From: indexFile, To: scriptFile}].Evidence
+	assert.Contains(t, script, depgraph.DependencyEvidence{
+		Symbol:          "app.js",
+		Kind:            "html-script-src",
+		Relationship:    depgraph.RelationshipScript,
+		ReferenceFile:   indexFile,
+		ReferenceLine:   2,
+		DeclarationFile: scriptFile,
+		DeclarationLine: 1,
+		Confidence:      depgraph.EvidenceConfidenceHigh,
+	})
+}

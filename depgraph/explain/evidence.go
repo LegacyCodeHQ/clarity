@@ -10,6 +10,7 @@ import (
 
 	"github.com/LegacyCodeHQ/clarity/depgraph"
 	"github.com/LegacyCodeHQ/clarity/depgraph/languages/golang"
+	"github.com/LegacyCodeHQ/clarity/depgraph/languages/html"
 	"github.com/LegacyCodeHQ/clarity/depgraph/languages/kotlin"
 	"github.com/LegacyCodeHQ/clarity/depgraph/languages/markdown"
 	"github.com/LegacyCodeHQ/clarity/depgraph/languages/rust"
@@ -32,6 +33,8 @@ func AttachEvidence(graph *depgraph.FileDependencyGraph, reader vcs.ContentReade
 			continue
 		}
 		switch filepath.Ext(edge.From) {
+		case ".html", ".htm":
+			metadata.Evidence = htmlEvidence(edge, supplied, reader)
 		case ".kt", ".kts":
 			metadata.Evidence = kotlinEvidence(edge, reader)
 		case ".js", ".jsx", ".mjs", ".cjs", ".ts", ".tsx", ".mts", ".cts":
@@ -55,6 +58,64 @@ func AttachEvidence(graph *depgraph.FileDependencyGraph, reader vcs.ContentReade
 			}}
 		}
 		graph.Meta.Edges[edge] = metadata
+	}
+}
+
+func htmlEvidence(
+	edge depgraph.FileEdge,
+	supplied map[string]bool,
+	reader vcs.ContentReader,
+) []depgraph.DependencyEvidence {
+	source, err := reader(edge.From)
+	if err != nil {
+		return nil
+	}
+	var evidence []depgraph.DependencyEvidence
+	for _, link := range html.ParseHTMLLinkLocations(source) {
+		resolved := html.ResolveHTMLLinkPath(edge.From, link.Path, supplied)
+		if len(resolved) != 1 || resolved[0] != edge.To {
+			continue
+		}
+		evidence = append(evidence, depgraph.DependencyEvidence{
+			Symbol:          link.Path,
+			Kind:            "html-" + link.Element + "-" + link.Attribute,
+			Relationship:    htmlRelationship(link, edge.To),
+			ReferenceFile:   edge.From,
+			ReferenceLine:   link.Line,
+			DeclarationFile: edge.To,
+			DeclarationLine: 1,
+			Confidence:      depgraph.EvidenceConfidenceHigh,
+		})
+	}
+	sortEvidence(evidence)
+	return deduplicateEvidence(evidence)
+}
+
+func htmlRelationship(
+	link html.HTMLLinkLocation,
+	target string,
+) depgraph.DependencyRelationship {
+	switch link.Element {
+	case "a", "area":
+		return depgraph.RelationshipNavigation
+	case "script":
+		return depgraph.RelationshipScript
+	case "img", "picture":
+		return depgraph.RelationshipImage
+	case "link":
+		if strings.EqualFold(filepath.Ext(target), ".css") {
+			return depgraph.RelationshipStylesheet
+		}
+		return depgraph.RelationshipEmbeddedResource
+	case "iframe", "embed", "object", "source", "video", "audio":
+		return depgraph.RelationshipEmbeddedResource
+	default:
+		switch strings.ToLower(filepath.Ext(target)) {
+		case ".png", ".jpg", ".jpeg", ".gif", ".svg", ".webp", ".avif":
+			return depgraph.RelationshipImage
+		default:
+			return depgraph.RelationshipEmbeddedResource
+		}
 	}
 }
 

@@ -87,3 +87,14 @@ func TestParseHTMLLinks_EmptyAndMissingValues(t *testing.T) {
 
 	assert.Empty(t, links)
 }
+
+func TestParseHTMLLinkLocations_ReportsElementAttributeAndLine(t *testing.T) {
+	source := []byte(`<a href="./about.html">About</a>
+<script src="app.js"></script>
+`)
+
+	assert.Equal(t, []HTMLLinkLocation{
+		{Element: "a", Attribute: "href", Path: "./about.html", Line: 1},
+		{Element: "script", Attribute: "src", Path: "app.js", Line: 2},
+	}, ParseHTMLLinkLocations(source))
+}
