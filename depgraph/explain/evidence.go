@@ -35,6 +35,7 @@ func AttachEvidence(graph *depgraph.FileDependencyGraph, reader vcs.ContentReade
 		if len(metadata.Evidence) == 0 {
 			metadata.Evidence = []depgraph.DependencyEvidence{{
 				Kind:            "resolved-dependency",
+				Relationship:    depgraph.RelationshipResolvedDependency,
 				ReferenceFile:   edge.From,
 				DeclarationFile: edge.To,
 				Confidence:      depgraph.EvidenceConfidenceMedium,
@@ -83,9 +84,16 @@ func swiftEvidence(edge depgraph.FileEdge, reader vcs.ContentReader) []depgraph.
 			if !matches {
 				continue
 			}
+			relationship := depgraph.RelationshipSymbolReference
+			if declaration.Kind == "swift-extension-member" {
+				relationship = depgraph.RelationshipExtensionMember
+			} else if startsUpper(declaration.Name) {
+				relationship = depgraph.RelationshipTypeReference
+			}
 			evidence = append(evidence, depgraph.DependencyEvidence{
 				Symbol:          declaration.Name,
 				Kind:            declaration.Kind,
+				Relationship:    relationship,
 				ReferenceFile:   edge.From,
 				ReferenceLine:   reference.Line,
 				DeclarationFile: edge.To,
@@ -116,6 +124,7 @@ func markdownEvidence(
 			evidence = append(evidence, depgraph.DependencyEvidence{
 				Symbol:          link.Path(),
 				Kind:            "markdown-link",
+				Relationship:    depgraph.RelationshipNavigation,
 				ReferenceFile:   edge.From,
 				ReferenceLine:   lineOf(content, link.Path()),
 				DeclarationFile: edge.To,

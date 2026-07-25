@@ -41,6 +41,7 @@ struct B {
 	require.NotEmpty(t, aToB)
 	assert.Equal(t, "B", aToB[0].Symbol)
 	assert.Equal(t, "swift-symbol", aToB[0].Kind)
+	assert.Equal(t, depgraph.RelationshipTypeReference, aToB[0].Relationship)
 	assert.Equal(t, 3, aToB[0].ReferenceLine)
 	assert.Equal(t, 2, aToB[0].DeclarationLine)
 	assert.Equal(t, depgraph.EvidenceConfidenceHigh, aToB[0].Confidence)
@@ -65,6 +66,7 @@ func TestAttachEvidence_MarkdownLink(t *testing.T) {
 	require.NotEmpty(t, evidence)
 	assert.Equal(t, "guide.md", evidence[0].Symbol)
 	assert.Equal(t, "markdown-link", evidence[0].Kind)
+	assert.Equal(t, depgraph.RelationshipNavigation, evidence[0].Relationship)
 	assert.Equal(t, 1, evidence[0].ReferenceLine)
 	assert.Equal(t, depgraph.EvidenceConfidenceHigh, evidence[0].Confidence)
 }

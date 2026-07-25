@@ -286,8 +286,9 @@ func renderEvidence(out interface{ Write([]byte) (int, error) }, item renderedCy
 			}
 			fmt.Fprintf(
 				out,
-				"         %s %q at %s → %s [%s]\n",
+				"         %s/%s %q at %s → %s [%s]\n",
 				evidence.Kind,
+				evidence.Relationship,
 				symbol,
 				reference,
 				declaration,
