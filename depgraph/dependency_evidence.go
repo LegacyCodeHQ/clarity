@@ -37,6 +37,30 @@ const (
 	RelationshipEmbeddedResource   DependencyRelationship = "embedded-resource"
 )
 
+// DependencyRelationships returns every supported semantic relationship in
+// stable display order.
+func DependencyRelationships() []DependencyRelationship {
+	return []DependencyRelationship{
+		RelationshipResolvedDependency,
+		RelationshipModuleDeclaration,
+		RelationshipImport,
+		RelationshipTypeImport,
+		RelationshipReExport,
+		RelationshipCall,
+		RelationshipTypeReference,
+		RelationshipSymbolReference,
+		RelationshipInheritance,
+		RelationshipExtensionMember,
+		RelationshipCompanionMember,
+		RelationshipSamePackage,
+		RelationshipNavigation,
+		RelationshipScript,
+		RelationshipStylesheet,
+		RelationshipImage,
+		RelationshipEmbeddedResource,
+	}
+}
+
 // DependencyEvidence identifies a declaration/reference pair behind an edge.
 type DependencyEvidence struct {
 	Symbol          string                 `json:"symbol,omitempty"`

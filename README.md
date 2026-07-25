@@ -150,6 +150,8 @@ collapse modules into architecture-level nodes.
 clarity cycles src
 clarity cycles src --explain
 clarity cycles src --code-only
+clarity cycles src --exclude-kind module-declaration,navigation
+clarity cycles src --include-kind call,type-reference
 clarity cycles src --format json
 clarity cycles src --url
 ```
@@ -158,7 +160,9 @@ Lists complete cyclic dependency components, shows a representative loop, and
 recommends verified dependency-edge break sets (exact minima for bounded
 components and labelled heuristics for larger ones). Explain mode adds the exact
 symbols and source lines behind each edge; code-only mode excludes Markdown
-navigation loops. See [actionable cycle analysis](docs/cycles.md).
+navigation loops. Semantic filters rebuild the graph and recompute break sets
+for selected relationship kinds. See
+[actionable cycle analysis](docs/cycles.md).
 
 ### Keep Feedback Live While Coding
 

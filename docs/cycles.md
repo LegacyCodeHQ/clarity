@@ -54,15 +54,59 @@ For every internal dependency, explain mode prints:
 - the relationship kind
 - confidence (`high`, `medium`, or `low`)
 
-Swift evidence distinguishes owner-scoped extension members from unrelated
-bare declarations. Qualified value members such as `logger.error`, leading-dot
-enum cases such as `.error`, implicit `catch` error values, and
-`private`/`fileprivate` declarations do not create unrelated cross-file edges.
+Human output shows the first 20 references per edge and reports how many remain;
+JSON retains the complete evidence set. This keeps large, frequently referenced
+types readable without weakening automation.
+
+Evidence adapters currently provide symbols and lines for:
+
+- Swift types, symbols, and owner-scoped extension members
+- Rust module declarations, imports, re-exports, calls, and type references
+- Go imported-package and same-package calls, types, values, and embeddings
+- TypeScript/JavaScript runtime imports, type imports, re-exports, calls, and
+  inheritance
+- Kotlin imported and same-package calls, types, inheritance, and
+  companion-style access
+- HTML navigation, scripts, stylesheets, images, and embedded resources
+
+Relationships use a stable cross-language taxonomy:
+
+`resolved-dependency`, `module-declaration`, `import`, `type-import`,
+`re-export`, `call`, `type-reference`, `symbol-reference`, `inheritance`,
+`extension-member`, `companion-member`, `same-package-reference`,
+`navigation`, `script`, `stylesheet`, `image`, and `embedded-resource`.
+
+When a language adapter cannot establish a more precise relationship, Clarity
+retains a medium-confidence `resolved-dependency` fallback rather than
+presenting a guess as fact.
 
 Evidence is structural rather than a compiler proof. Clarity still does not
 replace type checking or code review.
 
-## Filtering documentation
+## Filtering relationships
+
+Semantic filters are applied to evidence before cycle detection. Clarity then
+rebuilds the graph, finds SCCs again, and recomputes verified break sets:
+
+```sh
+# Ignore normal Rust module containment.
+clarity cycles . --exclude-kind module-declaration
+
+# Show cycles sustained specifically by calls.
+clarity cycles . --include-kind call
+
+# Ignore reciprocal website navigation while retaining scripts and assets.
+clarity cycles . --exclude-kind navigation
+```
+
+Flags accept comma-separated values and may be repeated. Exclusion wins when a
+kind appears in both lists. Active filters are included in JSON output.
+
+An edge can have several evidence kinds. Removing `import` evidence does not
+remove that edge when a retained call or type reference still sustains the same
+file dependency.
+
+## Filtering files
 
 Markdown links are valid dependency relationships and may intentionally point
 in both directions. To focus on source code:
@@ -72,6 +116,8 @@ clarity cycles . --code-only
 ```
 
 `--code-only` excludes `.md` and `.markdown` files before graph construction.
+HTML remains included; use `--exclude-kind navigation` when the files matter
+but reciprocal page navigation does not.
 
 ## JSON output
 
@@ -86,6 +132,7 @@ JSON includes:
 - the representative loop
 - `exact` or `heuristic` break analysis
 - every retained break-set alternative
+- active include/exclude relationship filters
 
 Paths are relative to the requested scope. `--url` is intentionally incompatible
 with JSON output.

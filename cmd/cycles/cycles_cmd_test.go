@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/LegacyCodeHQ/clarity/depgraph"
 )
 
 func TestCycles_DetectsCircularDependency(t *testing.T) {
@@ -117,6 +119,79 @@ func TestCycles_CodeOnlyExcludesMarkdownNavigationLoops(t *testing.T) {
 
 	if !strings.Contains(out, "No cyclic components") {
 		t.Fatalf("expected Markdown-only loop to be excluded, got:\n%s", out)
+	}
+}
+
+func TestCycles_ExcludeKindRecomputesHTMLNavigationCycles(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, filepath.Join(dir, "index.html"),
+		`<a href="about.html">About</a>`)
+	writeFile(t, filepath.Join(dir, "about.html"),
+		`<a href="index.html">Home</a>`)
+
+	included := executeCycles(t, dir, "--include-kind", "navigation")
+	if !strings.Contains(included, "Found 1 cyclic component") ||
+		!strings.Contains(included, "Relationship filters: include=navigation") {
+		t.Fatalf("expected navigation-only cycle, got:\n%s", included)
+	}
+
+	excluded := executeCycles(t, dir, "--exclude-kind", "navigation")
+	if !strings.Contains(excluded, "No cyclic components") ||
+		!strings.Contains(excluded, "Relationship filters: exclude=navigation") {
+		t.Fatalf("expected navigation cycle to be removed, got:\n%s", excluded)
+	}
+}
+
+func TestCycles_JSONIncludesRelationshipFilters(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, filepath.Join(dir, "a.mjs"), `import "./b.mjs";`)
+	writeFile(t, filepath.Join(dir, "b.mjs"), `import "./a.mjs";`)
+
+	out := executeCycles(t, dir, "--include-kind", "import", "--format", "json")
+	if !strings.Contains(out, `"include_kinds": [`) ||
+		!strings.Contains(out, `"import"`) {
+		t.Fatalf("expected active relationship filters in JSON, got:\n%s", out)
+	}
+}
+
+func TestCycles_RejectsUnknownRelationshipKind(t *testing.T) {
+	cmd := NewCommand()
+	cmd.SetArgs([]string{"--include-kind", "magic"})
+	var stdout bytes.Buffer
+	cmd.SetOut(&stdout)
+
+	err := cmd.Execute()
+	if err == nil || !strings.Contains(err.Error(), "unknown dependency relationship") {
+		t.Fatalf("expected an unknown-kind error, got %v", err)
+	}
+}
+
+func TestRenderEvidence_CapsHumanReferencesWithoutAffectingJSON(t *testing.T) {
+	edge := depgraph.FileEdge{From: "a.go", To: "b.go"}
+	evidence := make([]depgraph.DependencyEvidence, 25)
+	for index := range evidence {
+		evidence[index] = depgraph.DependencyEvidence{
+			Symbol:          "B",
+			Kind:            "go-same-package-type-reference",
+			Relationship:    depgraph.RelationshipTypeReference,
+			ReferenceFile:   "a.go",
+			ReferenceLine:   index + 1,
+			DeclarationFile: "b.go",
+			DeclarationLine: 1,
+			Confidence:      depgraph.EvidenceConfidenceHigh,
+		}
+	}
+	item := renderedCycle{
+		component: depgraph.FileCycle{Edges: []depgraph.FileEdge{edge}},
+		metadata: map[depgraph.FileEdge]depgraph.EdgeMetadata{
+			edge: {Evidence: evidence},
+		},
+	}
+	var output bytes.Buffer
+	renderEvidence(&output, item, ".")
+
+	if !strings.Contains(output.String(), "… 5 more references") {
+		t.Fatalf("expected explicit human evidence cap, got:\n%s", output.String())
 	}
 }
 

@@ -20,6 +20,7 @@ import (
 )
 
 const cycleArrow = " → "
+const maxHumanEvidencePerEdge = 20
 
 // Cmd represents the cycles command.
 var Cmd = NewCommand()
@@ -48,6 +49,8 @@ This command is experimental; its output may change.`,
 	cmd.Flags().BoolP("url", "u", false, "Emit a visualization URL for each component")
 	cmd.Flags().Bool("explain", false, "Show every internal edge, evidence, and break alternative")
 	cmd.Flags().Bool("code-only", false, "Exclude documentation relationships (Markdown files)")
+	cmd.Flags().StringSlice("include-kind", nil, "Keep only dependency relationship kinds")
+	cmd.Flags().StringSlice("exclude-kind", nil, "Exclude dependency relationship kinds")
 	cmd.Flags().StringP("format", "f", "human", "Output format: human or json")
 	return cmd
 }
@@ -60,6 +63,8 @@ func runCycles(cmd *cobra.Command, args []string) error {
 	emitURL, _ := cmd.Flags().GetBool("url")
 	explainOutput, _ := cmd.Flags().GetBool("explain")
 	codeOnly, _ := cmd.Flags().GetBool("code-only")
+	includeKindValues, _ := cmd.Flags().GetStringSlice("include-kind")
+	excludeKindValues, _ := cmd.Flags().GetStringSlice("exclude-kind")
 	outputFormat, _ := cmd.Flags().GetString("format")
 	outputFormat = strings.ToLower(outputFormat)
 	if outputFormat != "human" && outputFormat != "json" {
@@ -67,6 +72,14 @@ func runCycles(cmd *cobra.Command, args []string) error {
 	}
 	if emitURL && outputFormat == "json" {
 		return fmt.Errorf("--url cannot be combined with --format json")
+	}
+	includeKinds, includeKindList, err := parseRelationshipKinds(includeKindValues)
+	if err != nil {
+		return err
+	}
+	excludeKinds, excludeKindList, err := parseRelationshipKinds(excludeKindValues)
+	if err != nil {
+		return err
 	}
 
 	files, err := expandInputs(inputs)
@@ -87,8 +100,15 @@ func runCycles(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return fmt.Errorf("failed to analyze dependency graph: %w", err)
 	}
-	depgraph.AnalyzeCycleBreakSets(fileGraph.Meta.Cycles)
 	explain.AttachEvidence(&fileGraph, contentReader)
+	if len(includeKinds) > 0 || len(excludeKinds) > 0 {
+		fileGraph, err = filterGraphByRelationships(
+			fileGraph, includeKinds, excludeKinds, contentReader)
+		if err != nil {
+			return fmt.Errorf("failed to filter dependency graph: %w", err)
+		}
+	}
+	depgraph.AnalyzeCycleBreakSets(fileGraph.Meta.Cycles)
 	rankBreakSets(fileGraph.Meta.Cycles, fileGraph.Meta.Edges)
 
 	out := cmd.OutOrStdout()
@@ -97,9 +117,11 @@ func runCycles(cmd *cobra.Command, args []string) error {
 	items := renderCycles(fileGraph.Meta.Cycles, fileGraph.Meta.Edges, base)
 
 	if outputFormat == "json" {
-		return renderJSON(out, scope, base, codeOnly, items)
+		return renderJSON(
+			out, scope, base, codeOnly, includeKindList, excludeKindList, items)
 	}
 
+	renderRelationshipFilters(out, includeKindList, excludeKindList)
 	if len(items) == 0 {
 		fmt.Fprintf(out, "No cyclic components found in %s.\n", scope)
 		return nil
@@ -131,6 +153,113 @@ func runCycles(cmd *cobra.Command, args []string) error {
 		}
 	}
 	return nil
+}
+
+func parseRelationshipKinds(
+	values []string,
+) (map[depgraph.DependencyRelationship]bool, []depgraph.DependencyRelationship, error) {
+	known := make(map[string]depgraph.DependencyRelationship)
+	for _, relationship := range depgraph.DependencyRelationships() {
+		known[string(relationship)] = relationship
+	}
+	selected := make(map[depgraph.DependencyRelationship]bool)
+	for _, value := range values {
+		normalized := strings.ToLower(strings.TrimSpace(value))
+		relationship, ok := known[normalized]
+		if !ok {
+			valid := make([]string, 0, len(known))
+			for _, item := range depgraph.DependencyRelationships() {
+				valid = append(valid, string(item))
+			}
+			return nil, nil, fmt.Errorf(
+				"unknown dependency relationship %q (expected one of: %s)",
+				value,
+				strings.Join(valid, ", "))
+		}
+		selected[relationship] = true
+	}
+	ordered := make([]depgraph.DependencyRelationship, 0, len(selected))
+	for _, relationship := range depgraph.DependencyRelationships() {
+		if selected[relationship] {
+			ordered = append(ordered, relationship)
+		}
+	}
+	return selected, ordered, nil
+}
+
+func filterGraphByRelationships(
+	original depgraph.FileDependencyGraph,
+	include map[depgraph.DependencyRelationship]bool,
+	exclude map[depgraph.DependencyRelationship]bool,
+	contentReader vcs.ContentReader,
+) (depgraph.FileDependencyGraph, error) {
+	adjacency := make(map[string][]string, len(original.Meta.Files))
+	for file := range original.Meta.Files {
+		adjacency[file] = nil
+	}
+	filteredMetadata := make(map[depgraph.FileEdge]depgraph.EdgeMetadata)
+	for edge, metadata := range original.Meta.Edges {
+		evidence := make([]depgraph.DependencyEvidence, 0, len(metadata.Evidence))
+		for _, item := range metadata.Evidence {
+			relationship := item.Relationship
+			if relationship == "" {
+				relationship = depgraph.RelationshipResolvedDependency
+			}
+			if len(include) > 0 && !include[relationship] {
+				continue
+			}
+			if exclude[relationship] {
+				continue
+			}
+			evidence = append(evidence, item)
+		}
+		if len(evidence) == 0 {
+			continue
+		}
+		adjacency[edge.From] = append(adjacency[edge.From], edge.To)
+		metadata.Evidence = evidence
+		filteredMetadata[edge] = metadata
+	}
+	graph, err := depgraph.NewDependencyGraphFromAdjacency(adjacency)
+	if err != nil {
+		return depgraph.FileDependencyGraph{}, err
+	}
+	filtered, err := depgraph.NewFileDependencyGraph(graph, nil, contentReader)
+	if err != nil {
+		return depgraph.FileDependencyGraph{}, err
+	}
+	for edge, metadata := range filtered.Meta.Edges {
+		source := filteredMetadata[edge]
+		metadata.Evidence = source.Evidence
+		filtered.Meta.Edges[edge] = metadata
+	}
+	return filtered, nil
+}
+
+func renderRelationshipFilters(
+	out interface{ Write([]byte) (int, error) },
+	include []depgraph.DependencyRelationship,
+	exclude []depgraph.DependencyRelationship,
+) {
+	if len(include) == 0 && len(exclude) == 0 {
+		return
+	}
+	parts := []string{}
+	if len(include) > 0 {
+		parts = append(parts, "include="+joinRelationships(include))
+	}
+	if len(exclude) > 0 {
+		parts = append(parts, "exclude="+joinRelationships(exclude))
+	}
+	fmt.Fprintf(out, "Relationship filters: %s\n", strings.Join(parts, " "))
+}
+
+func joinRelationships(relationships []depgraph.DependencyRelationship) string {
+	values := make([]string, 0, len(relationships))
+	for _, relationship := range relationships {
+		values = append(values, string(relationship))
+	}
+	return strings.Join(values, ",")
 }
 
 // rankBreakSets keeps minimum cardinality as the primary guarantee, then
@@ -271,7 +400,12 @@ func renderEvidence(out interface{ Write([]byte) (int, error) }, item renderedCy
 	fmt.Fprintln(out, "     Internal dependencies:")
 	for _, edge := range item.component.Edges {
 		fmt.Fprintf(out, "       - %s\n", renderEdge(edge, base))
-		for _, evidence := range item.metadata[edge].Evidence {
+		evidenceItems := item.metadata[edge].Evidence
+		visible := evidenceItems
+		if len(visible) > maxHumanEvidencePerEdge {
+			visible = visible[:maxHumanEvidencePerEdge]
+		}
+		for _, evidence := range visible {
 			reference := relName(base, evidence.ReferenceFile)
 			if evidence.ReferenceLine > 0 {
 				reference = fmt.Sprintf("%s:%d", reference, evidence.ReferenceLine)
@@ -294,6 +428,12 @@ func renderEvidence(out interface{ Write([]byte) (int, error) }, item renderedCy
 				declaration,
 				evidence.Confidence)
 		}
+		if hidden := len(evidenceItems) - len(visible); hidden > 0 {
+			fmt.Fprintf(
+				out,
+				"         … %d more references; use --format json for complete evidence\n",
+				hidden)
+		}
 	}
 }
 
@@ -309,9 +449,11 @@ func pluralEdge(count int) string {
 }
 
 type jsonCyclesOutput struct {
-	Scope      string               `json:"scope"`
-	CodeOnly   bool                 `json:"code_only"`
-	Components []jsonCycleComponent `json:"components"`
+	Scope        string                            `json:"scope"`
+	CodeOnly     bool                              `json:"code_only"`
+	IncludeKinds []depgraph.DependencyRelationship `json:"include_kinds,omitempty"`
+	ExcludeKinds []depgraph.DependencyRelationship `json:"exclude_kinds,omitempty"`
+	Components   []jsonCycleComponent              `json:"components"`
 }
 
 type jsonCycleComponent struct {
@@ -333,9 +475,14 @@ func renderJSON(
 	scope string,
 	base string,
 	codeOnly bool,
+	includeKinds []depgraph.DependencyRelationship,
+	excludeKinds []depgraph.DependencyRelationship,
 	items []renderedCycle,
 ) error {
-	payload := jsonCyclesOutput{Scope: scope, CodeOnly: codeOnly}
+	payload := jsonCyclesOutput{
+		Scope: scope, CodeOnly: codeOnly,
+		IncludeKinds: includeKinds, ExcludeKinds: excludeKinds,
+	}
 	for _, item := range items {
 		component := jsonCycleComponent{
 			Nodes:              relativeFiles(item.component.Nodes, base),
