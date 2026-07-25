@@ -134,10 +134,14 @@ func ParseSwiftTopLevelSymbolNames(sourceCode []byte) []string {
 		var childNames []string
 		switch {
 		case isSwiftExtensionDeclaration(child):
-			// An extension declares nothing of its own name, but its body
-			// members are referenceable across files (CLR-31).
-			childNames = swiftExtensionMemberNames(child, sourceCode)
+			// Extension members are owner-scoped and resolved separately.
+			// Treating them as global declarations creates false edges for
+			// common member names such as `error`, `json`, and `span`.
+			continue
 		case isTopLevelSwiftSymbolDeclaration(child):
+			if isPrivateSwiftDeclaration(child, sourceCode) {
+				continue
+			}
 			childNames = swiftDeclarationNames(child, sourceCode)
 		default:
 			continue
@@ -184,7 +188,10 @@ func ExtractSwiftReferencedSymbols(sourceCode []byte) []string {
 			return
 		}
 
-		if isSwiftReferenceNode(n) {
+		if isSwiftReferenceNode(n) &&
+			!isQualifiedSwiftMemberName(n, sourceCode) &&
+			!isSwiftDeclarationName(n) &&
+			!isImplicitSwiftCatchError(n, sourceCode) {
 			name := strings.TrimSpace(n.Content(sourceCode))
 			if name != "" && !declared[name] && !seen[name] {
 				seen[name] = true
@@ -200,6 +207,219 @@ func ExtractSwiftReferencedSymbols(sourceCode []byte) []string {
 	walk(tree.RootNode())
 
 	return result
+}
+
+// SwiftQualifiedReference is a member referenced through an explicit type-like
+// qualifier (for example Parser.parse or Self.parse).
+type SwiftQualifiedReference struct {
+	Qualifier string
+	Member    string
+}
+
+// ExtractSwiftQualifiedReferences returns explicit type/Self member references.
+// Lowercase value-member navigation such as logger.error is deliberately
+// excluded because it cannot be matched safely without type information.
+func ExtractSwiftQualifiedReferences(sourceCode []byte) []SwiftQualifiedReference {
+	tree, err := parseSwift(sourceCode)
+	if err != nil {
+		return nil
+	}
+	defer tree.Close()
+
+	seen := make(map[SwiftQualifiedReference]bool)
+	var result []SwiftQualifiedReference
+	var walk func(*sitter.Node)
+	walk = func(n *sitter.Node) {
+		if n == nil {
+			return
+		}
+		if n.Type() == "navigation_expression" {
+			target := n.ChildByFieldName("target")
+			suffix := n.ChildByFieldName("suffix")
+			member := firstDescendantContent(suffix, sourceCode, "simple_identifier", "identifier")
+			qualifier := ""
+			if target != nil {
+				qualifier = strings.TrimSpace(target.Content(sourceCode))
+			}
+			if member != "" && (qualifier == "Self" || isLikelySwiftTypeName(qualifier)) {
+				ref := SwiftQualifiedReference{Qualifier: qualifier, Member: member}
+				if !seen[ref] {
+					seen[ref] = true
+					result = append(result, ref)
+				}
+			}
+		}
+		for i := 0; i < int(n.ChildCount()); i++ {
+			walk(n.Child(i))
+		}
+	}
+	walk(tree.RootNode())
+	return result
+}
+
+// SwiftExtensionMember identifies a cross-file-visible extension member and
+// the type whose extension declares it.
+type SwiftExtensionMember struct {
+	Owner  string
+	Member string
+}
+
+// ParseSwiftExtensionMembers returns non-private direct extension members.
+func ParseSwiftExtensionMembers(sourceCode []byte) []SwiftExtensionMember {
+	tree, err := parseSwift(sourceCode)
+	if err != nil {
+		return nil
+	}
+	defer tree.Close()
+
+	var result []SwiftExtensionMember
+	root := tree.RootNode()
+	for i := 0; i < int(root.ChildCount()); i++ {
+		ext := root.Child(i)
+		if ext == nil || !isSwiftExtensionDeclaration(ext) ||
+			isPrivateSwiftDeclaration(ext, sourceCode) {
+			continue
+		}
+		owner := extractSwiftDeclarationName(ext, sourceCode)
+		body := firstDirectChildOfType(ext, "class_body", "enum_class_body")
+		if owner == "" || body == nil {
+			continue
+		}
+		for j := 0; j < int(body.ChildCount()); j++ {
+			member := body.Child(j)
+			if member == nil || !isSwiftDeclarationNode(member) ||
+				isPrivateSwiftDeclaration(member, sourceCode) {
+				continue
+			}
+			for _, name := range swiftDeclarationNames(member, sourceCode) {
+				if name != "" {
+					result = append(result, SwiftExtensionMember{Owner: owner, Member: name})
+				}
+			}
+		}
+	}
+	return result
+}
+
+// ParseSwiftExtensionOwners returns the types extended by this file.
+func ParseSwiftExtensionOwners(sourceCode []byte) []string {
+	tree, err := parseSwift(sourceCode)
+	if err != nil {
+		return nil
+	}
+	defer tree.Close()
+
+	var owners []string
+	seen := make(map[string]bool)
+	root := tree.RootNode()
+	for i := 0; i < int(root.ChildCount()); i++ {
+		ext := root.Child(i)
+		if ext == nil || !isSwiftExtensionDeclaration(ext) {
+			continue
+		}
+		owner := extractSwiftDeclarationName(ext, sourceCode)
+		if owner != "" && !seen[owner] {
+			seen[owner] = true
+			owners = append(owners, owner)
+		}
+	}
+	return owners
+}
+
+func isQualifiedSwiftMemberName(node *sitter.Node, sourceCode []byte) bool {
+	if node == nil {
+		return false
+	}
+	parent := node.Parent()
+	if parent == nil {
+		return false
+	}
+	if parent.Type() == "navigation_suffix" {
+		return true
+	}
+	// Swift's leading-dot shorthand (`.error`, including switch patterns)
+	// retains the dot on the parent expression/pattern rather than on the
+	// identifier node itself. It is a member selection, not a bare reference.
+	return strings.HasPrefix(strings.TrimSpace(parent.Content(sourceCode)), ".")
+}
+
+func isSwiftDeclarationName(node *sitter.Node) bool {
+	if node == nil {
+		return false
+	}
+	parent := node.Parent()
+	if parent == nil {
+		return false
+	}
+	switch parent.Type() {
+	case "enum_entry":
+		return true
+	default:
+		return false
+	}
+}
+
+func isImplicitSwiftCatchError(node *sitter.Node, sourceCode []byte) bool {
+	if node == nil || strings.TrimSpace(node.Content(sourceCode)) != "error" {
+		return false
+	}
+	for ancestor := node.Parent(); ancestor != nil; ancestor = ancestor.Parent() {
+		if ancestor.Type() == "catch_block" {
+			return true
+		}
+		if ancestor.Type() == "function_declaration" {
+			return false
+		}
+	}
+	return false
+}
+
+func isPrivateSwiftDeclaration(node *sitter.Node, sourceCode []byte) bool {
+	if node == nil {
+		return false
+	}
+	for i := 0; i < int(node.ChildCount()); i++ {
+		child := node.Child(i)
+		if child == nil || child.Type() != "modifiers" {
+			continue
+		}
+		for j := 0; j < int(child.ChildCount()); j++ {
+			modifier := child.Child(j)
+			if modifier == nil || modifier.Type() != "visibility_modifier" {
+				continue
+			}
+			switch strings.TrimSpace(modifier.Content(sourceCode)) {
+			case "private", "fileprivate":
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func firstDescendantContent(node *sitter.Node, sourceCode []byte, types ...string) string {
+	found := firstDescendant(node, types...)
+	if found == nil {
+		return ""
+	}
+	return strings.TrimSpace(found.Content(sourceCode))
+}
+
+func firstDescendant(node *sitter.Node, types ...string) *sitter.Node {
+	if node == nil {
+		return nil
+	}
+	for _, nodeType := range types {
+		if node.Type() == nodeType {
+			return node
+		}
+	}
+	for i := 0; i < int(node.ChildCount()); i++ {
+		if value := firstDescendant(node.Child(i), types...); value != nil {
+			return value
+		}
+	}
+	return nil
 }
 
 // ExtractSwiftTypeIdentifiers returns referenced type-like identifiers in Swift source.
@@ -506,38 +726,6 @@ func firstDirectChildOfType(node *sitter.Node, types ...string) *sitter.Node {
 		}
 	}
 	return nil
-}
-
-// swiftExtensionMemberNames collects the names of members declared directly in
-// an extension body: the methods, computed properties, nested types, and
-// typealiases the extension adds to the extended type. These are what other
-// files reference when they use the extension (CLR-31), so an extension-only
-// file must contribute them to the declaration index. The extended type name
-// itself is deliberately not collected — `extension Foo` is a *reference* to
-// Foo, not a declaration of it (mirrors collectSwiftDeclaredNames). Only direct
-// body members are collected, not function-local declarations inside method
-// bodies, matching the one-level scope of the top-level collection.
-func swiftExtensionMemberNames(extNode *sitter.Node, sourceCode []byte) []string {
-	body := firstDirectChildOfType(extNode, "class_body", "enum_class_body")
-	if body == nil {
-		return nil
-	}
-	var names []string
-	for i := 0; i < int(body.ChildCount()); i++ {
-		member := body.Child(i)
-		if member == nil {
-			continue
-		}
-		if isSwiftExtensionDeclaration(member) {
-			// A nested extension adds members to some other type; recurse.
-			names = append(names, swiftExtensionMemberNames(member, sourceCode)...)
-			continue
-		}
-		if isSwiftDeclarationNode(member) {
-			names = append(names, swiftDeclarationNames(member, sourceCode)...)
-		}
-	}
-	return names
 }
 
 func isSwiftReferenceNode(node *sitter.Node) bool {

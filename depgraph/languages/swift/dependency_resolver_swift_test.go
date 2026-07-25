@@ -429,3 +429,109 @@ struct Parser {
 	require.NoError(t, err)
 	assert.ElementsMatch(t, []string{extensionPath}, imports)
 }
+
+func TestResolveSwiftProjectImports_QualifiedMembersDoNotMatchUnrelatedDeclarations(t *testing.T) {
+	tmpDir := t.TempDir()
+	appDir := filepath.Join(tmpDir, "Sources", "App")
+	require.NoError(t, os.MkdirAll(appDir, 0o755))
+
+	consumerPath := filepath.Join(appDir, "Consumer.swift")
+	require.NoError(t, os.WriteFile(consumerPath, []byte(`
+struct Consumer {
+    let logger: Logger
+    func run() {
+        logger.error("bad")
+        StrataLogging.logger("consumer")
+        let severity: Severity = .error
+    }
+}
+`), 0o644))
+
+	unrelatedPath := filepath.Join(appDir, "Unrelated.swift")
+	require.NoError(t, os.WriteFile(unrelatedPath, []byte(`
+private let logger = Logger()
+func error(_ message: String) {}
+`), 0o644))
+
+	reader := vcs.FilesystemContentReader()
+	supplied := map[string]bool{consumerPath: true, unrelatedPath: true}
+	imports, err := ResolveSwiftProjectImports(consumerPath, consumerPath, supplied, reader)
+	require.NoError(t, err)
+	assert.Empty(t, imports)
+}
+
+func TestResolveSwiftProjectImports_QualifiedExtensionMemberMatchesOwner(t *testing.T) {
+	tmpDir := t.TempDir()
+	appDir := filepath.Join(tmpDir, "Sources", "App")
+	require.NoError(t, os.MkdirAll(appDir, 0o755))
+
+	typePath := filepath.Join(appDir, "Parser.swift")
+	require.NoError(t, os.WriteFile(typePath, []byte(`
+struct Parser {
+    func run() {
+        Self.isStatusOpener("x")
+    }
+}
+`), 0o644))
+
+	extensionPath := filepath.Join(appDir, "Parser+Resolve.swift")
+	require.NoError(t, os.WriteFile(extensionPath, []byte(`
+extension Parser {
+    static func isStatusOpener(_ raw: String) -> Bool { false }
+}
+`), 0o644))
+
+	reader := vcs.FilesystemContentReader()
+	supplied := map[string]bool{typePath: true, extensionPath: true}
+	imports, err := ResolveSwiftProjectImports(typePath, typePath, supplied, reader)
+	require.NoError(t, err)
+	assert.ElementsMatch(t, []string{extensionPath}, imports)
+}
+
+func TestResolveSwiftProjectImports_PrivateTopLevelDeclarationIsFileScoped(t *testing.T) {
+	tmpDir := t.TempDir()
+	appDir := filepath.Join(tmpDir, "Sources", "App")
+	require.NoError(t, os.MkdirAll(appDir, 0o755))
+
+	consumerPath := filepath.Join(appDir, "Consumer.swift")
+	require.NoError(t, os.WriteFile(consumerPath, []byte(`
+func run() {
+    logger("consumer")
+}
+`), 0o644))
+
+	privatePath := filepath.Join(appDir, "Private.swift")
+	require.NoError(t, os.WriteFile(privatePath, []byte(`
+private func logger(_ category: String) {}
+`), 0o644))
+
+	reader := vcs.FilesystemContentReader()
+	supplied := map[string]bool{consumerPath: true, privatePath: true}
+	imports, err := ResolveSwiftProjectImports(consumerPath, consumerPath, supplied, reader)
+	require.NoError(t, err)
+	assert.Empty(t, imports)
+}
+
+func TestResolveSwiftProjectImports_PrivateSetterRemainsReadable(t *testing.T) {
+	tmpDir := t.TempDir()
+	appDir := filepath.Join(tmpDir, "Sources", "App")
+	require.NoError(t, os.MkdirAll(appDir, 0o755))
+
+	consumerPath := filepath.Join(appDir, "Consumer.swift")
+	require.NoError(t, os.WriteFile(consumerPath, []byte(`
+func run() {
+    print(sharedCount)
+}
+`), 0o644))
+
+	statePath := filepath.Join(appDir, "State.swift")
+	require.NoError(t, os.WriteFile(statePath, []byte(`
+public private(set) var sharedCount = 0
+`), 0o644))
+
+	reader := vcs.FilesystemContentReader()
+	supplied := map[string]bool{consumerPath: true, statePath: true}
+	imports, err := ResolveSwiftProjectImports(consumerPath, consumerPath, supplied, reader)
+	require.NoError(t, err)
+	assert.ElementsMatch(t, []string{statePath}, imports)
+}

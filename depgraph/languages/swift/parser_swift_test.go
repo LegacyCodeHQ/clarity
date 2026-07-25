@@ -54,6 +54,31 @@ struct FactoryStatusProbeFetchTests {
 	assert.Contains(t, identifiers, "FactoryStatusProbe")
 }
 
+func TestExtractSwiftReferencedSymbols_SkipsMemberAndImplicitCatchNames(t *testing.T) {
+	source := []byte(`
+enum Severity {
+    case error
+}
+
+func run(logger: Logger) {
+    logger.error("bad")
+    let severity: Severity = .error
+    do {
+        try work()
+    } catch {
+        print("\(error)")
+    }
+}
+`)
+
+	references := ExtractSwiftReferencedSymbols(source)
+
+	assert.NotContains(t, references, "error")
+	assert.NotContains(t, references, "Severity")
+	assert.Contains(t, references, "Logger")
+	assert.Contains(t, references, "work")
+}
+
 func TestParseSwiftTopLevelTypeNames_SkipsExtensions(t *testing.T) {
 	source := `
 extension SettingsStore {

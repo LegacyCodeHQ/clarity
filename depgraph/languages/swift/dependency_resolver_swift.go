@@ -27,7 +27,15 @@ func ResolveSwiftProjectImports(
 
 	moduleIndex := buildSwiftModuleIndex(suppliedFiles)
 	typeReferences := ExtractSwiftReferencedSymbols(content)
-	if len(typeReferences) == 0 {
+	qualifiedReferences := ExtractSwiftQualifiedReferences(content)
+	sourceTypes := make(map[string]bool)
+	for _, name := range ParseSwiftTopLevelTypeNames(content) {
+		sourceTypes[name] = true
+	}
+	for _, name := range ParseSwiftExtensionOwners(content) {
+		sourceTypes[name] = true
+	}
+	if len(typeReferences) == 0 && len(qualifiedReferences) == 0 {
 		return []string{}, nil
 	}
 
@@ -40,6 +48,7 @@ func ResolveSwiftProjectImports(
 
 	var projectImports []string
 	typeIndex := make(map[string][]string)
+	extensionIndex := make(map[string][]SwiftExtensionMember)
 	visitedModules := make(map[string]bool)
 
 	if moduleName := swiftModuleFromPath(absPath); moduleName != "" {
@@ -50,6 +59,9 @@ func ResolveSwiftProjectImports(
 			moduleIndex,
 			typeReferenceSet,
 			typeIndex,
+			qualifiedReferences,
+			sourceTypes,
+			extensionIndex,
 			contentReader)...)
 	} else {
 		projectImports = append(projectImports, resolveSwiftCandidatesByTypeReferences(
@@ -57,6 +69,9 @@ func ResolveSwiftProjectImports(
 			allSwiftCandidates(suppliedFiles),
 			typeReferenceSet,
 			typeIndex,
+			qualifiedReferences,
+			sourceTypes,
+			extensionIndex,
 			contentReader)...)
 	}
 
@@ -72,6 +87,9 @@ func ResolveSwiftProjectImports(
 			moduleIndex,
 			typeReferenceSet,
 			typeIndex,
+			qualifiedReferences,
+			sourceTypes,
+			extensionIndex,
 			contentReader)...)
 	}
 
@@ -102,6 +120,9 @@ func resolveSwiftModuleImport(
 	moduleIndex map[string][]string,
 	typeReferences map[string]bool,
 	typeIndex map[string][]string,
+	qualifiedReferences []SwiftQualifiedReference,
+	sourceTypes map[string]bool,
+	extensionIndex map[string][]SwiftExtensionMember,
 	contentReader vcs.ContentReader,
 ) []string {
 	if moduleName == "" {
@@ -126,6 +147,9 @@ func resolveSwiftModuleImport(
 		candidates,
 		typeReferences,
 		typeIndex,
+		qualifiedReferences,
+		sourceTypes,
+		extensionIndex,
 		contentReader)
 }
 
@@ -134,6 +158,9 @@ func resolveSwiftCandidatesByTypeReferences(
 	candidates []string,
 	typeReferences map[string]bool,
 	typeIndex map[string][]string,
+	qualifiedReferences []SwiftQualifiedReference,
+	sourceTypes map[string]bool,
+	extensionIndex map[string][]SwiftExtensionMember,
 	contentReader vcs.ContentReader,
 ) []string {
 	var resolved []string
@@ -141,7 +168,14 @@ func resolveSwiftCandidatesByTypeReferences(
 		if path == sourceFile {
 			continue
 		}
-		if fileDeclaresReferencedType(path, typeReferences, typeIndex, contentReader) {
+		if fileDeclaresReferencedType(
+			path,
+			typeReferences,
+			typeIndex,
+			qualifiedReferences,
+			sourceTypes,
+			extensionIndex,
+			contentReader) {
 			resolved = append(resolved, path)
 		}
 	}
@@ -152,6 +186,9 @@ func fileDeclaresReferencedType(
 	filePath string,
 	typeReferences map[string]bool,
 	typeIndex map[string][]string,
+	qualifiedReferences []SwiftQualifiedReference,
+	sourceTypes map[string]bool,
+	extensionIndex map[string][]SwiftExtensionMember,
 	contentReader vcs.ContentReader,
 ) bool {
 	if _, ok := typeIndex[filePath]; !ok {
@@ -165,6 +202,28 @@ func fileDeclaresReferencedType(
 
 	for _, declared := range typeIndex[filePath] {
 		if typeReferences[declared] {
+			return true
+		}
+	}
+	if _, ok := extensionIndex[filePath]; !ok {
+		content, err := contentReader(filePath)
+		if err != nil {
+			extensionIndex[filePath] = nil
+		} else {
+			extensionIndex[filePath] = ParseSwiftExtensionMembers(content)
+		}
+	}
+	for _, ref := range qualifiedReferences {
+		for _, member := range extensionIndex[filePath] {
+			ownerMatches := ref.Qualifier == member.Owner ||
+				(ref.Qualifier == "Self" && sourceTypes[member.Owner])
+			if ownerMatches && ref.Member == member.Member {
+				return true
+			}
+		}
+	}
+	for _, member := range extensionIndex[filePath] {
+		if sourceTypes[member.Owner] && typeReferences[member.Member] {
 			return true
 		}
 	}
