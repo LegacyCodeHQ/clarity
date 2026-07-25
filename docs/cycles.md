@@ -73,8 +73,8 @@ Relationships use a stable cross-language taxonomy:
 
 `resolved-dependency`, `module-declaration`, `import`, `type-import`,
 `re-export`, `call`, `type-reference`, `symbol-reference`, `inheritance`,
-`extension-member`, `companion-member`, `same-package-reference`,
-`navigation`, `script`, `stylesheet`, `image`, and `embedded-resource`.
+`extension-member`, `companion-member`, `navigation`, `script`, `stylesheet`,
+`image`, and `embedded-resource`.
 
 When a language adapter cannot establish a more precise relationship, Clarity
 retains a medium-confidence `resolved-dependency` fallback rather than

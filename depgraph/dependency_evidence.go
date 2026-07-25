@@ -29,7 +29,6 @@ const (
 	RelationshipInheritance        DependencyRelationship = "inheritance"
 	RelationshipExtensionMember    DependencyRelationship = "extension-member"
 	RelationshipCompanionMember    DependencyRelationship = "companion-member"
-	RelationshipSamePackage        DependencyRelationship = "same-package-reference"
 	RelationshipNavigation         DependencyRelationship = "navigation"
 	RelationshipScript             DependencyRelationship = "script"
 	RelationshipStylesheet         DependencyRelationship = "stylesheet"
@@ -52,7 +51,6 @@ func DependencyRelationships() []DependencyRelationship {
 		RelationshipInheritance,
 		RelationshipExtensionMember,
 		RelationshipCompanionMember,
-		RelationshipSamePackage,
 		RelationshipNavigation,
 		RelationshipScript,
 		RelationshipStylesheet,
