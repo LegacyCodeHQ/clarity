@@ -128,7 +128,7 @@ func TestCycles_ExplainShowsDependencyEvidence(t *testing.T) {
 	out := executeCycles(t, dir, "--explain")
 
 	if !strings.Contains(out, "Internal dependencies:") ||
-		!strings.Contains(out, "resolved-dependency") {
+		!strings.Contains(out, "javascript-import/import") {
 		t.Fatalf("expected source-level evidence, got:\n%s", out)
 	}
 }

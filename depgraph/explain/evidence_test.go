@@ -198,3 +198,83 @@ func Execute() {}
 		Confidence:      depgraph.EvidenceConfidenceHigh,
 	})
 }
+
+func TestAttachEvidence_TypeScriptTypeImportAndCall(t *testing.T) {
+	dir := t.TempDir()
+	appFile := filepath.Join(dir, "app.ts")
+	modelFile := filepath.Join(dir, "model.ts")
+	require.NoError(t, os.WriteFile(appFile, []byte(`import type { Job } from "./model";
+import { execute } from "./model";
+
+export function run(job: Job) {
+  return execute(job);
+}
+`), 0o644))
+	require.NoError(t, os.WriteFile(modelFile, []byte(`export interface Job {}
+export function execute(job: Job) {}
+`), 0o644))
+
+	reader := vcs.FilesystemContentReader()
+	graph := depgraph.MustDependencyGraph(map[string][]string{
+		appFile:   {modelFile},
+		modelFile: {appFile},
+	})
+	fileGraph, err := depgraph.NewFileDependencyGraph(graph, nil, reader)
+	require.NoError(t, err)
+
+	explain.AttachEvidence(&fileGraph, reader)
+
+	evidence := fileGraph.Meta.Edges[depgraph.FileEdge{From: appFile, To: modelFile}].Evidence
+	assert.Contains(t, evidence, depgraph.DependencyEvidence{
+		Symbol:          "Job",
+		Kind:            "typescript-type-import",
+		Relationship:    depgraph.RelationshipTypeImport,
+		ReferenceFile:   appFile,
+		ReferenceLine:   1,
+		DeclarationFile: modelFile,
+		DeclarationLine: 1,
+		Confidence:      depgraph.EvidenceConfidenceHigh,
+	})
+	assert.Contains(t, evidence, depgraph.DependencyEvidence{
+		Symbol:          "execute",
+		Kind:            "typescript-call",
+		Relationship:    depgraph.RelationshipCall,
+		ReferenceFile:   appFile,
+		ReferenceLine:   5,
+		DeclarationFile: modelFile,
+		DeclarationLine: 2,
+		Confidence:      depgraph.EvidenceConfidenceMedium,
+	})
+}
+
+func TestAttachEvidence_JavaScriptReExport(t *testing.T) {
+	dir := t.TempDir()
+	indexFile := filepath.Join(dir, "index.mjs")
+	modelFile := filepath.Join(dir, "model.mjs")
+	require.NoError(t, os.WriteFile(indexFile, []byte(
+		`export { execute } from "./model.mjs";`), 0o644))
+	require.NoError(t, os.WriteFile(modelFile, []byte(
+		`export function execute() {}`), 0o644))
+
+	reader := vcs.FilesystemContentReader()
+	graph := depgraph.MustDependencyGraph(map[string][]string{
+		indexFile: {modelFile},
+		modelFile: {indexFile},
+	})
+	fileGraph, err := depgraph.NewFileDependencyGraph(graph, nil, reader)
+	require.NoError(t, err)
+
+	explain.AttachEvidence(&fileGraph, reader)
+
+	evidence := fileGraph.Meta.Edges[depgraph.FileEdge{From: indexFile, To: modelFile}].Evidence
+	assert.Contains(t, evidence, depgraph.DependencyEvidence{
+		Symbol:          "execute",
+		Kind:            "javascript-re-export",
+		Relationship:    depgraph.RelationshipReExport,
+		ReferenceFile:   indexFile,
+		ReferenceLine:   1,
+		DeclarationFile: modelFile,
+		DeclarationLine: 1,
+		Confidence:      depgraph.EvidenceConfidenceHigh,
+	})
+}

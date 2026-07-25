@@ -21,6 +21,7 @@ const (
 	RelationshipResolvedDependency DependencyRelationship = "resolved-dependency"
 	RelationshipModuleDeclaration  DependencyRelationship = "module-declaration"
 	RelationshipImport             DependencyRelationship = "import"
+	RelationshipTypeImport         DependencyRelationship = "type-import"
 	RelationshipReExport           DependencyRelationship = "re-export"
 	RelationshipCall               DependencyRelationship = "call"
 	RelationshipTypeReference      DependencyRelationship = "type-reference"

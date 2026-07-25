@@ -13,6 +13,7 @@ import (
 	"github.com/LegacyCodeHQ/clarity/depgraph/languages/markdown"
 	"github.com/LegacyCodeHQ/clarity/depgraph/languages/rust"
 	"github.com/LegacyCodeHQ/clarity/depgraph/languages/swift"
+	"github.com/LegacyCodeHQ/clarity/depgraph/languages/typescript"
 	"github.com/LegacyCodeHQ/clarity/vcs"
 )
 
@@ -30,6 +31,8 @@ func AttachEvidence(graph *depgraph.FileDependencyGraph, reader vcs.ContentReade
 			continue
 		}
 		switch filepath.Ext(edge.From) {
+		case ".js", ".jsx", ".mjs", ".cjs", ".ts", ".tsx", ".mts", ".cts":
+			metadata.Evidence = ecmaScriptEvidence(edge, reader)
 		case ".go":
 			metadata.Evidence = goEvidence(edge, reader)
 		case ".rs":
@@ -49,6 +52,128 @@ func AttachEvidence(graph *depgraph.FileDependencyGraph, reader vcs.ContentReade
 			}}
 		}
 		graph.Meta.Edges[edge] = metadata
+	}
+}
+
+func ecmaScriptEvidence(edge depgraph.FileEdge, reader vcs.ContentReader) []depgraph.DependencyEvidence {
+	source, sourceErr := reader(edge.From)
+	target, targetErr := reader(edge.To)
+	if sourceErr != nil || targetErr != nil {
+		return nil
+	}
+	imports := typescript.ParseECMAScriptImportLocations(source)
+	declarations := typescript.ParseECMAScriptDeclarationLocations(target)
+	language := "javascript"
+	switch filepath.Ext(edge.From) {
+	case ".ts", ".tsx", ".mts", ".cts":
+		language = "typescript"
+	}
+
+	selected := make(map[string]typescript.ECMAScriptImportLocation)
+	var evidence []depgraph.DependencyEvidence
+	for _, item := range imports {
+		if !ecmaScriptImportTargetsEdge(edge, item.Path) {
+			continue
+		}
+		selected[item.Local] = item
+		declaration := matchingECMAScriptDeclaration(declarations, item.Imported, item.Local)
+		relationship := depgraph.RelationshipImport
+		switch item.Kind {
+		case "type-import":
+			relationship = depgraph.RelationshipTypeImport
+		case "re-export":
+			relationship = depgraph.RelationshipReExport
+		}
+		evidence = append(evidence, depgraph.DependencyEvidence{
+			Symbol:          item.Imported,
+			Kind:            language + "-" + item.Kind,
+			Relationship:    relationship,
+			ReferenceFile:   edge.From,
+			ReferenceLine:   item.Line,
+			DeclarationFile: edge.To,
+			DeclarationLine: declaration.Line,
+			Confidence:      depgraph.EvidenceConfidenceHigh,
+		})
+	}
+	if len(selected) == 0 {
+		return nil
+	}
+	for _, reference := range typescript.ExtractECMAScriptReferenceLocations(source, imports) {
+		local := ecmaLocalForImported(selected, reference.Name, reference.Path)
+		item, ok := selected[local]
+		if !ok {
+			continue
+		}
+		declaration := matchingECMAScriptDeclaration(
+			declarations, item.Imported, item.Local)
+		evidence = append(evidence, depgraph.DependencyEvidence{
+			Symbol:          reference.Name,
+			Kind:            language + "-" + reference.Kind,
+			Relationship:    ecmaScriptRelationship(reference.Kind),
+			ReferenceFile:   edge.From,
+			ReferenceLine:   reference.Line,
+			DeclarationFile: edge.To,
+			DeclarationLine: declaration.Line,
+			Confidence:      depgraph.EvidenceConfidenceMedium,
+		})
+	}
+	sortEvidence(evidence)
+	return deduplicateEvidence(evidence)
+}
+
+func ecmaLocalForImported(
+	selected map[string]typescript.ECMAScriptImportLocation,
+	imported string,
+	path string,
+) string {
+	for local, item := range selected {
+		if item.Imported == imported && item.Path == path {
+			return local
+		}
+	}
+	return ""
+}
+
+func matchingECMAScriptDeclaration(
+	declarations []typescript.ECMAScriptDeclarationLocation,
+	imported string,
+	local string,
+) typescript.ECMAScriptDeclarationLocation {
+	for _, declaration := range declarations {
+		if declaration.Name == imported ||
+			(imported == "default" && declaration.Name == local) {
+			return declaration
+		}
+	}
+	return typescript.ECMAScriptDeclarationLocation{Line: 1}
+}
+
+func ecmaScriptImportTargetsEdge(edge depgraph.FileEdge, importPath string) bool {
+	if !strings.HasPrefix(importPath, ".") {
+		return false
+	}
+	resolved := filepath.Clean(filepath.Join(filepath.Dir(edge.From), importPath))
+	if resolved == edge.To {
+		return true
+	}
+	targetWithoutExtension := strings.TrimSuffix(edge.To, filepath.Ext(edge.To))
+	if resolved == targetWithoutExtension {
+		return true
+	}
+	return resolved == filepath.Dir(edge.To) &&
+		strings.HasPrefix(filepath.Base(edge.To), "index.")
+}
+
+func ecmaScriptRelationship(kind string) depgraph.DependencyRelationship {
+	switch kind {
+	case "call":
+		return depgraph.RelationshipCall
+	case "type-reference":
+		return depgraph.RelationshipTypeReference
+	case "inheritance":
+		return depgraph.RelationshipInheritance
+	default:
+		return depgraph.RelationshipSymbolReference
 	}
 }
 
