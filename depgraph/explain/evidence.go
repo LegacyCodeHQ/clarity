@@ -9,6 +9,7 @@ import (
 	"unicode"
 
 	"github.com/LegacyCodeHQ/clarity/depgraph"
+	"github.com/LegacyCodeHQ/clarity/depgraph/languages/golang"
 	"github.com/LegacyCodeHQ/clarity/depgraph/languages/markdown"
 	"github.com/LegacyCodeHQ/clarity/depgraph/languages/rust"
 	"github.com/LegacyCodeHQ/clarity/depgraph/languages/swift"
@@ -29,6 +30,8 @@ func AttachEvidence(graph *depgraph.FileDependencyGraph, reader vcs.ContentReade
 			continue
 		}
 		switch filepath.Ext(edge.From) {
+		case ".go":
+			metadata.Evidence = goEvidence(edge, reader)
 		case ".rs":
 			metadata.Evidence = rustEvidence(edge, reader)
 		case ".swift":
@@ -46,6 +49,106 @@ func AttachEvidence(graph *depgraph.FileDependencyGraph, reader vcs.ContentReade
 			}}
 		}
 		graph.Meta.Edges[edge] = metadata
+	}
+}
+
+func goEvidence(edge depgraph.FileEdge, reader vcs.ContentReader) []depgraph.DependencyEvidence {
+	source, sourceErr := reader(edge.From)
+	target, targetErr := reader(edge.To)
+	if sourceErr != nil || targetErr != nil {
+		return nil
+	}
+	declarations := golang.ParseGoDeclarationLocations(edge.To, target)
+	sourcePackage, references := golang.ExtractGoReferenceLocations(edge.From, source)
+	targetPackage := ""
+	if len(declarations) > 0 {
+		targetPackage = declarations[0].Package
+	} else {
+		targetPackage, _ = golang.ExtractGoReferenceLocations(edge.To, target)
+	}
+	samePackage := sourcePackage != "" && sourcePackage == targetPackage
+
+	var evidence []depgraph.DependencyEvidence
+	matchedImport := false
+	for _, reference := range references {
+		if reference.Kind == "import" {
+			if !samePackage && goImportMatchesTarget(reference, targetPackage, edge.To) {
+				matchedImport = true
+				evidence = append(evidence, depgraph.DependencyEvidence{
+					Symbol:          reference.ImportPath,
+					Kind:            "go-import",
+					Relationship:    depgraph.RelationshipImport,
+					ReferenceFile:   edge.From,
+					ReferenceLine:   reference.Line,
+					DeclarationFile: edge.To,
+					DeclarationLine: 1,
+					Confidence:      depgraph.EvidenceConfidenceHigh,
+				})
+			}
+			continue
+		}
+		for _, declaration := range declarations {
+			if reference.Name != declaration.Name {
+				continue
+			}
+			if samePackage && reference.Qualifier != "" {
+				continue
+			}
+			if !samePackage && (reference.Qualifier == "" ||
+				!goImportPathMatchesPackage(reference.ImportPath, targetPackage)) {
+				continue
+			}
+			relationship := goRelationship(reference.Kind, declaration.Kind)
+			scope := "imported"
+			if samePackage {
+				scope = "same-package"
+			}
+			evidence = append(evidence, depgraph.DependencyEvidence{
+				Symbol:          declaration.Name,
+				Kind:            "go-" + scope + "-" + reference.Kind,
+				Relationship:    relationship,
+				ReferenceFile:   edge.From,
+				ReferenceLine:   reference.Line,
+				DeclarationFile: edge.To,
+				DeclarationLine: declaration.Line,
+				Confidence:      depgraph.EvidenceConfidenceHigh,
+			})
+		}
+	}
+	if !samePackage && !matchedImport {
+		return nil
+	}
+	sortEvidence(evidence)
+	return deduplicateEvidence(evidence)
+}
+
+func goImportMatchesTarget(
+	reference golang.GoReferenceLocation,
+	targetPackage string,
+	targetFile string,
+) bool {
+	return goImportPathMatchesPackage(reference.ImportPath, targetPackage) ||
+		filepath.Base(filepath.Dir(targetFile)) == filepath.Base(reference.ImportPath)
+}
+
+func goImportPathMatchesPackage(importPath, packageName string) bool {
+	if importPath == "" || packageName == "" {
+		return false
+	}
+	return filepath.Base(importPath) == packageName
+}
+
+func goRelationship(referenceKind, declarationKind string) depgraph.DependencyRelationship {
+	switch referenceKind {
+	case "call":
+		return depgraph.RelationshipCall
+	case "inheritance":
+		return depgraph.RelationshipInheritance
+	default:
+		if declarationKind == "type" {
+			return depgraph.RelationshipTypeReference
+		}
+		return depgraph.RelationshipSymbolReference
 	}
 }
 

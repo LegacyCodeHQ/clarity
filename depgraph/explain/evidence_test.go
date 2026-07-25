@@ -116,3 +116,85 @@ use crate::run;
 		Confidence:      depgraph.EvidenceConfidenceHigh,
 	})
 }
+
+func TestAttachEvidence_GoSamePackageAndImportedReferences(t *testing.T) {
+	dir := t.TempDir()
+	mainFile := filepath.Join(dir, "main.go")
+	helperFile := filepath.Join(dir, "helper.go")
+	require.NoError(t, os.WriteFile(mainFile, []byte(`package app
+
+func run() {
+    helper()
+}
+`), 0o644))
+	require.NoError(t, os.WriteFile(helperFile, []byte(`package app
+
+func helper() {
+    run()
+}
+`), 0o644))
+
+	reader := vcs.FilesystemContentReader()
+	graph := depgraph.MustDependencyGraph(map[string][]string{
+		mainFile:   {helperFile},
+		helperFile: {mainFile},
+	})
+	fileGraph, err := depgraph.NewFileDependencyGraph(graph, nil, reader)
+	require.NoError(t, err)
+
+	explain.AttachEvidence(&fileGraph, reader)
+
+	evidence := fileGraph.Meta.Edges[depgraph.FileEdge{From: mainFile, To: helperFile}].Evidence
+	assert.Contains(t, evidence, depgraph.DependencyEvidence{
+		Symbol:          "helper",
+		Kind:            "go-same-package-call",
+		Relationship:    depgraph.RelationshipCall,
+		ReferenceFile:   mainFile,
+		ReferenceLine:   4,
+		DeclarationFile: helperFile,
+		DeclarationLine: 3,
+		Confidence:      depgraph.EvidenceConfidenceHigh,
+	})
+}
+
+func TestAttachEvidence_GoImportedPackageReference(t *testing.T) {
+	dir := t.TempDir()
+	mainFile := filepath.Join(dir, "app", "main.go")
+	modelFile := filepath.Join(dir, "model", "model.go")
+	require.NoError(t, os.MkdirAll(filepath.Dir(mainFile), 0o755))
+	require.NoError(t, os.MkdirAll(filepath.Dir(modelFile), 0o755))
+	require.NoError(t, os.WriteFile(mainFile, []byte(`package app
+
+import "example.com/project/model"
+
+func run() {
+    model.Execute()
+}
+`), 0o644))
+	require.NoError(t, os.WriteFile(modelFile, []byte(`package model
+
+func Execute() {}
+`), 0o644))
+
+	reader := vcs.FilesystemContentReader()
+	graph := depgraph.MustDependencyGraph(map[string][]string{
+		mainFile:  {modelFile},
+		modelFile: {mainFile},
+	})
+	fileGraph, err := depgraph.NewFileDependencyGraph(graph, nil, reader)
+	require.NoError(t, err)
+
+	explain.AttachEvidence(&fileGraph, reader)
+
+	evidence := fileGraph.Meta.Edges[depgraph.FileEdge{From: mainFile, To: modelFile}].Evidence
+	assert.Contains(t, evidence, depgraph.DependencyEvidence{
+		Symbol:          "Execute",
+		Kind:            "go-imported-call",
+		Relationship:    depgraph.RelationshipCall,
+		ReferenceFile:   mainFile,
+		ReferenceLine:   6,
+		DeclarationFile: modelFile,
+		DeclarationLine: 3,
+		Confidence:      depgraph.EvidenceConfidenceHigh,
+	})
+}
