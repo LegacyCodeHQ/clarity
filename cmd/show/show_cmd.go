@@ -152,24 +152,34 @@ func runGraph(cmd *cobra.Command, opts *graphOptions) error {
 		return nil
 	}
 
-	// Bring deleted files into the bare commit view as nodes. They're excluded
-	// from the changed-file list (they no longer exist in the tree), so collect
-	// them separately and load their content from the parent ref.
+	// Bring deleted files into the graph as nodes. They must be parsed from the
+	// snapshot before their deletion: the parent commit for commit views, or
+	// HEAD for live working-tree views.
 	var deletedContent map[string][]byte
 	var deletedFiles []string
 	var deletedBaseRef string
-	if isPlainCommitView(opts) {
+	switch {
+	case isPlainCommitView(opts):
 		deletedFiles, deletedBaseRef, err = collectCommitDeletedFiles(opts, fromCommit, toCommit, isCommitRange)
 		if err != nil {
 			return err
 		}
-		if len(deletedFiles) > 0 {
-			deletedContent, err = loadDeletedFileContent(opts.repoPath, deletedBaseRef, deletedFiles)
-			if err != nil {
-				return err
+		filePaths = unionPaths(filePaths, deletedFiles)
+		anchorFiles = unionPaths(anchorFiles, deletedFiles)
+	case opts.commitID == "":
+		if _, repoErr := git.GetRepositoryRoot(opts.repoPath); repoErr == nil {
+			workingTreeDeleted, deletedErr := git.GetUncommittedDeletedFiles(opts.repoPath)
+			if deletedErr != nil {
+				return fmt.Errorf("failed to get deleted uncommitted files: %w", deletedErr)
 			}
-			filePaths = append(filePaths, deletedFiles...)
-			anchorFiles = append(anchorFiles, deletedFiles...)
+			deletedFiles = pathsPresentIn(filePaths, workingTreeDeleted)
+			deletedBaseRef = "HEAD"
+		}
+	}
+	if len(deletedFiles) > 0 {
+		deletedContent, err = loadDeletedFileContent(opts.repoPath, deletedBaseRef, deletedFiles)
+		if err != nil {
+			return err
 		}
 	}
 
@@ -698,6 +708,11 @@ func determineFilePaths(cmd *cobra.Command, opts *graphOptions, pathResolver Pat
 	if err != nil {
 		return nil, nil, false, fmt.Errorf("failed to get uncommitted files: %w", err)
 	}
+	deletedFiles, err := git.GetUncommittedDeletedFiles(opts.repoPath)
+	if err != nil {
+		return nil, nil, false, fmt.Errorf("failed to get deleted uncommitted files: %w", err)
+	}
+	anchorFiles = unionPaths(anchorFiles, deletedFiles)
 
 	if len(anchorFiles) == 0 {
 		// --module supplies its own files as the scope, so a clean tree is fine:
@@ -1216,6 +1231,21 @@ func unionPaths(base, extra []string) []string {
 		}
 	}
 	return out
+}
+
+func pathsPresentIn(scope, candidates []string) []string {
+	present := make(map[string]bool, len(scope))
+	for _, path := range scope {
+		present[filepath.Clean(path)] = true
+	}
+
+	matches := make([]string, 0, len(candidates))
+	for _, path := range candidates {
+		if present[filepath.Clean(path)] {
+			matches = append(matches, path)
+		}
+	}
+	return matches
 }
 
 // membersInGraph returns the module members that became graph nodes, so the

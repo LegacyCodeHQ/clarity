@@ -341,6 +341,76 @@ func TestGraphCommit_DeletedFileKeepsPreDeletionIncomingEdge(t *testing.T) {
 	}
 }
 
+func TestGraphInputDirectory_RendersWorkingTreeDeletedFileFromHead(t *testing.T) {
+	repoDir := t.TempDir()
+	gitInitRepo(t, repoDir)
+
+	srcDir := filepath.Join(repoDir, "src")
+	if err := os.MkdirAll(srcDir, 0o755); err != nil {
+		t.Fatalf("os.MkdirAll() error = %v", err)
+	}
+	importerFile := filepath.Join(srcDir, "importer.ts")
+	leafFile := filepath.Join(srcDir, "leaf.ts")
+	if err := os.WriteFile(importerFile, []byte("import { value } from './leaf';\nexport const result = value;\n"), 0o644); err != nil {
+		t.Fatalf("os.WriteFile() error = %v", err)
+	}
+	if err := os.WriteFile(leafFile, []byte("export const value = 1;\n"), 0o644); err != nil {
+		t.Fatalf("os.WriteFile() error = %v", err)
+	}
+	gitRun(t, repoDir, "add", "-A")
+	gitRun(t, repoDir, "commit", "-m", "add dependency")
+
+	if err := os.Remove(leafFile); err != nil {
+		t.Fatalf("os.Remove() error = %v", err)
+	}
+	if err := os.WriteFile(importerFile, []byte("export const result = 1;\n"), 0o644); err != nil {
+		t.Fatalf("os.WriteFile() error = %v", err)
+	}
+
+	output := runShow(t, "-r", repoDir, srcDir, "-f", "dot")
+	if !strings.Contains(output, "🗑️ leaf.ts") {
+		t.Fatalf("expected working-tree deletion to render from HEAD, got:\n%s", output)
+	}
+	if !strings.Contains(output, `importer.ts" -> "`) {
+		t.Fatalf("expected deleted leaf.ts to retain its pre-deletion incoming edge, got:\n%s", output)
+	}
+}
+
+func TestGraphInputDirectory_RendersUnstagedFileToDirectoryMove(t *testing.T) {
+	repoDir := t.TempDir()
+	gitInitRepo(t, repoDir)
+
+	srcDir := filepath.Join(repoDir, "src")
+	if err := os.MkdirAll(srcDir, 0o755); err != nil {
+		t.Fatalf("os.MkdirAll() error = %v", err)
+	}
+	oldFile := filepath.Join(srcDir, "layout.ts")
+	if err := os.WriteFile(oldFile, []byte("export const layout = 'old';\n"), 0o644); err != nil {
+		t.Fatalf("os.WriteFile() error = %v", err)
+	}
+	gitRun(t, repoDir, "add", "-A")
+	gitRun(t, repoDir, "commit", "-m", "add layout")
+
+	if err := os.Remove(oldFile); err != nil {
+		t.Fatalf("os.Remove() error = %v", err)
+	}
+	newDir := filepath.Join(srcDir, "layout")
+	if err := os.MkdirAll(newDir, 0o755); err != nil {
+		t.Fatalf("os.MkdirAll() error = %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(newDir, "index.ts"), []byte("export const layout = 'new';\n"), 0o644); err != nil {
+		t.Fatalf("os.WriteFile() error = %v", err)
+	}
+
+	output := runShow(t, "-r", repoDir, srcDir, "-f", "dot")
+	if !strings.Contains(output, "🗑️ layout.ts") {
+		t.Fatalf("expected old path to render as deleted while the move is unstaged, got:\n%s", output)
+	}
+	if !strings.Contains(output, "🪴 index.ts") {
+		t.Fatalf("expected replacement path to render as new while the move is unstaged, got:\n%s", output)
+	}
+}
+
 func TestGraphCommit_RendersRenameAsSingleNode(t *testing.T) {
 	repoDir := t.TempDir()
 	gitInitRepo(t, repoDir)
