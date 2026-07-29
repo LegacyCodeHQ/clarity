@@ -37,6 +37,39 @@ func ListUntrackedFiles(repoPath string) ([]string, error) {
 	return toAbsolutePaths(repoRoot, parseNullSeparatedPaths(stdout)), nil
 }
 
+// ListIgnoredDirectories returns absolute paths for untracked directories
+// excluded by Git's standard ignore sources. --directory prevents Git from
+// descending into wholly ignored trees, which keeps this query cheap even for
+// large generated directories.
+func ListIgnoredDirectories(repoPath string) ([]string, error) {
+	repoRoot, err := ensureRepoRoot(repoPath)
+	if err != nil {
+		return nil, err
+	}
+
+	stdout, stderr, err := runGitCommand(
+		repoRoot,
+		"ls-files",
+		"-z",
+		"--others",
+		"--ignored",
+		"--exclude-standard",
+		"--directory",
+		"--full-name")
+	if err != nil {
+		return nil, gitCommandError(err, stderr)
+	}
+
+	paths := parseNullSeparatedPaths(stdout)
+	directories := make([]string, 0, len(paths))
+	for _, path := range paths {
+		if strings.HasSuffix(filepath.ToSlash(path), "/") {
+			directories = append(directories, strings.TrimSuffix(path, "/"))
+		}
+	}
+	return toAbsolutePaths(repoRoot, directories), nil
+}
+
 // ResolveFirstParent resolves the first parent of a commit.
 // Returns hasParent=false for root commits.
 func ResolveFirstParent(repoPath, commitID string) (parent string, hasParent bool, err error) {

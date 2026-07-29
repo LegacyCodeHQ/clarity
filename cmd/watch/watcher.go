@@ -66,6 +66,16 @@ func watchAndRebuild(ctx context.Context, repoID, repoPath string, opts *watchOp
 				return nil
 			}
 
+			// Directory create events generally have no supported source-file
+			// extension, but they still need a watch so later file creation is
+			// observed. Re-evaluating Git ignores here also covers generated
+			// directories that appear after startup.
+			if event.Has(fsnotify.Create) {
+				if err := addIfDirectory(watcher, event.Name); err != nil {
+					fmt.Fprintf(os.Stderr, "failed to watch created directory: %v\n", err)
+				}
+			}
+
 			if !isRelevantChange(event) {
 				continue
 			}
@@ -76,10 +86,6 @@ func watchAndRebuild(ctx context.Context, repoID, repoPath string, opts *watchOp
 			} else {
 				stopAndDrainTimer(debounceTimer)
 				debounceTimer.Reset(debounceInterval)
-			}
-
-			if event.Has(fsnotify.Create) {
-				addIfDirectory(watcher, event.Name)
 			}
 
 		case err, ok := <-watcher.Errors:
@@ -242,6 +248,15 @@ func addWatchDirs(watcher *fsnotify.Watcher, root string) error {
 type watchDirAdder func(path string) error
 
 func addWatchDirsWithAdder(root string, add watchDirAdder) error {
+	ignoredDirs, err := git.ListIgnoredDirectories(root)
+	if err != nil {
+		return fmt.Errorf("load Git ignored directories: %w", err)
+	}
+	ignored := make(map[string]bool, len(ignoredDirs))
+	for _, path := range ignoredDirs {
+		ignored[normalizeWatchPath(path)] = true
+	}
+
 	return filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
 		if err != nil {
 			if isMissingPath(err) && path != root {
@@ -261,7 +276,7 @@ func addWatchDirsWithAdder(root string, add watchDirAdder) error {
 			isDir = info.IsDir()
 		}
 		if isDir {
-			if skippedDirs[d.Name()] {
+			if skippedDirs[d.Name()] || ignored[normalizeWatchPath(path)] {
 				return filepath.SkipDir
 			}
 			if err := add(path); err != nil {
@@ -273,6 +288,18 @@ func addWatchDirsWithAdder(root string, add watchDirAdder) error {
 		}
 		return nil
 	})
+}
+
+func normalizeWatchPath(path string) string {
+	resolved, err := filepath.EvalSymlinks(path)
+	if err == nil {
+		return filepath.Clean(resolved)
+	}
+	absolute, err := filepath.Abs(path)
+	if err == nil {
+		return filepath.Clean(absolute)
+	}
+	return filepath.Clean(path)
 }
 
 func isMissingPath(err error) bool {
@@ -298,12 +325,16 @@ func extractHEADSignature(repositoryStateSignature string) string {
 	return strings.TrimSpace(headLine)
 }
 
-func addIfDirectory(watcher *fsnotify.Watcher, path string) {
+func addIfDirectory(watcher *fsnotify.Watcher, path string) error {
 	info, err := os.Stat(path)
 	if err != nil {
-		return
+		if isMissingPath(err) {
+			return nil
+		}
+		return err
 	}
 	if info.IsDir() {
-		_ = addWatchDirs(watcher, path)
+		return addWatchDirs(watcher, path)
 	}
+	return nil
 }

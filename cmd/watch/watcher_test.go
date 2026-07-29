@@ -16,6 +16,7 @@ func TestAddWatchDirsIgnoresMissingPaths(t *testing.T) {
 	}
 
 	root := t.TempDir()
+	initGitRepo(t, root)
 	worktree := filepath.Join(root, ".claude", "worktrees", "beautiful-gauss")
 	if err := os.MkdirAll(worktree, 0o755); err != nil {
 		t.Fatalf("mkdir worktree: %v", err)
@@ -39,6 +40,7 @@ func TestAddWatchDirsIgnoresMissingPaths(t *testing.T) {
 
 func TestAddWatchDirsIgnoresMissingDirectoriesFromAdder(t *testing.T) {
 	root := t.TempDir()
+	initGitRepo(t, root)
 	target := filepath.Join(root, "missing-dir")
 	if err := os.MkdirAll(target, 0o755); err != nil {
 		t.Fatalf("mkdir target: %v", err)
@@ -65,6 +67,7 @@ func TestAddWatchDirsSkipsBrokenSymlink(t *testing.T) {
 	}
 
 	root := t.TempDir()
+	initGitRepo(t, root)
 	worktree := filepath.Join(root, ".claude", "worktrees", "beautiful-gauss")
 	if err := os.MkdirAll(worktree, 0o755); err != nil {
 		t.Fatalf("mkdir worktree: %v", err)
@@ -90,4 +93,91 @@ func TestAddWatchDirsSkipsBrokenSymlink(t *testing.T) {
 			t.Fatalf("expected broken symlink to be skipped, but was added")
 		}
 	}
+}
+
+func TestAddWatchDirsHonorsGitIgnoredDirectories(t *testing.T) {
+	root := t.TempDir()
+	initGitRepo(t, root)
+
+	if err := os.WriteFile(
+		filepath.Join(root, ".gitignore"),
+		[]byte(".build/\n"),
+		0o644); err != nil {
+		t.Fatalf("write .gitignore: %v", err)
+	}
+	if err := os.WriteFile(
+		filepath.Join(root, ".git", "info", "exclude"),
+		[]byte(".cache/\n"),
+		0o644); err != nil {
+		t.Fatalf("write repository exclude: %v", err)
+	}
+
+	sourceDir := filepath.Join(root, "Sources", "App")
+	ignoredDirs := []string{
+		filepath.Join(root, ".build"),
+		filepath.Join(root, ".build", "checkouts", "Dependency"),
+		filepath.Join(root, ".cache"),
+		filepath.Join(root, ".cache", "index"),
+	}
+	for _, dir := range append([]string{sourceDir}, ignoredDirs...) {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatalf("mkdir %s: %v", dir, err)
+		}
+	}
+
+	var added []string
+	if err := addWatchDirsWithAdder(root, func(path string) error {
+		added = append(added, path)
+		return nil
+	}); err != nil {
+		t.Fatalf("addWatchDirsWithAdder: %v", err)
+	}
+
+	if !containsPath(added, sourceDir) {
+		t.Fatalf("expected source directory to be watched, got %v", added)
+	}
+	for _, ignored := range ignoredDirs {
+		if containsPath(added, ignored) {
+			t.Fatalf("expected Git-ignored directory %s not to be watched", ignored)
+		}
+	}
+}
+
+func TestAddWatchDirsHonorsGitIgnoreForDirectoryCreatedAfterStartup(t *testing.T) {
+	root := t.TempDir()
+	initGitRepo(t, root)
+
+	if err := os.WriteFile(
+		filepath.Join(root, ".gitignore"),
+		[]byte("Generated/\n"),
+		0o644); err != nil {
+		t.Fatalf("write .gitignore: %v", err)
+	}
+
+	generated := filepath.Join(root, "Generated")
+	nested := filepath.Join(generated, "deep", "output")
+	if err := os.MkdirAll(nested, 0o755); err != nil {
+		t.Fatalf("mkdir generated tree: %v", err)
+	}
+
+	var added []string
+	if err := addWatchDirsWithAdder(generated, func(path string) error {
+		added = append(added, path)
+		return nil
+	}); err != nil {
+		t.Fatalf("addWatchDirsWithAdder: %v", err)
+	}
+
+	if len(added) > 0 {
+		t.Fatalf("expected newly created ignored tree not to be watched, got %v", added)
+	}
+}
+
+func containsPath(paths []string, want string) bool {
+	for _, path := range paths {
+		if path == want {
+			return true
+		}
+	}
+	return false
 }
