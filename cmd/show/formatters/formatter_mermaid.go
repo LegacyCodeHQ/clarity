@@ -167,7 +167,7 @@ func (f mermaidFormatter) Format(g depgraph.FileDependencyGraph, opts RenderOpti
 					renamedEdgeIndices = append(renamedEdgeIndices, edgeIndex)
 				case depgraph.EdgeStatePresent:
 				}
-				if edge.InCycle {
+				if edge.InCycle && edge.State != depgraph.EdgeStateDeleted {
 					cycleEdgeIndices = append(cycleEdgeIndices, edgeIndex)
 				}
 				edgeIndex++
@@ -183,7 +183,7 @@ func (f mermaidFormatter) Format(g depgraph.FileDependencyGraph, opts RenderOpti
 			renamedEdgeIndices = append(renamedEdgeIndices, edgeIndex)
 		case depgraph.EdgeStatePresent:
 		}
-		if edge.InCycle {
+		if edge.InCycle && edge.State != depgraph.EdgeStateDeleted {
 			cycleEdgeIndices = append(cycleEdgeIndices, edgeIndex)
 		}
 		edgeIndex++
@@ -281,9 +281,8 @@ func (f mermaidFormatter) Format(g depgraph.FileDependencyGraph, opts RenderOpti
 	for _, idx := range renamedEdgeIndices {
 		stylesSB.WriteString(fmt.Sprintf("    linkStyle %d stroke:#CC8800,stroke-width:2px,stroke-dasharray: 5 5\n", idx))
 	}
-	// Cycle edges are always solid and heavier so they read as present and
-	// emphatic. Emitted last so the last linkStyle for an index wins: a cycle
-	// edge that is also deleted/renamed still renders solid red.
+	// Cycle edges that still exist are solid red and heavier. Deleted edges are
+	// excluded from cycleEdgeIndices so their dashed lifecycle styling wins.
 	for _, idx := range cycleEdgeIndices {
 		stylesSB.WriteString(fmt.Sprintf("    linkStyle %d stroke:#d62728,stroke-width:3px\n", idx))
 	}

@@ -174,6 +174,10 @@ func NewFileDependencyGraph(g DependencyGraph, fileStats map[string]vcs.FileStat
 
 // MarkDeletedFiles marks file nodes and any incident edges as deleted context.
 func MarkDeletedFiles(fg *FileDependencyGraph, deletedFiles []string) {
+	if len(deletedFiles) == 0 {
+		return
+	}
+
 	deleted := make(map[string]bool, len(deletedFiles))
 	for _, file := range deletedFiles {
 		deleted[file] = true
@@ -190,6 +194,43 @@ func MarkDeletedFiles(fg *FileDependencyGraph, deletedFiles []string) {
 			md.State = EdgeStateDeleted
 			fg.Meta.Edges[edge] = md
 		}
+	}
+
+	recomputeCurrentCycles(fg)
+}
+
+// recomputeCurrentCycles derives cycle metadata from edges that still exist.
+// Deleted edges remain in the rendered graph as historical context, but cannot
+// keep a cycle alive or mark the surviving portion of that old cycle as cyclic.
+func recomputeCurrentCycles(fg *FileDependencyGraph) {
+	adjacency := make(map[string][]string)
+	for file, md := range fg.Meta.Files {
+		if md.State != FileStateDeleted {
+			adjacency[file] = nil
+		}
+	}
+
+	for edge, md := range fg.Meta.Edges {
+		md.InCycle = false
+		fg.Meta.Edges[edge] = md
+		if md.State == EdgeStateDeleted {
+			continue
+		}
+		if fg.Meta.Files[edge.From].State == FileStateDeleted || fg.Meta.Files[edge.To].State == FileStateDeleted {
+			continue
+		}
+		adjacency[edge.From] = append(adjacency[edge.From], edge.To)
+	}
+	for file := range adjacency {
+		sort.Strings(adjacency[file])
+	}
+
+	cycles, cycleEdges := findCyclesAndCycleEdges(adjacency)
+	fg.Meta.Cycles = cycles
+	for edge := range cycleEdges {
+		md := fg.Meta.Edges[edge]
+		md.InCycle = true
+		fg.Meta.Edges[edge] = md
 	}
 }
 

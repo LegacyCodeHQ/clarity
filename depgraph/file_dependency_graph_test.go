@@ -66,6 +66,25 @@ func TestNewFileDependencyGraph_DetectsCycles(t *testing.T) {
 	assert.False(t, fileGraph.Meta.Edges[depgraph.FileEdge{From: "/project/d.go", To: "/project/d.go"}].InCycle)
 }
 
+func TestMarkDeletedFiles_RemovesCyclesBrokenByDeletedEdges(t *testing.T) {
+	graph := depgraph.MustDependencyGraph(map[string][]string{
+		"/project/a.go": {"/project/b.go"},
+		"/project/b.go": {"/project/c.go"},
+		"/project/c.go": {"/project/a.go"},
+	})
+
+	fileGraph, err := depgraph.NewFileDependencyGraph(graph, nil, nil)
+	require.NoError(t, err)
+	require.Len(t, fileGraph.Meta.Cycles, 1)
+
+	depgraph.MarkDeletedFiles(&fileGraph, []string{"/project/a.go"})
+
+	assert.Empty(t, fileGraph.Meta.Cycles)
+	assert.False(t, fileGraph.Meta.Edges[depgraph.FileEdge{From: "/project/b.go", To: "/project/c.go"}].InCycle)
+	assert.False(t, fileGraph.Meta.Edges[depgraph.FileEdge{From: "/project/a.go", To: "/project/b.go"}].InCycle)
+	assert.False(t, fileGraph.Meta.Edges[depgraph.FileEdge{From: "/project/c.go", To: "/project/a.go"}].InCycle)
+}
+
 func TestNewFileDependencyGraph_MarksAllEdgesInCyclicSCC(t *testing.T) {
 	graph := depgraph.MustDependencyGraph(map[string][]string{
 		"/project/a.go": {"/project/b.go", "/project/c.go"},

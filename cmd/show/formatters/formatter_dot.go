@@ -192,10 +192,10 @@ func (f *dotFormatter) Format(g depgraph.FileDependencyGraph, opts RenderOptions
 		case depgraph.EdgeStatePresent:
 			// no edge-state styling
 		}
-		if edge.InCycle {
-			// Cycle edges are always solid and heavier so they read as present
-			// and emphatic. Appended after the state switch so a deleted/renamed
-			// cycle edge still renders solid red (later attributes win).
+		if edge.InCycle && edge.State != depgraph.EdgeStateDeleted {
+			// Cycle edges are solid and heavier when they are still present.
+			// A deleted edge is historical, so its dashed lifecycle styling takes
+			// precedence over the cycle it used to participate in.
 			edgeAttrs = append(edgeAttrs, "color=red", "penwidth=2.0", "style=solid")
 		}
 
