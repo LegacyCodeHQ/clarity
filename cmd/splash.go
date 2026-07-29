@@ -59,6 +59,9 @@ func renderSplash(screenWidth int, useColor bool) string {
 	b.WriteString(centerText("Software Design Maps for AI-Native Development", width, ansiYellow+ansiBold, useColor))
 	b.WriteString("\n\n")
 	b.WriteString(outerIndent)
+	b.WriteString(centerText(fmt.Sprintf("Version %s · %s", version, commit), width, ansiDim, useColor))
+	b.WriteByte('\n')
+	b.WriteString(outerIndent)
 	b.WriteString(centerText("Run 'clarity --help' for usage information", width, ansiDim, useColor))
 	b.WriteString("\n\n")
 

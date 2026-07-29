@@ -8,5 +8,6 @@
 
                           Software Design Maps for AI-Native Development
 
+                                       Version dev · unknown
                             Run 'clarity --help' for usage information
 

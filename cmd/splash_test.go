@@ -25,6 +25,14 @@ func TestRunRoot_PrintsSplashForEmptyInvocation(t *testing.T) {
 	g.Assert(t, t.Name(), out.Bytes())
 }
 
+func TestRenderSplash_IncludesBuildIdentity(t *testing.T) {
+	output := renderSplash(100, false)
+
+	if !strings.Contains(output, "Version dev · unknown") {
+		t.Fatalf("expected version and commit in splash, got:\n%s", output)
+	}
+}
+
 func TestRunRoot_PrintsHelpForFlagOnlyInvocation(t *testing.T) {
 	var out bytes.Buffer
 	cmd := &cobra.Command{
