@@ -31,6 +31,5 @@ cmd/watch/dist/
 # Windows
 Thumbs.db
 
-.compass/
 .dyno/
 runs/
