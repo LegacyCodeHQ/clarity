@@ -48,6 +48,9 @@ func watchAndRebuild(ctx context.Context, repoID, repoPath string, opts *watchOp
 	lastGitStateSig, err := git.GetRepositoryStateSignature(repoPath)
 	lastHeadSig := extractHEADSignature(lastGitStateSig)
 	if err != nil {
+		if finishRepoIfRemoved(repoID, repoPath, b) {
+			return nil
+		}
 		fmt.Fprintf(os.Stderr, "git state read error: %v\n", err)
 	}
 	gitStateTicker := time.NewTicker(gitStatePollInterval)
@@ -113,6 +116,9 @@ func watchAndRebuild(ctx context.Context, repoID, repoPath string, opts *watchOp
 			}
 			stateSig, err := git.GetRepositoryStateSignature(repoPath)
 			if err != nil {
+				if finishRepoIfRemoved(repoID, repoPath, b) {
+					return nil
+				}
 				fmt.Fprintf(os.Stderr, "git state read error: %v\n", err)
 				continue
 			}
@@ -128,6 +134,9 @@ func watchAndRebuild(ctx context.Context, repoID, repoPath string, opts *watchOp
 			if headChanged {
 				commitHistory, err := git.GetCommitHistory(repoPath, previousHeadSig, headSig)
 				if err != nil {
+					if finishRepoIfRemoved(repoID, repoPath, b) {
+						return nil
+					}
 					fmt.Fprintf(os.Stderr, "git commit history read error: %v\n", err)
 				}
 				b.archiveWorkingSetWithCommitHistory(repoID, commitHistory)
@@ -159,6 +168,9 @@ func stopAndDrainTimer(timer *time.Timer) {
 }
 
 func publishCurrentGraph(repoID, repoPath string, opts *watchOptions, b *broker, formatter formatters.Formatter) {
+	if finishRepoIfRemoved(repoID, repoPath, b) {
+		return
+	}
 	if isLinkedWorktreeTeardownSnapshot(repoPath) {
 		b.markRepoFinished(repoID)
 		return
@@ -170,10 +182,27 @@ func publishCurrentGraph(repoID, repoPath string, opts *watchOptions, b *broker,
 		return
 	}
 	if err != nil {
+		if finishRepoIfRemoved(repoID, repoPath, b) {
+			return
+		}
+		// A rebuild can lose an individual file while an editor replaces it or
+		// git worktree removal is still deleting the directory tree. A later
+		// filesystem event or poll will rebuild the resulting stable state.
+		if errors.Is(err, fs.ErrNotExist) {
+			return
+		}
 		fmt.Fprintf(os.Stderr, "graph rebuild error: %v\n", err)
 		return
 	}
 	b.publish(repoID, dot)
+}
+
+func finishRepoIfRemoved(repoID, repoPath string, b *broker) bool {
+	if pathExists(repoPath) {
+		return false
+	}
+	b.markRepoFinished(repoID)
+	return true
 }
 
 func isLinkedWorktreeTeardownSnapshot(repoPath string) bool {

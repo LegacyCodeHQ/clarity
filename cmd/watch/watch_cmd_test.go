@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -966,6 +967,21 @@ func TestPublishCurrentGraph_NoUncommittedChangesClearsWorkingSnapshots(t *testi
 	}
 }
 
+func TestPublishCurrentGraph_ExistingRepositoryReportsGraphError(t *testing.T) {
+	dir := t.TempDir()
+	initGitRepo(t, dir)
+
+	b := newBroker()
+	formatter, err := formatters.NewFormatter("dot")
+	require.NoError(t, err)
+
+	stderr := captureStderr(t, func() {
+		publishCurrentGraph("primary", dir, &watchOptions{depthLevel: -1}, b, formatter)
+	})
+
+	assert.Contains(t, stderr, "graph rebuild error: --depth must be at least 0")
+}
+
 func TestPublishCurrentGraph_LinkedWorktreeTeardownMarksRepoFinished(t *testing.T) {
 	primary := t.TempDir()
 	initGitRepo(t, primary)
@@ -1005,6 +1021,71 @@ func TestPublishCurrentGraph_LinkedWorktreeTeardownMarksRepoFinished(t *testing.
 	require.Len(t, payload.PastCollections, 1)
 	require.Len(t, payload.PastCollections[0].Snapshots, 1)
 	assert.Equal(t, "digraph { clean }", payload.PastCollections[0].Snapshots[0].DOT)
+}
+
+func TestPublishCurrentGraph_RemovedLinkedWorktreeFinishesWithoutError(t *testing.T) {
+	primary := t.TempDir()
+	initGitRepo(t, primary)
+
+	appPath := filepath.Join(primary, "app.ts")
+	require.NoError(t, os.WriteFile(appPath, []byte("export const app = 1;\n"), 0o644))
+	runGit(t, primary, "add", ".")
+	runGit(t, primary, "commit", "-m", "seed source")
+
+	linked := filepath.Join(t.TempDir(), "linked")
+	runGit(t, primary, "worktree", "add", "-b", "removed-teardown-test", linked)
+
+	b := newBroker()
+	b.registerRepo(protocol.RepoDescriptor{
+		ID:        "wt-removed",
+		Path:      linked,
+		Label:     "linked",
+		IsPrimary: false,
+		Active:    true,
+	})
+	b.publish("wt-removed", "digraph { clean }")
+
+	require.NoError(t, os.RemoveAll(linked))
+
+	formatter, err := formatters.NewFormatter("dot")
+	require.NoError(t, err)
+	stderr := captureStderr(t, func() {
+		publishCurrentGraph("wt-removed", linked, &watchOptions{}, b, formatter)
+	})
+
+	b.mu.Lock()
+	payload, ok := b.currentPayloadLocked()
+	b.mu.Unlock()
+	require.True(t, ok)
+	require.Len(t, payload.Repos, 1)
+	assert.False(t, payload.Repos[0].Active, "removed linked worktree should finish the repo")
+	assert.Empty(t, payload.WorkingSnapshots, "teardown must not publish a working snapshot")
+	require.Len(t, payload.PastCollections, 1)
+	require.Len(t, payload.PastCollections[0].Snapshots, 1)
+	assert.Equal(t, "digraph { clean }", payload.PastCollections[0].Snapshots[0].DOT)
+	assert.Empty(t, stderr, "linked worktree removal should not be reported as a graph error")
+}
+
+func captureStderr(t *testing.T, run func()) string {
+	t.Helper()
+
+	reader, writer, err := os.Pipe()
+	require.NoError(t, err)
+	original := os.Stderr
+	os.Stderr = writer
+	defer func() {
+		os.Stderr = original
+		_ = reader.Close()
+		_ = writer.Close()
+	}()
+
+	run()
+	os.Stderr = original
+	require.NoError(t, writer.Close())
+
+	output, err := io.ReadAll(reader)
+	require.NoError(t, err)
+	return string(output)
 }
 
 func TestListenWithPortFallback_PicksNextAvailablePort(t *testing.T) {
