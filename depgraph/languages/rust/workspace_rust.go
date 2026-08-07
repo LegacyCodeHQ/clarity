@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+
+	"github.com/LegacyCodeHQ/clarity/vcs"
 )
 
 // cargoWorkspace captures the subset of a Cargo workspace manifest needed for
@@ -29,11 +31,11 @@ type cargoWorkspace struct {
 //
 // Results are cached per resolver instance (keyed by directory) so repeated
 // calls within a single graph build pay the discovery cost only once.
-func (r *ProjectImportResolver) loadCargoWorkspaceFor(crateRoot string) *cargoWorkspace {
+func loadCargoWorkspaceFor(crateRoot string, contentReader vcs.ContentReader, workspaceCache *sync.Map) *cargoWorkspace {
 	if crateRoot == "" {
 		return nil
 	}
-	if cached, ok := r.workspaceCache.Load(crateRoot); ok {
+	if cached, ok := workspaceCache.Load(crateRoot); ok {
 		if cached == nil {
 			return nil
 		}
@@ -45,17 +47,17 @@ func (r *ProjectImportResolver) loadCargoWorkspaceFor(crateRoot string) *cargoWo
 	for {
 		visited = append(visited, current)
 
-		if cached, ok := r.workspaceCache.Load(current); ok {
+		if cached, ok := workspaceCache.Load(current); ok {
 			ws := cached.(*cargoWorkspace)
 			for _, d := range visited {
-				r.workspaceCache.Store(d, ws)
+				workspaceCache.Store(d, ws)
 			}
 			return ws
 		}
 
-		if ws := r.tryLoadCargoWorkspaceAt(current); ws != nil {
+		if ws := tryLoadCargoWorkspaceAt(current, contentReader); ws != nil {
 			for _, d := range visited {
-				r.workspaceCache.Store(d, ws)
+				workspaceCache.Store(d, ws)
 			}
 			return ws
 		}
@@ -63,7 +65,7 @@ func (r *ProjectImportResolver) loadCargoWorkspaceFor(crateRoot string) *cargoWo
 		parent := filepath.Dir(current)
 		if parent == current {
 			for _, d := range visited {
-				r.workspaceCache.Store(d, (*cargoWorkspace)(nil))
+				workspaceCache.Store(d, (*cargoWorkspace)(nil))
 			}
 			return nil
 		}
@@ -74,12 +76,12 @@ func (r *ProjectImportResolver) loadCargoWorkspaceFor(crateRoot string) *cargoWo
 // tryLoadCargoWorkspaceAt reads `<dir>/Cargo.toml` and, if it declares a
 // `[workspace]` section, returns a fully-populated cargoWorkspace.
 // Returns nil if dir is not a workspace root.
-func (r *ProjectImportResolver) tryLoadCargoWorkspaceAt(dir string) *cargoWorkspace {
-	if r.contentReader == nil {
+func tryLoadCargoWorkspaceAt(dir string, contentReader vcs.ContentReader) *cargoWorkspace {
+	if contentReader == nil {
 		return nil
 	}
 	cargoTomlPath := filepath.Join(dir, "Cargo.toml")
-	content, err := r.contentReader(cargoTomlPath)
+	content, err := contentReader(cargoTomlPath)
 	if err != nil {
 		return nil
 	}
@@ -94,7 +96,7 @@ func (r *ProjectImportResolver) tryLoadCargoWorkspaceAt(dir string) *cargoWorksp
 	for _, member := range parseCargoWorkspaceMembers(string(content)) {
 		for _, memberDir := range expandCargoMemberPattern(dir, member) {
 			memberCargoToml := filepath.Join(memberDir, "Cargo.toml")
-			memberContent, err := r.contentReader(memberCargoToml)
+			memberContent, err := contentReader(memberCargoToml)
 			if err != nil {
 				continue
 			}
@@ -116,7 +118,7 @@ func (r *ProjectImportResolver) tryLoadCargoWorkspaceAt(dir string) *cargoWorksp
 		// Prefer the package name from the dependency's own Cargo.toml; fall
 		// back to the key used in the workspace.dependencies table.
 		named := false
-		if depContent, err := r.contentReader(filepath.Join(depDir, "Cargo.toml")); err == nil {
+		if depContent, err := contentReader(filepath.Join(depDir, "Cargo.toml")); err == nil {
 			for name := range parseRustCrateNamesFromCargoToml(string(depContent)) {
 				crates[name] = depDir
 				named = true
