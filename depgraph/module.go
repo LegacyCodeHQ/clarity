@@ -116,15 +116,6 @@ func CollapseModules(g DependencyGraph, modules []Module) (DependencyGraph, Coll
 	return graph, Collapse{Members: moduleMembers, EdgeOrigins: edgeOrigins}, nil
 }
 
-func sortFileEdges(edges []FileEdge) {
-	sort.Slice(edges, func(i, j int) bool {
-		if edges[i].From != edges[j].From {
-			return edges[i].From < edges[j].From
-		}
-		return edges[i].To < edges[j].To
-	})
-}
-
 // AnnotateModule marks a collapsed module node and records its file count and
 // aggregated churn, summed from the per-file stats of its members. Members
 // without a stats entry (unchanged files) still count toward the file total.

@@ -75,12 +75,6 @@ type PhantomMetadata struct {
 	ProdChanged bool
 }
 
-// FileEdge identifies a directed edge between two files.
-type FileEdge struct {
-	From string `json:"from"`
-	To   string `json:"to"`
-}
-
 // EdgeState describes whether a rendered dependency exists in the current tree
 // or is shown as historical context for a deleted node.
 type EdgeState string
