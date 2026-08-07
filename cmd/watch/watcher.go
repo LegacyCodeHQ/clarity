@@ -20,18 +20,6 @@ import (
 const debounceInterval = 300 * time.Millisecond
 const gitStatePollInterval = 500 * time.Millisecond
 
-var skippedDirs = map[string]bool{
-	".git":         true,
-	"node_modules": true,
-	"target":       true,
-	".dart_tool":   true,
-	"build":        true,
-	"__pycache__":  true,
-	".gradle":      true,
-	".idea":        true,
-	".vscode":      true,
-}
-
 func watchAndRebuild(ctx context.Context, repoID, repoPath string, opts *watchOptions, b *broker, formatter formatters.Formatter) error {
 	watcher, err := fsnotify.NewWatcher()
 	if err != nil {
