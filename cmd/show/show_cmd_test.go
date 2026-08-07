@@ -3,7 +3,6 @@ package show
 import (
 	"bytes"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -1324,14 +1323,6 @@ func TestGraphCountLabel(t *testing.T) {
 	}
 }
 
-func gitInitRepo(t *testing.T, repoDir string) {
-	t.Helper()
-
-	gitRun(t, repoDir, "init")
-	gitRun(t, repoDir, "config", "user.name", "test")
-	gitRun(t, repoDir, "config", "user.email", "test@example.com")
-}
-
 func TestGraphFile_Also_IncludesConnectedTestFile(t *testing.T) {
 	repoDir := t.TempDir()
 	aFile := filepath.Join(repoDir, "a.ts")
@@ -1548,20 +1539,6 @@ func TestGraphFile_Also_NoMatches_ReturnsOriginalGraph(t *testing.T) {
 	output := stdout.String()
 	if !strings.Contains(output, `"a.ts"`) || !strings.Contains(output, `"b.ts"`) {
 		t.Fatalf("expected original graph nodes a.ts and b.ts, got:\n%s", output)
-	}
-}
-
-func gitRun(t *testing.T, repoDir string, args ...string) {
-	t.Helper()
-
-	cmd := exec.Command("git", args...)
-	cmd.Dir = repoDir
-
-	var stderr bytes.Buffer
-	cmd.Stderr = &stderr
-
-	if err := cmd.Run(); err != nil {
-		t.Fatalf("git %v failed: %v\nstderr: %s", args, err, strings.TrimSpace(stderr.String()))
 	}
 }
 

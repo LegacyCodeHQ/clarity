@@ -1,22 +1,11 @@
 package show
 
 import (
-	"bytes"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 )
-
-func runShowErr(t *testing.T, args ...string) error {
-	t.Helper()
-	cmd := NewCommand()
-	cmd.SetArgs(args)
-	var out bytes.Buffer
-	cmd.SetOut(&out)
-	cmd.SetErr(&out)
-	return cmd.Execute()
-}
 
 func TestShowCommand_ModuleSelectBoxesMembers(t *testing.T) {
 	repoDir, srcDir := writeJavaPair(t)
