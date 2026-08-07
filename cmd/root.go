@@ -14,12 +14,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// version is set via build-time ldflags
-var version = "dev"
-
-// commit is set via build-time ldflags
-var commit = "unknown"
-
 // rootCmd represents the base command when called without any subcommands
 var rootCmd = &cobra.Command{
 	Use:   "clarity",
