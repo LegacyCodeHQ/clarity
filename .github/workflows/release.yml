@@ -13,7 +13,32 @@ env:
   OSXCROSS_REF: e6ab3fa7423f9235ce9ed6381d6d3af191b46b59
 
 jobs:
+  validate-credentials:
+    name: Validate Release Credentials
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify Homebrew tap token
+        env:
+          HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+        run: |
+          if [ -z "$HOMEBREW_TAP_TOKEN" ]; then
+            echo "::error::HOMEBREW_TAP_TOKEN is not set. Aborting release before any channel is published."
+            exit 1
+          fi
+          # homebrew-tap is a public repo, so `git ls-remote` with bad creds still
+          # succeeds via anonymous read fallback — it can't detect an expired token.
+          # The REST API enforces whatever Authorization header is sent, even for
+          # public resources, so it correctly 401s on invalid/expired credentials.
+          status=$(curl -s -o /dev/null -w '%{http_code}' \
+            -H "Authorization: token ${HOMEBREW_TAP_TOKEN}" \
+            https://api.github.com/repos/LegacyCodeHQ/homebrew-tap)
+          if [ "$status" != "200" ]; then
+            echo "::error::HOMEBREW_TAP_TOKEN failed to authenticate against homebrew-tap (HTTP $status — it may be expired). Aborting release before any channel is published."
+            exit 1
+          fi
+
   goreleaser:
+    needs: validate-credentials
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -147,7 +172,6 @@ jobs:
           echo "linux_arm64=$(grep "clarity_${VERSION}_linux_arm64.tar.gz" checksums.txt | awk '{print $1}')" >> $GITHUB_OUTPUT
 
       - name: Update Homebrew formula
-        if: env.HOMEBREW_TAP_TOKEN != ''
         env:
           HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
         run: |
@@ -166,7 +190,7 @@ jobs:
             desc "CLI tool for analyzing and visualizing dependency graphs"
             homepage "https://github.com/LegacyCodeHQ/clarity-cli"
             version "${VERSION}"
-            license "AGPL-3.0-only"
+            license "Apache-2.0"
 
             on_macos do
               if Hardware::CPU.arm?
