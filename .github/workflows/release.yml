@@ -86,7 +86,7 @@ jobs:
       # is identical run-to-run, so cache it on the pinned OSXCross ref + SDK.
       - name: Cache OSXCross toolchain
         id: osxcross
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: /tmp/osxcross/target
           key: osxcross-${{ env.OSXCROSS_REF }}-sdk12.3-${{ runner.os }}
