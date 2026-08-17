@@ -127,9 +127,17 @@ func parsePythonImportsFast(src []byte) ([]PythonImport, bool) {
 				continue
 			}
 			modulePath := string(bytes.TrimSpace(fromRest[:importIdx]))
-			if modulePath != "" {
-				imports = append(imports, classifyPythonImport(modulePath, false))
+			if modulePath == "" {
+				continue
 			}
+			if strings.TrimLeft(modulePath, ".") == "" {
+				// Bare relative import (`from . import x, y as z`, or
+				// `from . import *`): the names after "import" determine the
+				// real targets, not the dots alone. Bail to tree-sitter
+				// rather than hand-rolling comma/alias/wildcard parsing.
+				return nil, false
+			}
+			imports = append(imports, classifyPythonImport(modulePath, false))
 		}
 	}
 
@@ -187,9 +195,10 @@ func extractImportsFromTree(rootNode *sitter.Node, sourceCode []byte) []PythonIm
 				}
 			}
 		case "import_from_statement", "future_import_statement":
-			module := extractImportFromModule(n, sourceCode)
-			if module != "" {
-				imports = append(imports, classifyPythonImport(module, false))
+			for _, module := range extractImportFromModules(n, sourceCode) {
+				if module != "" {
+					imports = append(imports, classifyPythonImport(module, false))
+				}
 			}
 		}
 
@@ -217,8 +226,18 @@ func extractImportStatementModules(node *sitter.Node, sourceCode []byte) []strin
 	return modules
 }
 
-func extractImportFromModule(node *sitter.Node, sourceCode []byte) string {
+// extractImportFromModules returns the import path(s) for a `from X import
+// ...` statement. Usually this is a single module path (e.g. ".models" for
+// `from .models import Response`). But a bare relative import with no dotted
+// name of its own — `from . import x, y as z` — names its real targets in the
+// import list, not in the dots; each name after "import" becomes its own
+// "<dots><name>" path so it resolves to the sibling file/subpackage, not the
+// package's own __init__.py. `from . import *` is left as a single dots-only
+// path: a wildcard pulls from the package's own namespace, which is what the
+// dots already resolve to.
+func extractImportFromModules(node *sitter.Node, sourceCode []byte) []string {
 	var module string
+	importIdx := -1
 
 	for i := 0; i < int(node.ChildCount()); i++ {
 		child := node.Child(i)
@@ -226,6 +245,7 @@ func extractImportFromModule(node *sitter.Node, sourceCode []byte) string {
 			continue
 		}
 		if child.Type() == "import" {
+			importIdx = i
 			break
 		}
 		switch child.Type() {
@@ -234,7 +254,35 @@ func extractImportFromModule(node *sitter.Node, sourceCode []byte) string {
 		}
 	}
 
-	return module
+	if module == "" || importIdx < 0 || strings.TrimLeft(module, ".") != "" {
+		return []string{module}
+	}
+
+	var names []string
+	for i := importIdx + 1; i < int(node.ChildCount()); i++ {
+		child := node.Child(i)
+		if child == nil {
+			continue
+		}
+		switch child.Type() {
+		case "wildcard_import":
+			return []string{module}
+		case "dotted_name", "aliased_import":
+			if name := extractModuleName(child, sourceCode); name != "" {
+				names = append(names, name)
+			}
+		}
+	}
+
+	if len(names) == 0 {
+		return []string{module}
+	}
+
+	modules := make([]string, len(names))
+	for i, name := range names {
+		modules[i] = module + name
+	}
+	return modules
 }
 
 func extractModuleName(node *sitter.Node, sourceCode []byte) string {

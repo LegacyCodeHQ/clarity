@@ -40,9 +40,61 @@ from .pkg import api
 
 	paths := extractPaths(imports)
 	assert.Contains(t, paths, "collections")
-	assert.Contains(t, paths, ".")
+	assert.Contains(t, paths, ".helpers")
 	assert.Contains(t, paths, "..utils")
 	assert.Contains(t, paths, ".pkg")
+}
+
+func TestParsePythonImports_BareRelativeImportNamesEachTarget(t *testing.T) {
+	// `from . import x, y` names its real targets in the import list, not in
+	// the dots. Each name must resolve to its own sibling file, not collapse
+	// onto a single "." edge that points at the package's own __init__.py.
+	source := `
+from . import packages, utils as u
+from .. import foo
+`
+	imports, err := ParsePythonImports([]byte(source))
+
+	require.NoError(t, err)
+	assert.Len(t, imports, 3)
+
+	paths := extractPaths(imports)
+	assert.Contains(t, paths, ".packages")
+	assert.Contains(t, paths, ".utils")
+	assert.Contains(t, paths, "..foo")
+	assert.NotContains(t, paths, ".")
+}
+
+func TestParsePythonImports_BareRelativeImportParenthesizedList(t *testing.T) {
+	source := `
+from . import (
+    packages,
+    utils,
+)
+`
+	imports, err := ParsePythonImports([]byte(source))
+
+	require.NoError(t, err)
+	assert.Len(t, imports, 2)
+
+	paths := extractPaths(imports)
+	assert.Contains(t, paths, ".packages")
+	assert.Contains(t, paths, ".utils")
+}
+
+func TestParsePythonImports_BareRelativeWildcardImportUnchanged(t *testing.T) {
+	// `from . import *` pulls from the package's own namespace -- the dots
+	// already resolve to that. Not the bug this covers; must stay a no-op.
+	source := `
+from . import *
+`
+	imports, err := ParsePythonImports([]byte(source))
+
+	require.NoError(t, err)
+	assert.Len(t, imports, 1)
+
+	paths := extractPaths(imports)
+	assert.Contains(t, paths, ".")
 }
 
 func TestPythonImports_ValidFile(t *testing.T) {
@@ -63,7 +115,7 @@ from . import helpers
 
 	paths := extractPaths(imports)
 	assert.Contains(t, paths, "json")
-	assert.Contains(t, paths, ".")
+	assert.Contains(t, paths, ".helpers")
 }
 
 func TestResolvePythonImportPath(t *testing.T) {
