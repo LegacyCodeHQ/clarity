@@ -13,3 +13,5 @@ echo "pre-push: running make lint"
 make lint
 echo "pre-push: running make test"
 make test
+echo "pre-push: running make security"
+make security
