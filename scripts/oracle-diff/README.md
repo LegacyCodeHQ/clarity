@@ -1,3 +1,8 @@
+This directory holds per-language oracle-diff harnesses: scripts that
+cross-check Clarity's dependency graph for one language against an
+independent, non-Clarity tool. See CLR-23 for why this exists and CLR-64 for
+the Python pass. Jump to [Python oracle diff](#python-oracle-diff) below.
+
 # Rust oracle diff
 
 Cross-checks Clarity's Rust dependency graph against
@@ -80,3 +85,79 @@ taskd-cli's binary target is `taskd`. Deriving them from package names silently
 drops an entire crate into "unmapped" while still producing a plausible-looking
 diff. The script warns loudly when anything fails to map; that warning means the
 numbers below it are incomplete, not that a few edges were skipped.
+
+# Python oracle diff
+
+Cross-checks Clarity's Python dependency graph against
+[grimp](https://github.com/seddonym/grimp) (which backs
+[import-linter](https://github.com/seddonym/import-linter)), used as an
+independent oracle. grimp builds its import graph via static AST analysis — it
+does not execute the target package, so it works without that package's
+runtime dependencies installed. Run it on demand after changing the Python
+extractor.
+
+It found CLR-65.
+
+```sh
+pip install grimp
+python3 scripts/oracle-diff/python_oracle_diff.py /path/to/python/repo
+python3 scripts/oracle-diff/python_oracle_diff.py ../../some-repo --src-root '' --clarity ./clarity --verbose
+```
+
+Exits non-zero when there are unexplained oracle-only edges. Use `--clarity` to
+point at a fresh build — the default picks up whatever `clarity` is on `PATH`.
+Use `--src-root ''` for a flat/no-`src`-directory layout; the default `src`
+matches the common `src/<package>/` convention.
+
+## Requirements
+
+- `pip install grimp` (tested against grimp on Python 3.9+; no other runtime
+  dependency of the target package needs to be installed).
+
+## Reading the output
+
+Unlike the Rust harness, there is no "expected divergence" bucket here: Python
+packages have no equivalent of a `mod X;` declaration that is containment
+rather than dependency, so every module-level import the oracle sees is a real
+edge Clarity should draw too.
+
+**UNEXPLAINED oracle-only** — the actionable bucket. Imports grimp found that
+Clarity did not. Treat each as a candidate Clarity bug and check the source
+before filing — grimp only sees import statements, so an oracle-only edge is
+almost always a real parser or resolver gap, not an artifact.
+
+**Oracle blind spot** — Clarity-only edges. grimp tracks import statements; it
+cannot see attribute or call expressions, and Clarity's resolver recovers a
+few shapes independently (e.g. some re-export chains). **These are not
+automatically Clarity false positives** — check the source before assuming
+noise, the same discipline the Rust harness's blind-spot bucket needs.
+
+## Limitations
+
+- **Package discovery is a filesystem heuristic**, not read from
+  `pyproject.toml`/`setup.cfg`. A directory under `--src-root` counts as a
+  top-level package only if it contains `__init__.py` directly. This misses
+  `package_dir` remapping and PEP 420 namespace packages (no `__init__.py`) —
+  both are gaps in what this harness can validate, not silent gaps in what it
+  reports: it fails loudly with "no top-level packages found" rather than
+  reporting an empty, misleadingly-clean diff.
+- **Module-to-file resolution is filesystem-convention-only** (dotted name →
+  path, `.py` or `/__init__.py`), deliberately not `importlib`-based, so the
+  harness does not need the target package's dependencies installed. This
+  matches how Clarity itself resolves imports, but means neither tool can see
+  a runtime `sys.path` hack.
+- Validated so far against two single-package `src`-layout repos (psf/requests,
+  pallets/click). A multi-package layout and a flat (no `src/`) layout have not
+  been run yet — see CLR-64.
+
+## Notes for whoever extends this
+
+The single-name and dotted-name relative-import forms look identical at a
+glance but are structurally different in the parse tree: `from .models import
+X` puts the dots and the module name in one `relative_import` node, while
+`from . import X` puts only the dots there and leaves `X` as a sibling node
+after the `import` keyword. CLR-65 was exactly this distinction not being
+handled. If you add another shape to the oracle diff, check the actual parse
+tree (`go run` a throwaway program against
+`github.com/smacker/go-tree-sitter/python`) before assuming the two forms
+share a code path.
