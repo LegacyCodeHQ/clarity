@@ -38,11 +38,21 @@ from .pkg import api
 	require.NoError(t, err)
 	assert.Len(t, imports, 4)
 
+	// Path() is the submodule-shaped candidate to try first.
 	paths := extractPaths(imports)
-	assert.Contains(t, paths, "collections")
+	assert.Contains(t, paths, "collections.defaultdict")
 	assert.Contains(t, paths, ".helpers")
-	assert.Contains(t, paths, "..utils")
-	assert.Contains(t, paths, ".pkg")
+	assert.Contains(t, paths, "..utils.slugify")
+	assert.Contains(t, paths, ".pkg.api")
+
+	// FallbackPath() is the bare module, tried only if Path() doesn't
+	// resolve to a real file (the imported name is an attribute, not a
+	// submodule).
+	fallbacks := extractFallbacks(imports)
+	assert.Contains(t, fallbacks, "collections")
+	assert.Contains(t, fallbacks, ".")
+	assert.Contains(t, fallbacks, "..utils")
+	assert.Contains(t, fallbacks, ".pkg")
 }
 
 func TestParsePythonImports_BareRelativeImportNamesEachTarget(t *testing.T) {
@@ -171,4 +181,12 @@ func extractPaths(imports []PythonImport) []string {
 		paths[i] = imp.Path()
 	}
 	return paths
+}
+
+func extractFallbacks(imports []PythonImport) []string {
+	fallbacks := make([]string, len(imports))
+	for i, imp := range imports {
+		fallbacks[i] = imp.FallbackPath()
+	}
+	return fallbacks
 }

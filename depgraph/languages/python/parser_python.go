@@ -26,19 +26,32 @@ var (
 )
 
 // PythonImport represents an import in a Python file.
+//
+// FallbackPath is the path to try when Path does not resolve to a real file.
+// It is only non-empty for `from X import name` statements: name might be a
+// submodule of X (Path: "X.name") or an attribute defined inside X's own
+// file/package (FallbackPath: "X") -- only a file-existence check can tell
+// them apart, and the parser doesn't have that information, so both
+// candidates are threaded through to the resolver.
 type PythonImport interface {
 	Path() string
+	FallbackPath() string
 	IsTypeOnly() bool
 }
 
 // ExternalImport represents an external module import.
 type ExternalImport struct {
-	path       string
-	isTypeOnly bool
+	path         string
+	fallbackPath string
+	isTypeOnly   bool
 }
 
 func (e ExternalImport) Path() string {
 	return e.path
+}
+
+func (e ExternalImport) FallbackPath() string {
+	return e.fallbackPath
 }
 
 func (e ExternalImport) IsTypeOnly() bool {
@@ -47,12 +60,17 @@ func (e ExternalImport) IsTypeOnly() bool {
 
 // InternalImport represents a relative module import.
 type InternalImport struct {
-	path       string
-	isTypeOnly bool
+	path         string
+	fallbackPath string
+	isTypeOnly   bool
 }
 
 func (i InternalImport) Path() string {
 	return i.path
+}
+
+func (i InternalImport) FallbackPath() string {
+	return i.fallbackPath
 }
 
 func (i InternalImport) IsTypeOnly() bool {
@@ -61,11 +79,17 @@ func (i InternalImport) IsTypeOnly() bool {
 
 // classifyPythonImport classifies a Python import path.
 func classifyPythonImport(importPath string, isTypeOnly bool) PythonImport {
+	return classifyPythonImportWithFallback(importPath, "", isTypeOnly)
+}
+
+// classifyPythonImportWithFallback classifies a Python import path that has
+// a fallback to try if importPath does not resolve to a real file.
+func classifyPythonImportWithFallback(importPath, fallbackPath string, isTypeOnly bool) PythonImport {
 	if strings.HasPrefix(importPath, ".") {
-		return InternalImport{path: importPath, isTypeOnly: isTypeOnly}
+		return InternalImport{path: importPath, fallbackPath: fallbackPath, isTypeOnly: isTypeOnly}
 	}
 
-	return ExternalImport{path: importPath, isTypeOnly: isTypeOnly}
+	return ExternalImport{path: importPath, fallbackPath: fallbackPath, isTypeOnly: isTypeOnly}
 }
 
 // parsePythonImportsFast extracts Python imports with a simple byte scanner, avoiding tree-sitter.
@@ -117,27 +141,12 @@ func parsePythonImportsFast(src []byte) ([]PythonImport, bool) {
 		}
 
 		if bytes.HasPrefix(trimmed, []byte("from ")) {
-			fromRest := trimmed[5:]
-			importIdx := bytes.Index(fromRest, []byte(" import "))
-			if importIdx < 0 {
-				// from X import ( — multiline form, bail.
-				if bytes.IndexByte(fromRest, '(') >= 0 {
-					return nil, false
-				}
-				continue
-			}
-			modulePath := string(bytes.TrimSpace(fromRest[:importIdx]))
-			if modulePath == "" {
-				continue
-			}
-			if strings.TrimLeft(modulePath, ".") == "" {
-				// Bare relative import (`from . import x, y as z`, or
-				// `from . import *`): the names after "import" determine the
-				// real targets, not the dots alone. Bail to tree-sitter
-				// rather than hand-rolling comma/alias/wildcard parsing.
-				return nil, false
-			}
-			imports = append(imports, classifyPythonImport(modulePath, false))
+			// Every `from X import name` needs submodule-first/module-fallback
+			// resolution (name might be a submodule of X or an attribute
+			// defined inside X itself — only a file-existence check downstream
+			// can tell), so there is no shortcut left worth hand-rolling here.
+			// Bail to tree-sitter for the whole file.
+			return nil, false
 		}
 	}
 
@@ -195,9 +204,9 @@ func extractImportsFromTree(rootNode *sitter.Node, sourceCode []byte) []PythonIm
 				}
 			}
 		case "import_from_statement", "future_import_statement":
-			for _, module := range extractImportFromModules(n, sourceCode) {
-				if module != "" {
-					imports = append(imports, classifyPythonImport(module, false))
+			for _, target := range extractImportFromModules(n, sourceCode) {
+				if target.submodule != "" {
+					imports = append(imports, classifyPythonImportWithFallback(target.submodule, target.fallback, false))
 				}
 			}
 		}
@@ -226,16 +235,27 @@ func extractImportStatementModules(node *sitter.Node, sourceCode []byte) []strin
 	return modules
 }
 
-// extractImportFromModules returns the import path(s) for a `from X import
-// ...` statement. Usually this is a single module path (e.g. ".models" for
-// `from .models import Response`). But a bare relative import with no dotted
-// name of its own — `from . import x, y as z` — names its real targets in the
-// import list, not in the dots; each name after "import" becomes its own
-// "<dots><name>" path so it resolves to the sibling file/subpackage, not the
-// package's own __init__.py. `from . import *` is left as a single dots-only
-// path: a wildcard pulls from the package's own namespace, which is what the
-// dots already resolve to.
-func extractImportFromModules(node *sitter.Node, sourceCode []byte) []string {
+// fromImportTarget is one name imported by a `from X import ...` statement.
+// Submodule is the path to try first, treating the name as a submodule of X
+// (e.g. "_pytest.nodes" or ".packages"). Fallback is the plain module path
+// (e.g. "_pytest" or ".") to try if Submodule does not resolve to a real
+// file -- the name is then an attribute defined inside X's own file/package,
+// not a submodule (e.g. `from . import logger` where logger is an instance
+// defined in the package's __init__.py, not a logger.py file).
+type fromImportTarget struct {
+	submodule string
+	fallback  string
+}
+
+// extractImportFromModules returns the import target(s) for a `from X import
+// ...` statement. Each name after "import" gets its own submodule-shaped
+// candidate plus a fallback to the bare module, since only a file-existence
+// check (done downstream, where suppliedFiles is available) can tell whether
+// a name is a submodule of X or an attribute defined inside X itself.
+// `from X import *` is left as a single module-only target with no fallback:
+// a wildcard pulls from X's own namespace, which is what the module path
+// already resolves to.
+func extractImportFromModules(node *sitter.Node, sourceCode []byte) []fromImportTarget {
 	var module string
 	importIdx := -1
 
@@ -254,8 +274,16 @@ func extractImportFromModules(node *sitter.Node, sourceCode []byte) []string {
 		}
 	}
 
-	if module == "" || importIdx < 0 || strings.TrimLeft(module, ".") != "" {
-		return []string{module}
+	if module == "" || importIdx < 0 {
+		return []fromImportTarget{{submodule: module}}
+	}
+
+	// Bare dots concatenate directly with the name ("." + "packages" =
+	// ".packages"); a module that already has a name of its own needs a
+	// literal separator (".models" + "." + "Response" = ".models.Response").
+	sep := "."
+	if strings.HasSuffix(module, ".") {
+		sep = ""
 	}
 
 	var names []string
@@ -266,7 +294,7 @@ func extractImportFromModules(node *sitter.Node, sourceCode []byte) []string {
 		}
 		switch child.Type() {
 		case "wildcard_import":
-			return []string{module}
+			return []fromImportTarget{{submodule: module}}
 		case "dotted_name", "aliased_import":
 			if name := extractModuleName(child, sourceCode); name != "" {
 				names = append(names, name)
@@ -275,14 +303,14 @@ func extractImportFromModules(node *sitter.Node, sourceCode []byte) []string {
 	}
 
 	if len(names) == 0 {
-		return []string{module}
+		return []fromImportTarget{{submodule: module}}
 	}
 
-	modules := make([]string, len(names))
+	targets := make([]fromImportTarget, len(names))
 	for i, name := range names {
-		modules[i] = module + name
+		targets[i] = fromImportTarget{submodule: module + sep + name, fallback: module}
 	}
-	return modules
+	return targets
 }
 
 func extractModuleName(node *sitter.Node, sourceCode []byte) string {
