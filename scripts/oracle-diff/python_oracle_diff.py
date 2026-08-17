@@ -79,10 +79,10 @@ def oracle_edges(base_dir, packages):
 
 
 def clarity_edges(repo, clarity_bin, src_root):
-    args = [clarity_bin, "show"]
-    if src_root:
-        args.append(src_root)
-    args += ["-f", "dot"]
+    # Always pass an explicit path. With none, `clarity show` defaults to the
+    # uncommitted working-set diff, which is empty right after a fresh clone
+    # -- not "the whole tree" the way a bare invocation might suggest.
+    args = [clarity_bin, "show", src_root or ".", "-f", "dot"]
     dot = run(args, cwd=repo)
     prefix = src_root.rstrip(os.sep) + os.sep if src_root else ""
     edges = set()
