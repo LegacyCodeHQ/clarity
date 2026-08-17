@@ -16,7 +16,7 @@ func (Provider) Extensions() []string {
 }
 
 func (Provider) Maturity() moduleapi.MaturityLevel {
-	return moduleapi.MaturityBasicTests
+	return moduleapi.MaturityActivelyTested
 }
 
 func (Provider) NewResolver(ctx *moduleapi.Context, contentReader vcs.ContentReader) moduleapi.Resolver {

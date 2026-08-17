@@ -9,7 +9,7 @@
 ◐ Java        .java
 ◐ Kotlin      .kt, .kts
 ◐ Markdown    .md, .markdown
-◐ Python      .py
+● Python      .py
 ◐ Ruby        .rb
 ● Rust        .rs
 ◐ Scala       .scala
