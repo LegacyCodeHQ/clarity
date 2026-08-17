@@ -379,6 +379,16 @@ func ResolvePythonImportPath(sourceFile, importPath string, suppliedFiles map[st
 
 // ResolvePythonAbsoluteImportPath resolves an absolute Python package import
 // (e.g. "dexter.tools.finance.api") to matching project files.
+//
+// A bare absolute import names a module reachable from a sys.path root, not
+// from just anywhere in the tree a file with a matching tail happens to
+// live. Suffix matching alone can't tell "the real top-level urllib3" apart
+// from "requests/packages/urllib3", a same-named vendored copy several
+// levels deep -- both end in "/urllib3/__init__.py". The directory that
+// would need to be on sys.path for a candidate to be valid (suppliedPath
+// with the matched suffix removed) is checked for its own __init__.py: a
+// real sys.path entry is a directory of packages, never a package itself,
+// so a candidate whose would-be root has one is rejected.
 func ResolvePythonAbsoluteImportPath(absSourcePath, importPath string, suppliedFiles map[string]bool) []string {
 	if importPath == "" || strings.HasPrefix(importPath, ".") {
 		return nil
@@ -393,9 +403,20 @@ func ResolvePythonAbsoluteImportPath(absSourcePath, importPath string, suppliedF
 		if suppliedPath == absSourcePath {
 			continue
 		}
-		if strings.HasSuffix(suppliedPath, fileSuffix) || strings.HasSuffix(suppliedPath, packageSuffix) {
-			resolvedPaths = append(resolvedPaths, suppliedPath)
+		var matchedSuffix string
+		switch {
+		case strings.HasSuffix(suppliedPath, fileSuffix):
+			matchedSuffix = fileSuffix
+		case strings.HasSuffix(suppliedPath, packageSuffix):
+			matchedSuffix = packageSuffix
+		default:
+			continue
 		}
+		root := suppliedPath[:len(suppliedPath)-len(matchedSuffix)]
+		if suppliedFiles[filepath.Join(root, "__init__.py")] {
+			continue
+		}
+		resolvedPaths = append(resolvedPaths, suppliedPath)
 	}
 
 	sort.Strings(resolvedPaths)

@@ -173,6 +173,44 @@ func TestResolvePythonAbsoluteImportPath(t *testing.T) {
 	assert.Equal(t, []string{"/project/legacy/src/dexter/tools/finance/api.py"}, resolved)
 }
 
+// Regression test, found reviewing psf/requests@28666e5d: `import urllib3`
+// in requests/packages.py names the real third-party package, but suffix
+// matching alone also matches requests/packages/urllib3/__init__.py, a
+// vendored copy several levels deep -- reachable only as
+// requests.packages.urllib3, never as bare urllib3, because
+// requests/packages/ is itself a package (has its own __init__.py). A bare
+// absolute import must not resolve into a directory that isn't a legitimate
+// sys.path root.
+func TestResolvePythonAbsoluteImportPath_RejectsNestedPackageNamesake(t *testing.T) {
+	suppliedFiles := map[string]bool{
+		"/project/requests/packages.py":                    true,
+		"/project/requests/packages/__init__.py":           true,
+		"/project/requests/packages/urllib3/__init__.py":   true,
+		"/project/requests/packages/urllib3/connection.py": true,
+	}
+
+	sourcePath := "/project/requests/packages.py"
+
+	resolved := ResolvePythonAbsoluteImportPath(sourcePath, "urllib3", suppliedFiles)
+	assert.Empty(t, resolved, "bare 'urllib3' must not resolve into the nested requests/packages/urllib3 vendored copy")
+}
+
+// A genuinely top-level package sharing a name one level deeper in an
+// unrelated directory (not itself a package) is still fair game -- the
+// __init__.py check must only reject roots that are themselves packages,
+// not just any nesting.
+func TestResolvePythonAbsoluteImportPath_AllowsGenuineTopLevelMatch(t *testing.T) {
+	suppliedFiles := map[string]bool{
+		"/project/src/urllib3/__init__.py":   true,
+		"/project/src/urllib3/connection.py": true,
+	}
+
+	sourcePath := "/project/src/caller.py"
+
+	resolved := ResolvePythonAbsoluteImportPath(sourcePath, "urllib3", suppliedFiles)
+	assert.Equal(t, []string{"/project/src/urllib3/__init__.py"}, resolved)
+}
+
 // Helper functions
 
 func extractPaths(imports []PythonImport) []string {
