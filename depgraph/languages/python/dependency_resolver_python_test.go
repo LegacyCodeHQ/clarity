@@ -79,3 +79,34 @@ func TestResolvePythonProjectImports_BareRelativeFallsBackWhenNoSubmoduleExists(
 	require.NoError(t, err)
 	assert.Contains(t, resolved, initPath)
 }
+
+// Regression test, found reviewing psf/requests@2ed84f55 with a query scoped
+// to fewer files than the whole project (a single-file `clarity show`, or a
+// commit-scoped render where the referenced file wasn't itself changed):
+// `from . import utils` in requests/__init__.py, with requests/utils.py
+// existing on disk but out of the query's scope (not in suppliedFiles). The
+// submodule candidate ".utils" can't resolve -- correctly, it's genuinely not
+// in scope -- so CLR-66's fallback tries "."), which the bare-dots branch of
+// ResolvePythonImportPath resolves to the enclosing package's own
+// __init__.py. When the importing file IS that __init__.py, this produced a
+// self-edge: a file "depending on itself" purely because its own target
+// fell outside the query's scope.
+func TestResolvePythonProjectImports_BareRelativeFallbackNoSelfEdgeWhenScopeNarrow(t *testing.T) {
+	absPath := "/project/requests/__init__.py"
+	suppliedFiles := map[string]bool{
+		absPath: true,
+		// requests/utils.py deliberately absent: out of this query's scope,
+		// even though it exists in the real project.
+	}
+
+	source := []byte("from . import utils\n")
+	contentReader := func(path string) ([]byte, error) {
+		return source, nil
+	}
+
+	resolved, err := ResolvePythonProjectImports(absPath, "requests/__init__.py", ".py", suppliedFiles, contentReader)
+
+	require.NoError(t, err)
+	assert.NotContains(t, resolved, absPath, "a file must not depend on itself")
+	assert.Empty(t, resolved, "the target is out of the query's scope; there is nothing correct to resolve to")
+}

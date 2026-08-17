@@ -332,6 +332,14 @@ func extractModuleName(node *sitter.Node, sourceCode []byte) string {
 }
 
 // ResolvePythonImportPath resolves a Python import path to possible file paths.
+//
+// A candidate matching sourceFile itself is never returned. This matters most
+// for the bare-dots case (`from . import x` falling back to `.` when `x`
+// isn't a real submodule, or a query scoped to fewer files than the whole
+// project -- a single-file or single-commit `clarity show` -- simply doesn't
+// have x's file in suppliedFiles even though it exists): resolving "." always
+// means the enclosing package's own __init__.py, which is sourceFile itself
+// whenever sourceFile IS that __init__.py. A file cannot depend on itself.
 func ResolvePythonImportPath(sourceFile, importPath string, suppliedFiles map[string]bool) []string {
 	if !strings.HasPrefix(importPath, ".") {
 		return nil
@@ -355,24 +363,19 @@ func ResolvePythonImportPath(sourceFile, importPath string, suppliedFiles map[st
 	modulePath = strings.ReplaceAll(modulePath, ".", string(filepath.Separator))
 
 	var resolvedPaths []string
-
-	if modulePath == "" {
-		candidate := filepath.Join(baseDir, "__init__.py")
-		if suppliedFiles[candidate] {
+	addCandidate := func(candidate string) {
+		if candidate != sourceFile && suppliedFiles[candidate] {
 			resolvedPaths = append(resolvedPaths, candidate)
 		}
+	}
+
+	if modulePath == "" {
+		addCandidate(filepath.Join(baseDir, "__init__.py"))
 		return resolvedPaths
 	}
 
-	fileCandidate := filepath.Join(baseDir, modulePath) + ".py"
-	if suppliedFiles[fileCandidate] {
-		resolvedPaths = append(resolvedPaths, fileCandidate)
-	}
-
-	packageCandidate := filepath.Join(baseDir, modulePath, "__init__.py")
-	if suppliedFiles[packageCandidate] {
-		resolvedPaths = append(resolvedPaths, packageCandidate)
-	}
+	addCandidate(filepath.Join(baseDir, modulePath) + ".py")
+	addCandidate(filepath.Join(baseDir, modulePath, "__init__.py"))
 
 	return resolvedPaths
 }
