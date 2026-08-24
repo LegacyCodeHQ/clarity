@@ -206,6 +206,45 @@ func (w *Widget) testOnlyHelper() string {
 		"a production type file must never gain an edge to a test method file")
 }
 
+func TestBuildDependencyGraph_GoQualifiedStdlibCallDoesNotMatchLocalSymbol(t *testing.T) {
+	// A qualified call like errors.New(...) must not be treated as a
+	// reference to a same-package function that happens to share the bare
+	// name "New" (e.g. appstate.New). The "errors." qualifier disambiguates
+	// it; only the qualifier identifier itself is a candidate local
+	// reference, never the selector's field name.
+	goModPath := filepath.Clean("/virtual/go.mod")
+	newPath := filepath.Clean("/virtual/appstate/appstate.go")
+	configPath := filepath.Clean("/virtual/appstate/config.go")
+
+	reader := mapContentReader(map[string]string{
+		goModPath: "module appmod\n\ngo 1.25\n",
+		newPath: `package appstate
+
+type AppState struct{}
+
+func New() *AppState {
+	return &AppState{}
+}
+`,
+		configPath: `package appstate
+
+import "errors"
+
+func adminConfigFromEnv() error {
+	return errors.New("boom")
+}
+`,
+	})
+
+	files := []string{newPath, configPath}
+	graph, err := depgraph.BuildDependencyGraph(files, reader)
+	require.NoError(t, err)
+
+	adj := mustAdjacency(t, graph)
+	assert.NotContains(t, adj[configPath], newPath,
+		"errors.New must not resolve to appstate.New just because both are named New")
+}
+
 func TestBuildDependencyGraph_GoDotImportResolvesUsedSymbolsOnly(t *testing.T) {
 	tmpDir := t.TempDir()
 

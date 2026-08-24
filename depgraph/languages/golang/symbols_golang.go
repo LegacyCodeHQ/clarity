@@ -212,11 +212,29 @@ func extractSymbolsFromAST(filePath string, node *ast.File) (*GoSymbolInfo, erro
 		"init": true, "main": true,
 	}
 
+	// A SelectorExpr's Sel field (e.g. "New" in "errors.New") is itself an
+	// *ast.Ident, so ast.Inspect's default recursion visits it a second time
+	// as a bare identifier. Track those positions up front so the Ident case
+	// below can skip them - otherwise a qualified call like errors.New gets
+	// recorded as a reference to "New" with the "errors." qualifier silently
+	// dropped, which can collide with an unrelated same-package New (see
+	// CLR-73: errors.New falsely resolving to appstate.New).
+	selectorFields := make(map[*ast.Ident]bool)
+	ast.Inspect(node, func(n ast.Node) bool {
+		if sel, ok := n.(*ast.SelectorExpr); ok {
+			selectorFields[sel.Sel] = true
+		}
+		return true
+	})
+
 	// Extract referenced symbols - only track identifiers that could be package-level symbols
 	// Filter out built-ins, package names, and locally defined symbols
 	ast.Inspect(node, func(n ast.Node) bool {
 		switch x := n.(type) {
 		case *ast.Ident:
+			if selectorFields[x] {
+				return true
+			}
 			// Only track identifiers that:
 			// 1. Don't have a local object (x.Obj == nil) - meaning they might be from another file
 			// 2. Are not the blank identifier
