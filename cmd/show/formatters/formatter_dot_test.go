@@ -488,6 +488,38 @@ func TestDependencyGraph_ToDOT_ExtensionColorsRemainStableAcrossSequentialRender
 		"expected .go extension color to remain stable across sequential renders when extension set changes")
 }
 
+func TestDependencyGraph_ToDOT_ManyExtensionsAllColorsDistinct(t *testing.T) {
+	// Regression test for CLR-72: a graph spanning more file types than the
+	// extension color palette used to wrap its index and reassign colors
+	// already in use, making unrelated file types visually indistinguishable.
+	const numTypes = 16
+	adjacency := make(map[string][]string)
+	for i := 0; i < numTypes; i++ {
+		path := fmt.Sprintf("/project/file%02d.ext%02d", i, i)
+		adjacency[path] = []string{}
+	}
+	graph := testFileGraph(t, adjacency, nil)
+
+	formatter := dotFormatter{}
+	output, err := formatter.Format(graph, RenderOptions{})
+	require.NoError(t, err)
+
+	seenBy := make(map[string]string)
+	for i := 0; i < numTypes; i++ {
+		label := fmt.Sprintf("file%02d.ext%02d", i, i)
+		color, ok := findFillColorForLabel(output, label)
+		require.True(t, ok, "expected %s to have a fill color", label)
+		if color == "white" {
+			// The tie-broken majority type renders neutral white by design.
+			continue
+		}
+		if other, exists := seenBy[color]; exists {
+			t.Fatalf("distinct file types %q and %q both render fillcolor %q; every file type in scope must get a visually distinct color", label, other, color)
+		}
+		seenBy[color] = label
+	}
+}
+
 func findFillColorForLabel(dotOutput, label string) (string, bool) {
 	needle := fmt.Sprintf("label=%q", label)
 	for _, line := range strings.Split(dotOutput, "\n") {

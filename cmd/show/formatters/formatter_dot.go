@@ -285,8 +285,7 @@ func (f *dotFormatter) assignExtensionColors(filePaths []string) map[string]stri
 		if _, exists := f.extensionColors[ext]; exists {
 			continue
 		}
-		color := extensionColorPalette[f.nextColorPaletteI%len(extensionColorPalette)]
-		f.extensionColors[ext] = color
+		f.extensionColors[ext] = paletteColor(f.nextColorPaletteI)
 		f.nextColorPaletteI++
 	}
 

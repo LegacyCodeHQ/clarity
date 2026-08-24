@@ -153,6 +153,16 @@ func Test_getExtensionColors_ManyExtensions(t *testing.T) {
 	for _, ext := range expectedExts {
 		assert.Contains(t, colors, ext, "extension %s should be in the map", ext)
 	}
+
+	// CLR-72: with more file types than the curated palette has entries, colors
+	// must stay distinct instead of wrapping around and reusing earlier ones.
+	seenBy := make(map[string]string)
+	for ext, color := range colors {
+		if other, exists := seenBy[color]; exists {
+			t.Fatalf("extensions %q and %q share color %q; every extension should get a distinct color", ext, other, color)
+		}
+		seenBy[color] = ext
+	}
 }
 
 func Test_getExtensionColors_WithinCallConsistency(t *testing.T) {
