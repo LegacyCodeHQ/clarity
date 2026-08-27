@@ -33,6 +33,22 @@ func watchAndRebuild(ctx context.Context, repoID, repoPath string, opts *watchOp
 
 	var debounceTimer *time.Timer
 	var debounceC <-chan time.Time
+	// armDebounce defers a rebuild until debounceInterval has passed with no
+	// further relevant activity. Both the fsnotify event branch and the
+	// git-state poll branch below call this instead of rebuilding directly,
+	// so a burst from either source (or both, interleaved) coalesces into a
+	// single rebuild once the tree actually goes quiet, rather than each
+	// source independently sampling whatever transient state exists at the
+	// moment it fires.
+	armDebounce := func() {
+		if debounceTimer == nil {
+			debounceTimer = time.NewTimer(debounceInterval)
+			debounceC = debounceTimer.C
+		} else {
+			stopAndDrainTimer(debounceTimer)
+			debounceTimer.Reset(debounceInterval)
+		}
+	}
 	lastGitStateSig, err := git.GetRepositoryStateSignature(repoPath)
 	lastHeadSig := extractHEADSignature(lastGitStateSig)
 	if err != nil {
@@ -78,13 +94,7 @@ func watchAndRebuild(ctx context.Context, repoID, repoPath string, opts *watchOp
 				continue
 			}
 
-			if debounceTimer == nil {
-				debounceTimer = time.NewTimer(debounceInterval)
-				debounceC = debounceTimer.C
-			} else {
-				stopAndDrainTimer(debounceTimer)
-				debounceTimer.Reset(debounceInterval)
-			}
+			armDebounce()
 
 		case err, ok := <-watcher.Errors:
 			if !ok {
@@ -136,7 +146,11 @@ func watchAndRebuild(ctx context.Context, repoID, repoPath string, opts *watchOp
 				}
 				b.archiveWorkingSetWithCommitHistory(repoID, commitHistory)
 			}
-			publishCurrentGraph(repoID, repoPath, opts, b, formatter)
+			// Defer to the debounce timer rather than rebuilding immediately:
+			// a state change detected mid-burst (a refactor, a codegen regen)
+			// otherwise samples whatever half-written state the tree is in
+			// at this exact poll tick.
+			armDebounce()
 
 		case <-debounceC:
 			publishCurrentGraph(repoID, repoPath, opts, b, formatter)

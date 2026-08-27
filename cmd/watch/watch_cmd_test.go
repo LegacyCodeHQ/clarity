@@ -1210,6 +1210,62 @@ func TestWatchAndRebuild_DebounceFiresOnEverySaveCycle(t *testing.T) {
 	waitForSnapshotID(t, b, 2, 2*time.Second)
 }
 
+// TestWatchAndRebuild_GitStatePollDoesNotSampleMidChurnState reproduces a
+// watcher bug where the git-state poller (gitStateTicker) calls
+// publishCurrentGraph directly on every detected state change, bypassing the
+// fsnotify debounce coalescing entirely. During an active multi-write burst
+// (a refactor, a codegen regen) this makes the poller sample and report
+// whatever transient, syntactically-broken intermediate state a file happens
+// to be in at each 500ms tick, even though the fsnotify path is correctly
+// deferring its own rebuild the whole time because writes keep arriving
+// faster than its debounce window.
+func TestWatchAndRebuild_GitStatePollDoesNotSampleMidChurnState(t *testing.T) {
+	dir := t.TempDir()
+	initGitRepo(t, dir)
+
+	target := filepath.Join(dir, "main.go")
+	seed := "package main\n\nfunc Hello() string {\n\treturn \"v0\"\n}\n"
+	require.NoError(t, os.WriteFile(target, []byte(seed), 0o644))
+	runGit(t, dir, "add", ".")
+	runGit(t, dir, "commit", "-m", "seed")
+
+	b := newBroker()
+	formatter, err := formatters.NewFormatter("dot")
+	require.NoError(t, err)
+	opts := &watchOptions{}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	stderr := captureStderr(t, func() {
+		go func() { _ = watchAndRebuild(ctx, "primary", dir, opts, b, formatter) }()
+
+		time.Sleep(100 * time.Millisecond)
+
+		// Churn burst: repeatedly overwrite the file with content missing its
+		// package declaration (an editor/codegen mid-write, matching the
+		// user-observed "expected 'package', found 'func'" failure). Each
+		// write's content differs so the git-state signature changes on every
+		// tick. Writes are spaced well inside the 300ms fsnotify debounce
+		// window, and the burst spans well past the 500ms git-state poll
+		// interval, so only the poller — not fsnotify — can observe these
+		// broken intermediate states.
+		for i := 0; i < 10; i++ {
+			broken := fmt.Sprintf("func Hello() string {\n\treturn \"broken v%d\"\n}\n", i)
+			require.NoError(t, os.WriteFile(target, []byte(broken), 0o644))
+			time.Sleep(80 * time.Millisecond)
+		}
+
+		final := "package main\n\nfunc Hello() string {\n\treturn \"final\"\n}\n"
+		require.NoError(t, os.WriteFile(target, []byte(final), 0o644))
+
+		waitForSnapshotID(t, b, 1, 3*time.Second)
+	})
+
+	assert.NotContains(t, stderr, "graph rebuild error",
+		"the git-state poller sampled a mid-churn broken file instead of deferring to the settled state, stderr: %s", stderr)
+}
+
 func waitForSnapshotID(t *testing.T, b *broker, want int64, timeout time.Duration) {
 	t.Helper()
 	deadline := time.Now().Add(timeout)
