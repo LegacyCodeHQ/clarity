@@ -61,6 +61,29 @@ func TestAddWatchDirsIgnoresMissingDirectoriesFromAdder(t *testing.T) {
 	}
 }
 
+func TestAddWatchDirsIgnoresRootRemovedBeforeGitInspection(t *testing.T) {
+	root := t.TempDir()
+	initGitRepo(t, root)
+
+	// Simulates the fsnotify Create event fired for a transient scratch
+	// directory such as Xcode/SwiftFormat's atomic-save folder
+	// "(A Document Being Saved By swift-format)": it exists just long enough
+	// to trigger a Create event, then is gone by the time the watcher gets
+	// around to inspecting it.
+	scratch := filepath.Join(root, "Sources", "(A Document Being Saved By swift-format)")
+	if err := os.MkdirAll(scratch, 0o755); err != nil {
+		t.Fatalf("mkdir scratch: %v", err)
+	}
+	if err := os.RemoveAll(scratch); err != nil {
+		t.Fatalf("remove scratch: %v", err)
+	}
+
+	err := addWatchDirsWithAdder(scratch, func(path string) error { return nil })
+	if err != nil && !isMissingPath(err) {
+		t.Fatalf("expected a vanished root directory to be treated as a benign missing-path race, got: %v", err)
+	}
+}
+
 func TestAddWatchDirsSkipsBrokenSymlink(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("symlink creation requires elevated privileges on Windows")

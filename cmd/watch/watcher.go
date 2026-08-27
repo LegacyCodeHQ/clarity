@@ -63,7 +63,14 @@ func watchAndRebuild(ctx context.Context, repoID, repoPath string, opts *watchOp
 			// directories that appear after startup.
 			if event.Has(fsnotify.Create) {
 				if err := addIfDirectory(watcher, event.Name); err != nil {
-					fmt.Fprintf(os.Stderr, "failed to watch created directory: %v\n", err)
+					// A directory can vanish between the Create event and
+					// this inspection — e.g. an editor's transient
+					// atomic-save scratch directory (Xcode/SwiftFormat's
+					// "(A Document Being Saved By swift-format)"). That
+					// race is benign and shouldn't be reported.
+					if !isMissingPath(err) {
+						fmt.Fprintf(os.Stderr, "failed to watch created directory: %v\n", err)
+					}
 				}
 			}
 

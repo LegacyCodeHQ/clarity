@@ -2,6 +2,7 @@ package git
 
 import (
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -95,9 +96,16 @@ func ResolveFirstParent(repoPath, commitID string) (parent string, hasParent boo
 
 func ensureRepoRoot(repoPath string) (string, error) {
 	if _, err := os.Stat(repoPath); os.IsNotExist(err) {
-		return "", fmt.Errorf("repository path does not exist: %s", repoPath)
+		return "", fmt.Errorf("repository path does not exist: %s: %w", repoPath, fs.ErrNotExist)
 	}
 	if !isGitRepository(repoPath) {
+		// A path can vanish between the Stat above and the git invocation
+		// inside isGitRepository — e.g. an editor's transient atomic-save
+		// scratch directory. Re-check so that race is reported as a missing
+		// path rather than the misleading "not a git repository".
+		if _, err := os.Stat(repoPath); os.IsNotExist(err) {
+			return "", fmt.Errorf("repository path no longer exists: %s: %w", repoPath, fs.ErrNotExist)
+		}
 		return "", fmt.Errorf("%s is not a git repository (use 'git init' to initialize)", repoPath)
 	}
 
