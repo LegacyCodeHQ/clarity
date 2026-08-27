@@ -1,6 +1,8 @@
 package git
 
 import (
+	"errors"
+	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -532,6 +534,33 @@ func TestGetFileContentFromCommit_FileNotFound(t *testing.T) {
 	_, err := GetFileContentFromCommit(tmpDir, commitID, "nonexistent.txt")
 
 	assert.Error(t, err)
+	assert.True(t, errors.Is(err, fs.ErrNotExist),
+		"a path absent from both HEAD and disk should be classified as a missing-path condition so callers (e.g. clarity watch) can treat it as benign, got: %v", err)
+}
+
+// TestGetFileContentFromCommit_ExistsOnDiskButNotInCommit reproduces the
+// other half of the race clarity watch hits when a file it just saw as
+// git-deleted is recreated on disk before the watcher gets around to reading
+// its pre-deletion content from HEAD (e.g. a codegen tool regenerating its
+// output). `git show` reports this case with a different message than a
+// plain "does not exist" ("exists on disk, but not in <ref>"), but it's the
+// same underlying condition and must be classified the same way.
+func TestGetFileContentFromCommit_ExistsOnDiskButNotInCommit(t *testing.T) {
+	tmpDir := t.TempDir()
+	setupGitRepo(t, tmpDir)
+
+	createFile(t, tmpDir, "tracked.txt", "content")
+	gitAdd(t, tmpDir, "tracked.txt")
+	commitID := gitCommitAndGetSHA(t, tmpDir, "Add tracked.txt")
+
+	// Present on disk but never committed, so it's absent from commitID's tree.
+	createFile(t, tmpDir, "untracked.txt", "not in HEAD")
+
+	_, err := GetFileContentFromCommit(tmpDir, commitID, "untracked.txt")
+
+	assert.Error(t, err)
+	assert.True(t, errors.Is(err, fs.ErrNotExist),
+		"a path present on disk but absent from the given commit should be classified as a missing-path condition, got: %v", err)
 }
 
 func TestGetFileContentFromCommit_InvalidCommit(t *testing.T) {

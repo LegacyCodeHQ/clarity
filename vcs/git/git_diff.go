@@ -2,6 +2,7 @@ package git
 
 import (
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"sort"
@@ -371,6 +372,16 @@ func GetFileContentFromCommit(repoPath, commitID, filePath string) ([]byte, erro
 	stdout, stderr, err := runGitCommand(repoPath, "show", ref)
 	if err != nil {
 		if stderr != "" {
+			// Both variants mean the same thing to a caller: this content
+			// isn't available at this ref. They commonly arise from a race
+			// between an earlier `git status` snapshot and this read — e.g.
+			// a commit landing or a codegen tool recreating the file in
+			// between — so classify them as a missing-path condition
+			// (fs.ErrNotExist) rather than a generic failure, letting
+			// callers like clarity watch treat it as benign and retry.
+			if strings.Contains(stderr, "does not exist in") || strings.Contains(stderr, "exists on disk, but not in") {
+				return nil, fmt.Errorf("git show failed: %s: %w", stderr, fs.ErrNotExist)
+			}
 			return nil, fmt.Errorf("git show failed: %s", stderr)
 		}
 		return nil, err

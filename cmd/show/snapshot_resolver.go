@@ -94,7 +94,7 @@ func (r *snapshotResolver) Modules(enabled bool) ([]depgraph.Module, error) {
 
 	data, err := git.GetFileContentFromCommit(r.repoPath, r.commit, modulesRelPath)
 	if err != nil {
-		if errors.Is(err, os.ErrNotExist) || strings.Contains(err.Error(), "exists on disk, but not in") {
+		if errors.Is(err, os.ErrNotExist) {
 			return nil, nil
 		}
 		return nil, err
